@@ -18,6 +18,22 @@
 .workspace-leaf-content[data-type="opencode-terminal"] .view-content {
 	padding: 0 !important;
 	margin: 0 !important;
+	overflow: clip !important;
+	height: 100% !important;
+	display: flex !important;
+	flex-direction: column !important;
+}
+
+.opencode-terminal {
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+/* Ensure view content has no padding */
+.workspace-leaf-content[data-type="opencode-terminal"] .view-content {
+	padding: 0 !important;
+	margin: 0 !important;
 	overflow: hidden !important;
 	height: 100% !important;
 }
