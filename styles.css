@@ -1,0 +1,292 @@
+.opencode-terminal-container {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	width: 100%;
+	overflow: hidden;
+	position: relative;
+	padding: 0 !important;
+	margin: 0 !important;
+}
+
+/* Hide view header for terminal */
+.workspace-leaf-content[data-type="opencode-terminal"] .view-header {
+	display: none !important;
+}
+
+/* Ensure view content has no padding */
+.workspace-leaf-content[data-type="opencode-terminal"] .view-content {
+	padding: 0 !important;
+	margin: 0 !important;
+	overflow: hidden !important;
+	height: 100% !important;
+}
+
+.opencode-terminal {
+	flex: 1;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
+	position: relative;
+	padding: 0 !important;
+	margin: 0 !important;
+}
+
+.opencode-terminal .xterm {
+	height: 100% !important;
+	width: 100% !important;
+	padding: 0 !important;
+	margin: 0 !important;
+}
+
+.opencode-terminal .xterm .xterm-viewport {
+	overflow-y: auto !important;
+	overflow-x: hidden !important;
+}
+
+.opencode-terminal .xterm-screen {
+	width: 100% !important;
+	height: 100% !important;
+}
+
+.opencode-terminal .xterm-viewport canvas {
+	width: 100% !important;
+}
+
+/* Fix for sidebar terminal sizing */
+.mod-right-split .workspace-leaf-content[data-type="opencode-terminal"] {
+	width: 100% !important;
+}
+
+.mod-right-split .opencode-terminal-container {
+	width: 100% !important;
+}
+
+/* Hide view header for terminal */
+.opencode-terminal-container ~ .view-header,
+.workspace-leaf-content[data-type="opencode-terminal"] .view-header {
+	display: none !important;
+}
+
+/* Ensure view content has no padding */
+.workspace-leaf-content[data-type="opencode-terminal"] .view-content {
+	padding: 0 !important;
+	margin: 0 !important;
+	overflow: hidden !important;
+	height: 100% !important;
+}
+
+.opencode-terminal {
+	flex: 1;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
+	position: relative;
+	padding: 0 !important;
+	margin: 0 !important;
+}
+
+.opencode-terminal .xterm {
+	height: 100% !important;
+	width: 100% !important;
+	padding: 0 !important;
+	margin: 0 !important;
+}
+
+.opencode-terminal .xterm .xterm-viewport {
+	overflow-y: auto !important;
+	overflow-x: hidden !important;
+}
+
+.opencode-terminal .xterm-screen {
+	width: 100% !important;
+	height: 100% !important;
+}
+
+.opencode-terminal .xterm-viewport canvas {
+	width: 100% !important;
+}
+
+/* Fix for sidebar terminal sizing */
+.mod-right-split .workspace-leaf-content[data-type="opencode-terminal"] {
+	width: 100% !important;
+}
+
+.mod-right-split .opencode-terminal-container {
+	width: 100% !important;
+}
+
+.opencode-terminal-error {
+	padding: 20px;
+	color: var(--text-error);
+	font-weight: bold;
+}
+
+.opencode-terminal-info {
+	padding: 0 20px 20px;
+	color: var(--text-muted);
+}
+
+.opencode-conversation-container {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
+}
+
+.opencode-conversation-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.opencode-conversation-header h3 {
+	margin: 0;
+}
+
+.opencode-conversation-main {
+	display: flex;
+	flex: 1;
+	overflow: hidden;
+}
+
+.opencode-session-list {
+	width: 280px;
+	min-width: 200px;
+	border-right: 1px solid var(--background-modifier-border);
+	overflow-y: auto;
+}
+
+.opencode-session-detail {
+	flex: 1;
+	padding: 12px;
+	overflow-y: auto;
+}
+
+.opencode-session-item {
+	padding: 8px 12px;
+	cursor: pointer;
+	border-bottom: 1px solid var(--background-modifier-border);
+	transition: background-color 0.1s;
+}
+
+.opencode-session-item:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.opencode-session-item.is-active {
+	background-color: var(--background-modifier-active-hover);
+}
+
+.opencode-session-title {
+	font-weight: 500;
+	margin-bottom: 2px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.opencode-session-meta {
+	font-size: 0.8em;
+	color: var(--text-muted);
+	display: flex;
+	gap: 8px;
+}
+
+.opencode-session-dir {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 120px;
+}
+
+.opencode-session-actions {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 12px;
+	flex-wrap: wrap;
+}
+
+.opencode-session-info {
+	background: var(--background-secondary);
+	padding: 10px;
+	border-radius: 6px;
+	margin-bottom: 12px;
+	font-size: 0.85em;
+}
+
+.opencode-session-info div {
+	margin-bottom: 2px;
+}
+
+.opencode-messages {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.opencode-message {
+	border-radius: 6px;
+	padding: 10px;
+	background: var(--background-secondary);
+}
+
+.opencode-message-user {
+	border-left: 3px solid var(--interactive-accent);
+}
+
+.opencode-message-assistant {
+	border-left: 3px solid var(--text-success);
+}
+
+.opencode-message-header {
+	display: flex;
+	justify-content: space-between;
+	font-size: 0.75em;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	margin-bottom: 6px;
+	color: var(--text-muted);
+}
+
+.opencode-message-body {
+	font-size: 0.9em;
+	line-height: 1.5;
+}
+
+.opencode-message-text {
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.opencode-message-step {
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+.opencode-message-tool {
+	color: var(--text-accent);
+	font-family: monospace;
+	font-size: 0.85em;
+}
+
+.opencode-loading {
+	padding: 20px;
+	text-align: center;
+	color: var(--text-muted);
+}
+
+.opencode-empty {
+	padding: 20px;
+	text-align: center;
+	color: var(--text-muted);
+}
+
+.opencode-error {
+	padding: 20px;
+	color: var(--text-error);
+}
