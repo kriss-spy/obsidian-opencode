@@ -69,7 +69,7 @@ def handle_resize(pty_fd):
         return
     for line in data.decode("UTF-8", "strict").splitlines():
         rows, columns = (int(s.strip()) for s in line.split("x", 2))
-        ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", columns, rows, 0, 0))
+        ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, 0, 0))
 
 if __name__ == "__main__":
     main()
