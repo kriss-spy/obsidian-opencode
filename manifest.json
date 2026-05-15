@@ -1,0 +1,11 @@
+{
+  "id": "obsidian-opencode",
+  "name": "OpenCode",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "OpenCode CLI wrapper for Obsidian. Launch OpenCode terminal windows and browse conversation history.",
+  "author": "krisspy",
+  "authorUrl": "",
+  "fundingUrl": "",
+  "isDesktopOnly": true
+}
