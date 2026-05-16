@@ -214,12 +214,34 @@ export class OpencodeTerminalView extends ItemView {
 		this.spawnPty(terminal);
 	}
 
+	restartPty() {
+		if (this.ptyProcess) {
+			this.ptyProcess.kill();
+			this.ptyProcess = null;
+		}
+		if (this.terminal) {
+			this.terminal.clear();
+			this.spawnPty(this.terminal);
+		}
+	}
+
 	private spawnPty(terminal: Terminal) {
-		const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
+		const defaultCwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
+		const cwd = this.plugin.sessionCwd || defaultCwd;
 		const opencodePath = this.plugin.settings.opencodePath || "opencode";
-		const args = this.plugin.settings.newSessionArgs
-			? this.plugin.settings.newSessionArgs.split(/\s+/).filter(Boolean)
-			: [];
+		
+		let args: string[] = [];
+		if (this.plugin.sessionArgs) {
+			args = [...this.plugin.sessionArgs];
+		} else {
+			args = this.plugin.settings.newSessionArgs
+				? this.plugin.settings.newSessionArgs.split(/\s+/).filter(Boolean)
+				: [];
+		}
+
+		// Clear one-time session args after reading them
+		this.plugin.sessionArgs = null;
+		this.plugin.sessionCwd = null;
 
 		const pythonPath = process.platform === "win32" ? "python" : "python3";
 
