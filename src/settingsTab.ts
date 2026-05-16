@@ -69,20 +69,6 @@ export class OpencodeSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Terminal theme")
-			.setDesc("Color theme for the integrated terminal.")
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption("dark", "Dark")
-					.addOption("light", "Light")
-					.setValue(this.plugin.settings.terminalTheme)
-					.onChange(async (value) => {
-						this.plugin.settings.terminalTheme = value as "dark" | "light";
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
 			.setName("New session arguments")
 			.setDesc("Additional arguments to pass when starting a new opencode session (e.g. --model provider/model).")
 			.addText((text) =>

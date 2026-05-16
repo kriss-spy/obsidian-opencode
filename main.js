@@ -6912,8 +6912,6 @@ var DEFAULT_SETTINGS = {
   defaultWorkingDirectory: "",
   terminalFontSize: 14,
   terminalFontFamily: "monospace",
-  terminalTheme: "dark",
-  autoRestoreSessions: true,
   newSessionArgs: ""
 };
 
@@ -6949,12 +6947,6 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
     new import_obsidian.Setting(containerEl).setName("Terminal font family").setDesc("Font family for the integrated terminal.").addText(
       (text) => text.setPlaceholder("monospace").setValue(this.plugin.settings.terminalFontFamily).onChange(async (value) => {
         this.plugin.settings.terminalFontFamily = value || "monospace";
-        await this.plugin.saveSettings();
-      })
-    );
-    new import_obsidian.Setting(containerEl).setName("Terminal theme").setDesc("Color theme for the integrated terminal.").addDropdown(
-      (dropdown) => dropdown.addOption("dark", "Dark").addOption("light", "Light").setValue(this.plugin.settings.terminalTheme).onChange(async (value) => {
-        this.plugin.settings.terminalTheme = value;
         await this.plugin.saveSettings();
       })
     );
@@ -10909,7 +10901,13 @@ var OpencodeTerminalView = class extends import_obsidian2.ItemView {
         this.ptyProcess.stdin.write(data);
       }
     });
+    this.registerKeyInterception();
     this.spawnPty(terminal);
+    setTimeout(() => {
+      if (this.terminal) {
+        this.terminal.focus();
+      }
+    }, 600);
   }
   restartPty() {
     if (this.ptyProcess) {
@@ -10979,13 +10977,215 @@ Error: ${err.message}\r
 `);
     }
   }
+  registerKeyInterception() {
+    const container = this.container;
+    if (!container)
+      return;
+    const app = this.app;
+    const hotkeyToCommand = /* @__PURE__ */ new Map();
+    const addHotkeys = (cmdId, hotkeys) => {
+      for (const hk of hotkeys) {
+        const mods = hk.modifiers.map((m) => m === "Mod" ? "Ctrl" : m).sort().join("+");
+        const str = `${mods}${mods ? "+" : ""}${hk.key}`;
+        hotkeyToCommand.set(str, cmdId);
+      }
+    };
+    for (const [cmdId, hotkeys] of Object.entries(app.hotkeyManager.defaultKeys || {})) {
+      addHotkeys(cmdId, hotkeys);
+    }
+    try {
+      const adapter = app.vault.adapter;
+      const hotkeysPath = adapter.getBasePath() + "/.obsidian/hotkeys.json";
+      const fs2 = require("fs");
+      if (fs2.existsSync(hotkeysPath)) {
+        const custom = JSON.parse(fs2.readFileSync(hotkeysPath, "utf8"));
+        for (const [cmdId, hotkeys] of Object.entries(custom)) {
+          if (Array.isArray(hotkeys) && hotkeys.length > 0) {
+            addHotkeys(cmdId, hotkeys);
+          }
+        }
+      }
+    } catch (e) {
+    }
+    const allowedIds = /* @__PURE__ */ new Set([
+      "opencode:open-opencode-terminal",
+      "opencode:toggle-opencode-terminal-sidebar",
+      "opencode:open-opencode-conversations",
+      "opencode:new-opencode-session",
+      "opencode:continue-last-opencode-session",
+      "app:toggle-right-sidebar"
+    ]);
+    const handler = (e) => {
+      if (!this.terminal)
+        return;
+      const target = e.target;
+      const inContainer = container.contains(target);
+      if (!inContainer)
+        return;
+      if (e.key === "Control" || e.key === "Alt" || e.key === "Shift" || e.key === "Meta")
+        return;
+      const mods = [];
+      if (e.ctrlKey || e.metaKey)
+        mods.push("Ctrl");
+      if (e.altKey)
+        mods.push("Alt");
+      if (e.shiftKey)
+        mods.push("Shift");
+      mods.sort();
+      const hotkeyStr = `${mods.join("+")}${mods.length ? "+" : ""}${e.key}`;
+      const cmdId = hotkeyToCommand.get(hotkeyStr);
+      if (cmdId && allowedIds.has(cmdId)) {
+        app.commands.executeCommandById(cmdId);
+        e.stopImmediatePropagation();
+        return;
+      }
+      e.preventDefault();
+      this.sendKeyToPty(e);
+      if (e.key === "Escape") {
+        setTimeout(() => {
+          var _a4;
+          const textarea = (_a4 = this.terminal) == null ? void 0 : _a4.textarea;
+          if (textarea)
+            textarea.focus();
+        }, 50);
+      }
+      e.stopImmediatePropagation();
+    };
+    document.addEventListener("keydown", handler, true);
+    this.register(() => document.removeEventListener("keydown", handler, true));
+  }
+  sendKeyToPty(e) {
+    var _a4;
+    if (!((_a4 = this.ptyProcess) == null ? void 0 : _a4.stdin))
+      return;
+    const key = e.key;
+    const ctrl = e.ctrlKey || e.metaKey;
+    const alt = e.altKey;
+    const shift = e.shiftKey;
+    let seq;
+    if (ctrl && !alt) {
+      if (key.length === 1 && key >= "a" && key <= "z") {
+        seq = String.fromCharCode(key.charCodeAt(0) - 96);
+      } else if (key >= "A" && key <= "Z") {
+        seq = String.fromCharCode(key.charCodeAt(0) - 64);
+      } else {
+        switch (key) {
+          case "[":
+            seq = "\x1B";
+            break;
+          case "\\":
+            seq = "";
+            break;
+          case "]":
+            seq = "";
+            break;
+          case "^":
+            seq = "";
+            break;
+          case "_":
+            seq = "";
+            break;
+          default:
+            seq = key;
+            break;
+        }
+      }
+    } else if (alt) {
+      seq = "\x1B" + key;
+    } else {
+      switch (key) {
+        case "Escape":
+          seq = "\x1B";
+          break;
+        case "Enter":
+          seq = "\r";
+          break;
+        case "Tab":
+          seq = shift ? "\x1B[Z" : "	";
+          break;
+        case "Backspace":
+          seq = "\x7F";
+          break;
+        case "Delete":
+          seq = "\x1B[3~";
+          break;
+        case "ArrowUp":
+          seq = "\x1B[A";
+          break;
+        case "ArrowDown":
+          seq = "\x1B[B";
+          break;
+        case "ArrowRight":
+          seq = "\x1B[C";
+          break;
+        case "ArrowLeft":
+          seq = "\x1B[D";
+          break;
+        case "Home":
+          seq = "\x1B[H";
+          break;
+        case "End":
+          seq = "\x1B[F";
+          break;
+        case "PageUp":
+          seq = "\x1B[5~";
+          break;
+        case "PageDown":
+          seq = "\x1B[6~";
+          break;
+        case "F1":
+          seq = "\x1BOP";
+          break;
+        case "F2":
+          seq = "\x1BOQ";
+          break;
+        case "F3":
+          seq = "\x1BOR";
+          break;
+        case "F4":
+          seq = "\x1BOS";
+          break;
+        case "F5":
+          seq = "\x1B[15~";
+          break;
+        case "F6":
+          seq = "\x1B[17~";
+          break;
+        case "F7":
+          seq = "\x1B[18~";
+          break;
+        case "F8":
+          seq = "\x1B[19~";
+          break;
+        case "F9":
+          seq = "\x1B[20~";
+          break;
+        case "F10":
+          seq = "\x1B[21~";
+          break;
+        case "F11":
+          seq = "\x1B[23~";
+          break;
+        case "F12":
+          seq = "\x1B[24~";
+          break;
+        default:
+          seq = key;
+          break;
+      }
+    }
+    this.ptyProcess.stdin.write(seq);
+  }
   async onClose() {
     if (this.ptyProcess) {
       this.ptyProcess.kill();
       this.ptyProcess = null;
     }
     if (this.terminal) {
-      this.terminal.dispose();
+      try {
+        this.terminal.dispose();
+      } catch (e) {
+      }
       this.terminal = null;
     }
   }
@@ -11336,16 +11536,23 @@ var OpencodePlugin = class extends import_obsidian5.Plugin {
       workspace.revealLeaf(leaf);
   }
   async toggleTerminalSidebar() {
+    var _a4;
     const { workspace } = this.app;
-    const existing = workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE);
-    if (existing.length > 0) {
-      workspace.detachLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE);
+    const rightSplit = workspace.rightSplit;
+    const isCollapsed = (_a4 = rightSplit == null ? void 0 : rightSplit.collapsed) != null ? _a4 : true;
+    if (!isCollapsed) {
+      rightSplit == null ? void 0 : rightSplit.toggle();
     } else {
-      const rightLeaf = workspace.getRightLeaf(false);
-      if (rightLeaf) {
-        await rightLeaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
-        workspace.revealLeaf(rightLeaf);
+      let leaf = workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
+      if (!leaf) {
+        const newLeaf = workspace.getRightLeaf(false);
+        if (newLeaf) {
+          leaf = newLeaf;
+          await leaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
+        }
       }
+      if (leaf)
+        workspace.revealLeaf(leaf);
     }
   }
   async newSession() {
