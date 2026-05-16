@@ -1,16 +1,16 @@
 # Obsidian OpenCode
 
-A powerful Obsidian plugin that integrates the OpenCode CLI seamlessly into your Obsidian vault. Access your AI coding agent, manage sessions, and run terminal commands directly from your personal knowledge management environment.
+A plugin that embeds the OpenCode CLI directly into Obsidian. Manage your AI coding sessions, browse conversation history, and resume work without leaving your vault.
 
 ## ✨ Features
 
-- **Integrated Terminal:** A fully featured, hardware-accelerated (WebGL) terminal inside Obsidian, powered by xterm.js.
-- **Vault-Aware Context:** The terminal automatically launches in your vault's root directory, giving the agent immediate context of your notes, code, and files.
-- **Session Management:** 
-  - Browse your recent OpenCode sessions directly from the dedicated "OpenCode Sessions" view.
-  - Preview conversation history, token usage, model details, and costs.
-  - **Restore Sessions:** Quickly resume a past conversation right inside the integrated terminal.
-  - **Export to Note:** Export valuable OpenCode conversations as formatted markdown notes directly into your Obsidian vault.
+- **Native OpenCode Execution:** Runs the OpenCode CLI directly inside Obsidian using a WebGL-accelerated terminal, ensuring smooth performance for long coding sessions.
+- **Vault-Centric Workflow:** Automatically spawns the agent in your vault's root, ensuring it has immediate access to your notes and project files.
+- **Session Manager:** 
+  - **History Browser:** View a list of all your past OpenCode sessions with timestamps and working directories.
+  - **Conversation Preview:** Inspect message history, token usage, model details, and costs before deciding to resume.
+  - **One-Click Restore:** Instantly resume a previous session in the embedded terminal.
+  - **Export to Markdown:** Save entire conversation threads as formatted notes in your vault for documentation or review.
 
 ## 🚀 Installation
 
