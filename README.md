@@ -14,27 +14,18 @@ A plugin that embeds the OpenCode CLI directly into Obsidian. Manage your AI cod
 
 ## 🚀 Installation
 
-*Note: This plugin must currently be installed manually.*
+### From Obsidian Community Plugins (Recommended)
 
-1. Clone this repository to your local machine:
-   ```bash
-   git clone https://github.com/kriss-spy/obsidian-opencode.git
-   ```
-2. Navigate to the project directory and install dependencies:
-   ```bash
-   cd obsidian-opencode
-   npm install
-   ```
-3. Build the plugin:
-   ```bash
-   npm run build
-   ```
-4. Create the plugin folder in your vault and copy the required files over:
-   ```bash
-   mkdir -p /path/to/your/vault/.obsidian/plugins/obsidian-opencode/
-   cp main.js manifest.json styles.css /path/to/your/vault/.obsidian/plugins/obsidian-opencode/
-   ```
-5. Reload Obsidian and enable the **OpenCode** plugin in the Community Plugins settings.
+1. Open Obsidian and go to **Settings** → **Community plugins**
+2. Click **Browse** and search for **OpenCode**
+3. Click **Install**, then **Enable**
+
+### Manual Installation
+
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/kriss-spy/obsidian-opencode/releases/latest)
+2. Create a folder named `obsidian-opencode` in your vault's `.obsidian/plugins/` directory
+3. Copy the downloaded files into that folder
+4. Reload Obsidian and enable the **OpenCode** plugin in Community Plugins settings
 
 ## 💻 Usage
 
