@@ -2,6 +2,7 @@ import { ItemView, WorkspaceLeaf, Notice } from "obsidian";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { WebglAddon } from "@xterm/addon-webgl";
 import OpencodePlugin from "../main";
 import { spawn, ChildProcess } from "child_process";
 
@@ -121,6 +122,7 @@ export class OpencodeTerminalView extends ItemView {
 		const terminal = new Terminal({
 			fontSize: this.plugin.settings.terminalFontSize,
 			fontFamily: this.plugin.settings.terminalFontFamily,
+			lineHeight: 1.2,
 			theme: {
 				background: computedStyle.getPropertyValue("--background-primary").trim() || (isDark ? "#1e1e1e" : "#ffffff"),
 				foreground: computedStyle.getPropertyValue("--text-normal").trim() || (isDark ? "#d4d4d4" : "#333333"),
@@ -147,6 +149,11 @@ export class OpencodeTerminalView extends ItemView {
 		terminal.loadAddon(new WebLinksAddon());
 
 		terminal.open(termContainer);
+		try {
+			terminal.loadAddon(new WebglAddon());
+		} catch (e) {
+			console.warn("WebGL addon failed to load, falling back to canvas", e);
+		}
 		this.terminal = terminal;
 		this.fitAddon = fitAddon;
 
