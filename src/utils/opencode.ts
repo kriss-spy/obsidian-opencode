@@ -80,7 +80,7 @@ export class OpencodeClient {
 
 	async listSessions(): Promise<OpencodeSession[]> {
 		try {
-			const { stdout } = await execFileAsync(this.resolvePath(), ["session", "list", "--json"], { cwd: this.cwd });
+			const { stdout } = await execFileAsync(this.resolvePath(), ["session", "list", "--format", "json"], { cwd: this.cwd });
 			return JSON.parse(stdout) as OpencodeSession[];
 		} catch (error) {
 			console.error("Failed to list sessions:", error);
