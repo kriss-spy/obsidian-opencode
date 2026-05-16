@@ -72,7 +72,7 @@ export interface OpencodeExport {
 }
 
 export class OpencodeClient {
-	constructor(private opencodePath: string) {}
+	constructor(private opencodePath: string, private cwd: string) {}
 
 	private resolvePath(): string {
 		return this.opencodePath || "opencode";
@@ -80,7 +80,7 @@ export class OpencodeClient {
 
 	async listSessions(): Promise<OpencodeSession[]> {
 		try {
-			const { stdout } = await execFileAsync(this.resolvePath(), ["session", "list", "--json"]);
+			const { stdout } = await execFileAsync(this.resolvePath(), ["session", "list", "--json"], { cwd: this.cwd });
 			return JSON.parse(stdout) as OpencodeSession[];
 		} catch (error) {
 			console.error("Failed to list sessions:", error);
@@ -91,7 +91,7 @@ export class OpencodeClient {
 
 	async exportSession(sessionId: string): Promise<OpencodeExport | null> {
 		try {
-			const { stdout } = await execFileAsync(this.resolvePath(), ["export", sessionId]);
+			const { stdout } = await execFileAsync(this.resolvePath(), ["export", sessionId], { cwd: this.cwd });
 			return JSON.parse(stdout) as OpencodeExport;
 		} catch (error) {
 			console.error("Failed to export session:", error);
@@ -102,13 +102,13 @@ export class OpencodeClient {
 
 	async deleteSession(sessionId: string): Promise<boolean> {
 		try {
-			await execFileAsync(this.resolvePath(), ["session", "delete", sessionId]);
+			await execFileAsync(this.resolvePath(), ["session", "delete", sessionId], { cwd: this.cwd });
 			return true;
 		} catch (error) {
 			console.error("Failed to delete session:", error);
-			new Notice(`Failed to delete session ${sessionId}`);
 			return false;
 		}
+
 	}
 
 	spawnTerminal(cwd: string, extraArgs: string[] = []): ReturnType<typeof spawn> {

@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, Notice, TFile } from "obsidian";
+import { Plugin, WorkspaceLeaf, Notice, TFile, FileSystemAdapter } from "obsidian";
 import { OpencodePluginSettings, DEFAULT_SETTINGS } from "./settings";
 import { OpencodeSettingTab } from "./settingsTab";
 import { OpencodeTerminalView, OPENCODE_TERMINAL_VIEW_TYPE } from "./views/opencodeTerminalView";
@@ -11,7 +11,11 @@ export default class OpencodePlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
-		this.vaultRoot = this.app.vault.getRoot().path || "/";
+		if (this.app.vault.adapter instanceof FileSystemAdapter) {
+			this.vaultRoot = this.app.vault.adapter.getBasePath();
+		} else {
+			this.vaultRoot = "/";
+		}
 		this.vaultConfigDir = this.app.vault.configDir;
 
 		this.registerView(
