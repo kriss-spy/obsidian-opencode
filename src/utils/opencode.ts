@@ -91,7 +91,7 @@ export class OpencodeClient {
 
 	async exportSession(sessionId: string): Promise<OpencodeExport | null> {
 		try {
-			const { stdout } = await execFileAsync(this.resolvePath(), ["export", sessionId], { cwd: this.cwd });
+			const { stdout } = await execFileAsync(this.resolvePath(), ["export", sessionId], { cwd: this.cwd, maxBuffer: 100 * 1024 * 1024 });
 			return JSON.parse(stdout) as OpencodeExport;
 		} catch (error) {
 			console.error("Failed to export session:", error);

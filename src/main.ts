@@ -122,28 +122,42 @@ export default class OpencodePlugin extends Plugin {
 		}
 	}
 
+	sessionArgs: string[] | null = null;
+	sessionCwd: string | null = null;
+
 	async newSession() {
-		const rightLeaf = this.app.workspace.getRightLeaf(false);
-		if (rightLeaf) {
-			await rightLeaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
-			this.app.workspace.revealLeaf(rightLeaf);
-		}
+		this.sessionArgs = [];
+		this.sessionCwd = null;
+		await this.openOrRestartTerminal();
 	}
 
 	async continueLastSession() {
-		const rightLeaf = this.app.workspace.getRightLeaf(false);
-		if (rightLeaf) {
-			await rightLeaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
-			this.app.workspace.revealLeaf(rightLeaf);
-		}
+		this.sessionArgs = ["-c"];
+		this.sessionCwd = null;
+		await this.openOrRestartTerminal();
 	}
 
 	async openTerminalWithSession(sessionId: string, directory: string) {
-		const rightLeaf = this.app.workspace.getRightLeaf(false);
-		if (rightLeaf) {
-			await rightLeaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
-			this.app.workspace.revealLeaf(rightLeaf);
+		this.sessionArgs = ["-s", sessionId];
+		this.sessionCwd = directory;
+		await this.openOrRestartTerminal();
+	}
+
+	private async openOrRestartTerminal() {
+		const { workspace } = this.app;
+		let leaf = workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
+		if (leaf) {
+			const view = leaf.view as any;
+			if (view && typeof view.restartPty === "function") {
+				view.restartPty();
+			}
+			workspace.revealLeaf(leaf);
+		} else {
+			const rightLeaf = workspace.getRightLeaf(false);
+			if (rightLeaf) {
+				await rightLeaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
+				workspace.revealLeaf(rightLeaf);
+			}
 		}
-		new Notice(`Session restore not yet fully implemented. Session: ${sessionId}`);
 	}
 }
