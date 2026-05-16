@@ -1,7 +1,7 @@
 {
   "id": "opencode",
   "name": "OpenCode",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "minAppVersion": "1.4.0",
   "description": "Launch OpenCode CLI terminal sessions and browse conversation history without leaving your vault.",
   "author": "krisspy",
