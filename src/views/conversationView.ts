@@ -12,7 +12,8 @@ export class OpencodeConversationView extends ItemView {
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
-		this.client = new OpencodeClient(plugin.settings.opencodePath);
+		const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
+		this.client = new OpencodeClient(plugin.settings.opencodePath, cwd);
 	}
 
 	getViewType() {
@@ -50,7 +51,8 @@ export class OpencodeConversationView extends ItemView {
 		this.listContainer.empty();
 		this.listContainer.createEl("div", { cls: "opencode-loading", text: "Loading sessions..." });
 
-		this.client = new OpencodeClient(this.plugin.settings.opencodePath);
+		const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
+		this.client = new OpencodeClient(this.plugin.settings.opencodePath, cwd);
 		this.sessions = await this.client.listSessions();
 
 		this.listContainer.empty();
