@@ -110,15 +110,23 @@ export default class OpencodePlugin extends Plugin {
 
 	async toggleTerminalSidebar() {
 		const { workspace } = this.app;
-		const existing = workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE);
-		if (existing.length > 0) {
-			workspace.detachLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE);
+		const rightSplit = workspace.rightSplit;
+		const isCollapsed = rightSplit?.collapsed ?? true;
+
+		if (!isCollapsed) {
+			// Right sidebar is visible — collapse it (leaf stays alive)
+			rightSplit?.toggle();
 		} else {
-			const rightLeaf = workspace.getRightLeaf(false);
-			if (rightLeaf) {
-				await rightLeaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
-				workspace.revealLeaf(rightLeaf);
+			// Right sidebar is collapsed — ensure leaf exists, then reveal
+			let leaf = workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
+			if (!leaf) {
+				const newLeaf = workspace.getRightLeaf(false);
+				if (newLeaf) {
+					leaf = newLeaf;
+					await leaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
+				}
 			}
+			if (leaf) workspace.revealLeaf(leaf);
 		}
 	}
 
