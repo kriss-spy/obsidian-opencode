@@ -31,28 +31,24 @@ export function handleTerminalDrop(context: DropContext): void {
             
             const filePath = filesToProcess[index];
             
-            // 1. Trigger the context menu
-            context.ptyWrite('@');
+            // 1. Send the mention and path together to reliably trigger the TUI menu
+            context.ptyWrite(`@${filePath}`);
             
             setTimeout(() => {
-                // 2. Type the path to fuzzy search
-                context.ptyWrite(filePath);
+                // 2. Use Tab to confirm the mention (Enter might submit the prompt if it arrives late)
+                // 500ms delay gives the TUI fuzzy search time to open the menu
+                context.ptyWrite('\t');
                 
                 setTimeout(() => {
-                    // 3. Confirm the selection (wait enough time for React/Ink to render the menu)
-                    context.ptyWrite('\r');
+                    // 3. Add a space after the pill
+                    context.ptyWrite(' ');
                     
                     setTimeout(() => {
-                        // 4. Add a space after the pill
-                        context.ptyWrite(' ');
-                        
-                        setTimeout(() => {
-                            // 5. Move to the next file
-                            processNext(index + 1);
-                        }, 50);
+                        // 4. Move to the next file
+                        processNext(index + 1);
                     }, 50);
-                }, 300); // 300ms is usually enough for local file search to resolve
-            }, 50);
+                }, 50);
+            }, 500); 
         };
         
         processNext(0);
