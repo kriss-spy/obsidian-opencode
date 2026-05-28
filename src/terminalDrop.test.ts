@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { handleTerminalDrop } from './terminalDrop';
 
 describe('TerminalDropHandler', () => {
-    it('should inject @filePath and Enter when a single internal note is dropped', async () => {
+    it('should inject @filePath, Tab, and Space when a single internal note is dropped', async () => {
         vi.useFakeTimers();
 
         // Arrange
@@ -27,16 +27,22 @@ describe('TerminalDropHandler', () => {
         expect(ptyWriteMock).toHaveBeenCalledTimes(1);
         expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@folder/note.md');
 
-        // Advance time to trigger Enter
-        await vi.runAllTimersAsync();
+        // Advance time to trigger Tab
+        await vi.advanceTimersByTimeAsync(300);
 
         expect(ptyWriteMock).toHaveBeenCalledTimes(2);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\r');
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\t');
+        
+        // Advance time to trigger Space
+        await vi.advanceTimersByTimeAsync(50);
+        
+        expect(ptyWriteMock).toHaveBeenCalledTimes(3);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, ' ');
 
         vi.useRealTimers();
     });
 
-    it('should inject @filePath and Enter when a single external OS file is dropped (dataTransfer)', async () => {
+    it('should inject @filePath, Tab, and Space when a single external OS file is dropped (dataTransfer)', async () => {
         vi.useFakeTimers();
         const ptyWriteMock = vi.fn();
 
@@ -61,16 +67,22 @@ describe('TerminalDropHandler', () => {
         expect(ptyWriteMock).toHaveBeenCalledTimes(1);
         expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@/Users/test/external.txt');
 
-        // Advance time to trigger Enter
-        await vi.runAllTimersAsync();
+        // Advance time to trigger Tab
+        await vi.advanceTimersByTimeAsync(300);
 
         expect(ptyWriteMock).toHaveBeenCalledTimes(2);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\r');
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\t');
+        
+        // Advance time to trigger Space
+        await vi.advanceTimersByTimeAsync(50);
+        
+        expect(ptyWriteMock).toHaveBeenCalledTimes(3);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, ' ');
 
         vi.useRealTimers();
     });
 
-    it('should inject @filePath and Enter sequentially with delays when multiple internal notes are dropped', async () => {
+    it('should inject @filePath, Tab, and Space sequentially with delays when multiple internal notes are dropped', async () => {
         vi.useFakeTimers();
         const ptyWriteMock = vi.fn();
 
@@ -95,20 +107,30 @@ describe('TerminalDropHandler', () => {
         expect(ptyWriteMock).toHaveBeenCalledTimes(1);
         expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@folder/note1.md');
 
-        // Advance for first Enter
-        await vi.advanceTimersByTimeAsync(100);
+        // Advance for first Tab
+        await vi.advanceTimersByTimeAsync(300);
         expect(ptyWriteMock).toHaveBeenCalledTimes(2);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\r');
-
-        // Advance for second file injection (assuming a 50ms delay after Enter as per old code)
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\t');
+        
+        // Advance for first Space
         await vi.advanceTimersByTimeAsync(50);
         expect(ptyWriteMock).toHaveBeenCalledTimes(3);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, '@folder/note2.md');
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, ' ');
 
-        // Advance for second Enter
-        await vi.advanceTimersByTimeAsync(100);
+        // Advance for second file injection
+        await vi.advanceTimersByTimeAsync(50);
         expect(ptyWriteMock).toHaveBeenCalledTimes(4);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(4, '\r');
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(4, '@folder/note2.md');
+
+        // Advance for second Tab
+        await vi.advanceTimersByTimeAsync(300);
+        expect(ptyWriteMock).toHaveBeenCalledTimes(5);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(5, '\t');
+        
+        // Advance for second Space
+        await vi.advanceTimersByTimeAsync(50);
+        expect(ptyWriteMock).toHaveBeenCalledTimes(6);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(6, ' ');
 
         vi.useRealTimers();
     });
