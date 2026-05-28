@@ -32,13 +32,21 @@ export function handleTerminalDrop(context: DropContext): void {
             const filePath = filesToProcess[index];
             context.ptyWrite(`@${filePath}`);
             
+            // Wait for TUI autocomplete menu to open
             setTimeout(() => {
-                context.ptyWrite('\r');
+                // Use Tab instead of Enter to confirm autocomplete safely
+                // (Enter submits the prompt if the menu isn't open)
+                context.ptyWrite('\t');
                 
                 setTimeout(() => {
-                    processNext(index + 1);
+                    // Add a space after the pill so the user can keep typing or drop another file
+                    context.ptyWrite(' ');
+                    
+                    setTimeout(() => {
+                        processNext(index + 1);
+                    }, 50);
                 }, 50);
-            }, 100);
+            }, 300); // Increased delay to ensure TUI has time to search and render the menu
         };
         
         processNext(0);
