@@ -30,25 +30,17 @@ export function handleTerminalDrop(context: DropContext): void {
             if (index >= filesToProcess.length) return;
             
             const filePath = filesToProcess[index];
-            
-            // 1. Send the mention and path together to reliably trigger the TUI menu
             context.ptyWrite(`@${filePath}`);
             
             setTimeout(() => {
-                // 2. Use Tab to confirm the mention (Enter might submit the prompt if it arrives late)
-                // 500ms delay gives the TUI fuzzy search time to open the menu
+                // Use Tab instead of Enter to confirm the mention pill.
+                // Tab safely confirms the autocomplete menu without risking prompt submission.
                 context.ptyWrite('\t');
                 
                 setTimeout(() => {
-                    // 3. Add a space after the pill
-                    context.ptyWrite(' ');
-                    
-                    setTimeout(() => {
-                        // 4. Move to the next file
-                        processNext(index + 1);
-                    }, 50);
+                    processNext(index + 1);
                 }, 50);
-            }, 500); 
+            }, 100);
         };
         
         processNext(0);
