@@ -2,9 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { handleTerminalDrop } from './terminalDrop';
 
 describe('TerminalDropHandler', () => {
-    it('should inject @filePath, Tab, and Space when a single internal note is dropped', async () => {
-        vi.useFakeTimers();
-
+    it('should inject @filePath without Enter when a single internal note is dropped', () => {
         // Arrange
         const ptyWriteMock = vi.fn();
         
@@ -23,27 +21,12 @@ describe('TerminalDropHandler', () => {
             ptyWrite: ptyWriteMock
         });
 
-        // Assert immediately after drop
+        // Assert
         expect(ptyWriteMock).toHaveBeenCalledTimes(1);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@folder/note.md');
-
-        // Advance time to trigger Tab
-        await vi.advanceTimersByTimeAsync(300);
-
-        expect(ptyWriteMock).toHaveBeenCalledTimes(2);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\t');
-        
-        // Advance time to trigger Space
-        await vi.advanceTimersByTimeAsync(50);
-        
-        expect(ptyWriteMock).toHaveBeenCalledTimes(3);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, ' ');
-
-        vi.useRealTimers();
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@folder/note.md ');
     });
 
-    it('should inject @filePath, Tab, and Space when a single external OS file is dropped (dataTransfer)', async () => {
-        vi.useFakeTimers();
+    it('should inject @filePath without Enter when a single external OS file is dropped (dataTransfer)', () => {
         const ptyWriteMock = vi.fn();
 
         // No internal Obsidian file
@@ -63,27 +46,12 @@ describe('TerminalDropHandler', () => {
             ptyWrite: ptyWriteMock
         });
 
-        // Assert immediately after drop
+        // Assert
         expect(ptyWriteMock).toHaveBeenCalledTimes(1);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@/Users/test/external.txt');
-
-        // Advance time to trigger Tab
-        await vi.advanceTimersByTimeAsync(300);
-
-        expect(ptyWriteMock).toHaveBeenCalledTimes(2);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\t');
-        
-        // Advance time to trigger Space
-        await vi.advanceTimersByTimeAsync(50);
-        
-        expect(ptyWriteMock).toHaveBeenCalledTimes(3);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, ' ');
-
-        vi.useRealTimers();
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@/Users/test/external.txt ');
     });
 
-    it('should inject @filePath, Tab, and Space sequentially with delays when multiple internal notes are dropped', async () => {
-        vi.useFakeTimers();
+    it('should inject combined @filePaths separated by spaces without Enter when multiple notes are dropped', () => {
         const ptyWriteMock = vi.fn();
 
         const mockDragManager = {
@@ -103,35 +71,8 @@ describe('TerminalDropHandler', () => {
             ptyWrite: ptyWriteMock
         });
 
-        // First file is injected immediately
+        // Assert
         expect(ptyWriteMock).toHaveBeenCalledTimes(1);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@folder/note1.md');
-
-        // Advance for first Tab
-        await vi.advanceTimersByTimeAsync(300);
-        expect(ptyWriteMock).toHaveBeenCalledTimes(2);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\t');
-        
-        // Advance for first Space
-        await vi.advanceTimersByTimeAsync(50);
-        expect(ptyWriteMock).toHaveBeenCalledTimes(3);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, ' ');
-
-        // Advance for second file injection
-        await vi.advanceTimersByTimeAsync(50);
-        expect(ptyWriteMock).toHaveBeenCalledTimes(4);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(4, '@folder/note2.md');
-
-        // Advance for second Tab
-        await vi.advanceTimersByTimeAsync(300);
-        expect(ptyWriteMock).toHaveBeenCalledTimes(5);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(5, '\t');
-        
-        // Advance for second Space
-        await vi.advanceTimersByTimeAsync(50);
-        expect(ptyWriteMock).toHaveBeenCalledTimes(6);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(6, ' ');
-
-        vi.useRealTimers();
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@folder/note1.md @folder/note2.md ');
     });
 });
