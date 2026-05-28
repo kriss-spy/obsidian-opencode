@@ -33,9 +33,12 @@ export function handleTerminalDrop(context: DropContext): void {
             context.ptyWrite(`@${filePath}`);
             
             setTimeout(() => {
-                // Use Tab instead of Enter to confirm the mention pill.
-                // Tab safely confirms the autocomplete menu without risking prompt submission.
-                context.ptyWrite('\t');
+                // If there is a next file, insert a space so they don't stick together.
+                // We DO NOT inject a space (or Enter/Tab) after the LAST file.
+                // This guarantees the TUI mention menu stays OPEN for the user to manually confirm.
+                if (index < filesToProcess.length - 1) {
+                    context.ptyWrite(' ');
+                }
                 
                 setTimeout(() => {
                     processNext(index + 1);

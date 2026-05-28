@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { handleTerminalDrop } from './terminalDrop';
 
 describe('TerminalDropHandler', () => {
-    it('should inject @filePath and Tab sequentially with proper delays', async () => {
+    it('should inject @filePath and stop (leaving menu open) for a single file', async () => {
         vi.useFakeTimers();
         const ptyWriteMock = vi.fn();
         
@@ -11,19 +11,19 @@ describe('TerminalDropHandler', () => {
             ptyWrite: ptyWriteMock
         });
 
-        // 1. Sends @filePath immediately
         expect(ptyWriteMock).toHaveBeenCalledTimes(1);
         expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@folder/note.md');
 
-        // 2. Wait 100ms, sends Tab
-        await vi.advanceTimersByTimeAsync(100);
-        expect(ptyWriteMock).toHaveBeenCalledTimes(2);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\t');
+        // Fast forward all timers
+        await vi.runAllTimersAsync();
+        
+        // No more writes!
+        expect(ptyWriteMock).toHaveBeenCalledTimes(1);
 
         vi.useRealTimers();
     });
 
-    it('should process multiple files sequentially', async () => {
+    it('should inject space only between files for multiple files', async () => {
         vi.useFakeTimers();
         const ptyWriteMock = vi.fn();
         
@@ -34,14 +34,22 @@ describe('TerminalDropHandler', () => {
 
         // File 1
         expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@file1.md');
+        
+        // Wait 100ms
         await vi.advanceTimersByTimeAsync(100);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\t');
-
-        // File 2 starts after 50ms
+        // Space added because there is another file
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, ' ');
+        
+        // Wait 50ms
         await vi.advanceTimersByTimeAsync(50);
+        // File 2
         expect(ptyWriteMock).toHaveBeenNthCalledWith(3, '@file2.md');
-        await vi.advanceTimersByTimeAsync(100);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(4, '\t');
+        
+        // Fast forward remaining
+        await vi.runAllTimersAsync();
+        
+        // No more writes! (No trailing space, so menu stays open for file 2)
+        expect(ptyWriteMock).toHaveBeenCalledTimes(3);
 
         vi.useRealTimers();
     });
