@@ -26,29 +26,9 @@ export function handleTerminalDrop(context: DropContext): void {
     }
 
     if (filesToProcess.length > 0) {
-        const processNext = (index: number) => {
-            if (index >= filesToProcess.length) return;
-            
-            const filePath = filesToProcess[index];
-            context.ptyWrite(`@${filePath}`);
-            
-            // Wait for TUI autocomplete menu to open
-            setTimeout(() => {
-                // Use Tab instead of Enter to confirm autocomplete safely
-                // (Enter submits the prompt if the menu isn't open)
-                context.ptyWrite('\t');
-                
-                setTimeout(() => {
-                    // Add a space after the pill so the user can keep typing or drop another file
-                    context.ptyWrite(' ');
-                    
-                    setTimeout(() => {
-                        processNext(index + 1);
-                    }, 50);
-                }, 50);
-            }, 300); // Increased delay to ensure TUI has time to search and render the menu
-        };
-        
-        processNext(0);
+        // Just inject the paths with @ and let the user manually confirm them
+        // This avoids race conditions where \r submits the prompt prematurely
+        const payload = filesToProcess.map(p => `@${p}`).join(' ') + ' ';
+        context.ptyWrite(payload);
     }
 }
