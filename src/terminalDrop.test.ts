@@ -2,77 +2,65 @@ import { describe, it, expect, vi } from 'vitest';
 import { handleTerminalDrop } from './terminalDrop';
 
 describe('TerminalDropHandler', () => {
-    it('should inject @filePath without Enter when a single internal note is dropped', () => {
-        // Arrange
+    it('should inject @, path, Enter, and Space sequentially with proper delays for a single file', async () => {
+        vi.useFakeTimers();
         const ptyWriteMock = vi.fn();
         
-        // Mock Obsidian's drag manager for a single file
-        const mockDragManager = {
-            draggable: {
-                type: 'file',
-                file: { path: 'folder/note.md' }
-            }
-        };
-
-        // Act
         handleTerminalDrop({
-            dragManager: mockDragManager,
-            dataTransfer: null,
+            dragManager: { draggable: { type: 'file', file: { path: 'folder/note.md' } } },
             ptyWrite: ptyWriteMock
         });
 
-        // Assert
+        // 1. Sends @ immediately
         expect(ptyWriteMock).toHaveBeenCalledTimes(1);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@folder/note.md ');
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@');
+
+        // 2. Wait 50ms, sends path
+        await vi.advanceTimersByTimeAsync(50);
+        expect(ptyWriteMock).toHaveBeenCalledTimes(2);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, 'folder/note.md');
+
+        // 3. Wait 300ms for fuzzy search, sends Enter
+        await vi.advanceTimersByTimeAsync(300);
+        expect(ptyWriteMock).toHaveBeenCalledTimes(3);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, '\r');
+
+        // 4. Wait 50ms, sends space
+        await vi.advanceTimersByTimeAsync(50);
+        expect(ptyWriteMock).toHaveBeenCalledTimes(4);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(4, ' ');
+
+        vi.useRealTimers();
     });
 
-    it('should inject @filePath without Enter when a single external OS file is dropped (dataTransfer)', () => {
+    it('should process multiple files sequentially', async () => {
+        vi.useFakeTimers();
         const ptyWriteMock = vi.fn();
-
-        // No internal Obsidian file
-        const mockDragManager = {};
         
-        // Mock external OS file drop
-        const mockDataTransfer = {
-            files: [
-                { path: '/Users/test/external.txt' }
-            ]
-        };
-
-        // Act
         handleTerminalDrop({
-            dragManager: mockDragManager,
-            dataTransfer: mockDataTransfer,
+            dragManager: { draggable: { type: 'files', files: [{ path: 'file1.md' }, { path: 'file2.md' }] } },
             ptyWrite: ptyWriteMock
         });
 
-        // Assert
-        expect(ptyWriteMock).toHaveBeenCalledTimes(1);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@/Users/test/external.txt ');
-    });
+        // File 1
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@');
+        await vi.advanceTimersByTimeAsync(50);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, 'file1.md');
+        await vi.advanceTimersByTimeAsync(300);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, '\r');
+        await vi.advanceTimersByTimeAsync(50);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(4, ' ');
 
-    it('should inject combined @filePaths separated by spaces without Enter when multiple notes are dropped', () => {
-        const ptyWriteMock = vi.fn();
+        // File 2 starts after 50ms
+        await vi.advanceTimersByTimeAsync(50);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(5, '@');
+        await vi.advanceTimersByTimeAsync(50);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(6, 'file2.md');
+        await vi.advanceTimersByTimeAsync(300);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(7, '\r');
+        await vi.advanceTimersByTimeAsync(50);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(8, ' ');
 
-        const mockDragManager = {
-            draggable: {
-                type: 'files',
-                files: [
-                    { path: 'folder/note1.md' },
-                    { path: 'folder/note2.md' }
-                ]
-            }
-        };
-
-        // Act
-        handleTerminalDrop({
-            dragManager: mockDragManager,
-            dataTransfer: null,
-            ptyWrite: ptyWriteMock
-        });
-
-        // Assert
-        expect(ptyWriteMock).toHaveBeenCalledTimes(1);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@folder/note1.md @folder/note2.md ');
+        vi.useRealTimers();
     });
 });
