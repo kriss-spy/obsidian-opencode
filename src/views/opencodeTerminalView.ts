@@ -5,6 +5,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import OpencodePlugin from "../main";
 import { spawn, ChildProcess } from "child_process";
+import { handleTerminalDrop } from "../terminalDrop";
 
 export const OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
 
@@ -251,6 +252,12 @@ export class OpencodeTerminalView extends ItemView {
 		this.plugin.sessionArgs = null;
 		this.plugin.sessionCwd = null;
 
+		// Handle pending prompt from @opencode editor suggest
+		if (this.plugin.pendingPrompt) {
+			args.push("--prompt", this.plugin.pendingPrompt);
+			this.plugin.pendingPrompt = null;
+		}
+
 		const pythonPath = process.platform === "win32" ? "python" : "python3";
 
 		if (process.platform === "win32") {
@@ -355,6 +362,21 @@ export class OpencodeTerminalView extends ItemView {
 			// Skip modifier-only keys (Ctrl, Alt, Shift, Meta)
 			if (e.key === 'Control' || e.key === 'Alt' || e.key === 'Shift' || e.key === 'Meta') return;
 
+			// Allow paste shortcuts to pass through to xterm's native handler
+			if ((e.ctrlKey || e.metaKey) && e.key === 'v') return;
+			// Handle Ctrl+Shift+V text paste directly
+			if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'V' || e.key === 'v')) {
+				e.preventDefault();
+				e.stopImmediatePropagation();
+				navigator.clipboard.readText().then(text => {
+					if (text && this.ptyProcess?.stdin) {
+						const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+						this.ptyProcess.stdin.write(normalized);
+					}
+				}).catch(() => {});
+				return;
+			}
+
 			const mods: string[] = [];
 			if (e.ctrlKey || e.metaKey) mods.push('Ctrl');
 			if (e.altKey) mods.push('Alt');
@@ -388,6 +410,55 @@ export class OpencodeTerminalView extends ItemView {
 
 		document.addEventListener('keydown', handler, true);
 		this.register(() => document.removeEventListener('keydown', handler, true));
+
+		// Handle text paste in capture phase to beat Obsidian's handler
+		const pasteHandler = (e: ClipboardEvent) => {
+			if (!this.terminal || !this.ptyProcess?.stdin) return;
+			const target = e.target as Node;
+			if (!container.contains(target)) return;
+
+			const text = e.clipboardData?.getData('text/plain');
+			if (text) {
+				e.preventDefault();
+				e.stopImmediatePropagation();
+				// Normalize line endings and send to PTY
+				const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+				this.ptyProcess.stdin.write(normalized);
+			}
+		};
+
+		container.addEventListener('paste', pasteHandler, true);
+		this.register(() => container.removeEventListener('paste', pasteHandler, true));
+
+		// Handle drag and drop for files
+		const dragOverHandler = (e: DragEvent) => {
+			const target = e.target as Node;
+			if (!container.contains(target)) return;
+			// Prevent default to allow drop
+			e.preventDefault();
+		};
+
+		const dropHandler = (e: DragEvent) => {
+			if (!this.terminal || !this.ptyProcess?.stdin) return;
+			const target = e.target as Node;
+			if (!container.contains(target)) return;
+
+			e.preventDefault();
+			e.stopImmediatePropagation();
+
+			handleTerminalDrop({
+				dragManager: (this.app as any).dragManager,
+				dataTransfer: e.dataTransfer,
+				ptyWrite: (data: string) => this.ptyProcess!.stdin!.write(data)
+			});
+		};
+
+		container.addEventListener('dragover', dragOverHandler, true);
+		container.addEventListener('drop', dropHandler, true);
+		this.register(() => {
+			container.removeEventListener('dragover', dragOverHandler, true);
+			container.removeEventListener('drop', dropHandler, true);
+		});
 	}
 
 	private sendKeyToPty(e: KeyboardEvent) {
