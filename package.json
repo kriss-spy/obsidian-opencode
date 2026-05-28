@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc --noEmit && node esbuild.config.mjs production",
-    "version": "node version-bump.mjs && git add manifest.json versions.json"
+    "version": "node version-bump.mjs && git add manifest.json versions.json",
+    "test": "vitest run"
   },
   "keywords": [
     "obsidian",
@@ -21,7 +22,8 @@
     "esbuild": "0.17.3",
     "obsidian": "latest",
     "tslib": "2.4.0",
-    "typescript": "4.7.4"
+    "typescript": "4.7.4",
+    "vitest": "^4.1.7"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
