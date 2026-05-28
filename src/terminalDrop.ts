@@ -26,9 +26,35 @@ export function handleTerminalDrop(context: DropContext): void {
     }
 
     if (filesToProcess.length > 0) {
-        // Just inject the paths with @ and let the user manually confirm them
-        // This avoids race conditions where \r submits the prompt prematurely
-        const payload = filesToProcess.map(p => `@${p}`).join(' ') + ' ';
-        context.ptyWrite(payload);
+        const processNext = (index: number) => {
+            if (index >= filesToProcess.length) return;
+            
+            const filePath = filesToProcess[index];
+            
+            // 1. Trigger the context menu
+            context.ptyWrite('@');
+            
+            setTimeout(() => {
+                // 2. Type the path to fuzzy search
+                context.ptyWrite(filePath);
+                
+                setTimeout(() => {
+                    // 3. Confirm the selection (wait enough time for React/Ink to render the menu)
+                    context.ptyWrite('\r');
+                    
+                    setTimeout(() => {
+                        // 4. Add a space after the pill
+                        context.ptyWrite(' ');
+                        
+                        setTimeout(() => {
+                            // 5. Move to the next file
+                            processNext(index + 1);
+                        }, 50);
+                    }, 50);
+                }, 300); // 300ms is usually enough for local file search to resolve
+            }, 50);
+        };
+        
+        processNext(0);
     }
 }
