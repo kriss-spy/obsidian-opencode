@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { handleTerminalDrop } from './terminalDrop';
 
 describe('TerminalDropHandler', () => {
-    it('should inject @, path, Enter, and Space sequentially with proper delays for a single file', async () => {
+    it('should inject @filePath, Tab, and Space sequentially with proper delays', async () => {
         vi.useFakeTimers();
         const ptyWriteMock = vi.fn();
         
@@ -11,24 +11,19 @@ describe('TerminalDropHandler', () => {
             ptyWrite: ptyWriteMock
         });
 
-        // 1. Sends @ immediately
+        // 1. Sends @filePath immediately
         expect(ptyWriteMock).toHaveBeenCalledTimes(1);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@');
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@folder/note.md');
 
-        // 2. Wait 50ms, sends path
-        await vi.advanceTimersByTimeAsync(50);
+        // 2. Wait 500ms for fuzzy search, sends Tab
+        await vi.advanceTimersByTimeAsync(500);
         expect(ptyWriteMock).toHaveBeenCalledTimes(2);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, 'folder/note.md');
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\t');
 
-        // 3. Wait 300ms for fuzzy search, sends Enter
-        await vi.advanceTimersByTimeAsync(300);
-        expect(ptyWriteMock).toHaveBeenCalledTimes(3);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, '\r');
-
-        // 4. Wait 50ms, sends space
+        // 3. Wait 50ms, sends space
         await vi.advanceTimersByTimeAsync(50);
-        expect(ptyWriteMock).toHaveBeenCalledTimes(4);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(4, ' ');
+        expect(ptyWriteMock).toHaveBeenCalledTimes(3);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, ' ');
 
         vi.useRealTimers();
     });
@@ -43,23 +38,19 @@ describe('TerminalDropHandler', () => {
         });
 
         // File 1
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@');
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@file1.md');
+        await vi.advanceTimersByTimeAsync(500);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, '\t');
         await vi.advanceTimersByTimeAsync(50);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, 'file1.md');
-        await vi.advanceTimersByTimeAsync(300);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, '\r');
-        await vi.advanceTimersByTimeAsync(50);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(4, ' ');
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, ' ');
 
         // File 2 starts after 50ms
         await vi.advanceTimersByTimeAsync(50);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(5, '@');
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(4, '@file2.md');
+        await vi.advanceTimersByTimeAsync(500);
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(5, '\t');
         await vi.advanceTimersByTimeAsync(50);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(6, 'file2.md');
-        await vi.advanceTimersByTimeAsync(300);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(7, '\r');
-        await vi.advanceTimersByTimeAsync(50);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(8, ' ');
+        expect(ptyWriteMock).toHaveBeenNthCalledWith(6, ' ');
 
         vi.useRealTimers();
     });
