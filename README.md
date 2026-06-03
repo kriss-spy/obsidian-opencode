@@ -45,6 +45,10 @@ npm run dev
 
 - **Session Previews / Loading:** While the buffer size for exporting sessions has been increased (up to 100MB), exceptionally large or deeply complex OpenCode sessions with massive token counts may still occasionally fail to preview or load properly.
 
+## 🙏 Acknowledgements
+
+- **Terminal integration approach** inspired by [polyipseity/obsidian-terminal](https://github.com/polyipseity/obsidian-terminal) — the Python PTY proxy with `pty.fork()` and 4-pipe stdio for resize control (FD 3).
+
 ## 📄 License
 
 MIT License

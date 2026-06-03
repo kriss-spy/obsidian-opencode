@@ -6,6 +6,8 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import OpencodePlugin from "../main";
 import { spawn, ChildProcess } from "child_process";
 import { handleTerminalDrop } from "../terminalDrop";
+import { EditorServer } from "../editorServer";
+import { normalizeVaultPath } from "../utils/path";
 
 export const OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
 
@@ -83,6 +85,7 @@ export class OpencodeTerminalView extends ItemView {
 	ptyProcess: ChildProcess | null = null;
 	cmdioFd: number | null = null;
 	container: HTMLElement | null = null;
+	editorServer: EditorServer | null = null;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
@@ -215,6 +218,12 @@ export class OpencodeTerminalView extends ItemView {
 		this.registerKeyInterception();
 
 		this.spawnPty(terminal);
+
+		// Start the WebSocket editor server so OpenCode can auto-discover this vault
+		this.editorServer = new EditorServer();
+		this.editorServer.start(this.plugin.vaultRoot).catch((err) => {
+			console.warn("OpenCode editor server failed to start:", err);
+		});
 
 		setTimeout(() => {
 			if (this.terminal) {
@@ -439,7 +448,6 @@ export class OpencodeTerminalView extends ItemView {
 		};
 
 		const dropHandler = (e: DragEvent) => {
-			if (!this.terminal || !this.ptyProcess?.stdin) return;
 			const target = e.target as Node;
 			if (!container.contains(target)) return;
 
@@ -449,7 +457,11 @@ export class OpencodeTerminalView extends ItemView {
 			handleTerminalDrop({
 				dragManager: (this.app as any).dragManager,
 				dataTransfer: e.dataTransfer,
-				ptyWrite: (data: string) => this.ptyProcess!.stdin!.write(data)
+				ptyWrite: this.ptyProcess?.stdin ? (data: string) => this.ptyProcess!.stdin!.write(data) : undefined,
+				onFileDrop: this.editorServer ? (filePath: string) => {
+				const normalized = normalizeVaultPath(filePath, this.plugin.vaultRoot);
+				this.editorServer!.notifyAtMentioned(normalized);
+			} : undefined
 			});
 		};
 
@@ -527,6 +539,10 @@ export class OpencodeTerminalView extends ItemView {
 	}
 
 	async onClose() {
+		if (this.editorServer) {
+			await this.editorServer.stop();
+			this.editorServer = null;
+		}
 		if (this.ptyProcess) {
 			this.ptyProcess.kill();
 			this.ptyProcess = null;

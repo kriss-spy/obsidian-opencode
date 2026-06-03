@@ -24,6 +24,7 @@ const context = await esbuild.context({
 		'@lezer/*',
 		'node-pty',
 		...builtinModules],
+	platform: 'node',
 	format: 'cjs',
 	target: 'es2018',
 	logLevel: "info",
