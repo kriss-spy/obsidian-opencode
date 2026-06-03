@@ -1,6 +1,6 @@
 {
-	"id": "opencode-beta",
-	"name": "OpenCode Beta",
+	"id": "opencode",
+	"name": "OpenCode",
 	"version": "1.2.0",
 	"minAppVersion": "1.4.0",
 	"description": "Launch OpenCode CLI terminal sessions and browse conversation history without leaving your vault.",
