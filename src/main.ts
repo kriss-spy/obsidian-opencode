@@ -3,11 +3,13 @@ import { OpencodePluginSettings, DEFAULT_SETTINGS } from "./settings";
 import { OpencodeSettingTab } from "./settingsTab";
 import { OpencodeTerminalView, OPENCODE_TERMINAL_VIEW_TYPE } from "./views/opencodeTerminalView";
 import { OpencodeConversationView, OPENCODE_CONVERSATION_VIEW_TYPE } from "./views/conversationView";
+import { OpencodeEditorSuggest } from "./opencodeEditorSuggest";
 
 export default class OpencodePlugin extends Plugin {
 	settings: OpencodePluginSettings;
 	vaultRoot: string = "";
 	vaultConfigDir: string = "";
+	pendingPrompt: string | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -67,6 +69,8 @@ export default class OpencodePlugin extends Plugin {
 		});
 
 		this.addSettingTab(new OpencodeSettingTab(this.app, this));
+
+		this.registerEditorSuggest(new OpencodeEditorSuggest(this));
 	}
 
 	onunload() {

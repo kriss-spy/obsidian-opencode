@@ -235,3 +235,15 @@
 	padding: 20px;
 	color: var(--text-error);
 }
+
+.opencode-suggest-title {
+	font-weight: 600;
+	color: var(--text-accent);
+}
+
+.opencode-suggest-desc {
+	color: var(--text-muted);
+	font-size: 0.85em;
+	display: block;
+	margin-top: 2px;
+}

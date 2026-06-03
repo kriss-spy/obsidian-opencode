@@ -1,7 +1,8 @@
 export interface DropContext {
     dragManager?: any;
     dataTransfer?: any;
-    ptyWrite: (data: string) => void;
+    ptyWrite?: (data: string) => void;
+    onFileDrop?: (filePath: string) => void;
 }
 
 export function handleTerminalDrop(context: DropContext): void {
@@ -25,27 +26,43 @@ export function handleTerminalDrop(context: DropContext): void {
         }
     }
 
-    if (filesToProcess.length > 0) {
-        const processNext = (index: number) => {
+    if (filesToProcess.length === 0) return;
+
+    // New WebSocket-based path: stagger messages so the TUI can render each mention
+    if (context.onFileDrop) {
+        const sendNext = (index: number) => {
             if (index >= filesToProcess.length) return;
-            
-            const filePath = filesToProcess[index];
-            context.ptyWrite(`@${filePath}`);
+            context.onFileDrop!(filesToProcess[index]);
+            if (index < filesToProcess.length - 1) {
+                setTimeout(() => sendNext(index + 1), 75);
+            }
+        };
+        sendNext(0);
+        return;
+    }
+
+    // Legacy PTY keystroke injection path
+    if (!context.ptyWrite) return;
+
+    const processNext = (index: number) => {
+        if (index >= filesToProcess.length) return;
+        
+        const filePath = filesToProcess[index];
+        context.ptyWrite!(`@${filePath}`);
+        
+        setTimeout(() => {
+            // If there is a next file, insert a space so they don't stick together.
+            // We DO NOT inject a space (or Enter/Tab) after the LAST file.
+            // This guarantees the TUI mention menu stays OPEN for the user to manually confirm.
+            if (index < filesToProcess.length - 1) {
+                context.ptyWrite!(' ');
+            }
             
             setTimeout(() => {
-                // If there is a next file, insert a space so they don't stick together.
-                // We DO NOT inject a space (or Enter/Tab) after the LAST file.
-                // This guarantees the TUI mention menu stays OPEN for the user to manually confirm.
-                if (index < filesToProcess.length - 1) {
-                    context.ptyWrite(' ');
-                }
-                
-                setTimeout(() => {
-                    processNext(index + 1);
-                }, 50);
-            }, 100);
-        };
-        
-        processNext(0);
-    }
+                processNext(index + 1);
+            }, 50);
+        }, 100);
+    };
+    
+    processNext(0);
 }
