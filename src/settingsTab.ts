@@ -13,7 +13,7 @@ export class OpencodeSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "OpenCode Settings" });
+		new Setting(containerEl).setName("OpenCode Settings").setHeading();
 
 		new Setting(containerEl)
 			.setName("OpenCode path")
