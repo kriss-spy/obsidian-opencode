@@ -61,7 +61,7 @@ export class EditorServer {
 
 	private handleMessage(ws: WebSocket, rawData: string): void {
 		try {
-			const msg = JSON.parse(rawData);
+			const msg: { method?: string; id?: number | string } = JSON.parse(rawData) as { method?: string; id?: number | string };
 			if (msg.method === "initialize" && msg.id !== undefined) {
 				const response = {
 					jsonrpc: "2.0",
@@ -76,7 +76,7 @@ export class EditorServer {
 				};
 				ws.send(JSON.stringify(response));
 			}
-		} catch (e) {
+		} catch {
 			// Ignore malformed JSON
 		}
 	}

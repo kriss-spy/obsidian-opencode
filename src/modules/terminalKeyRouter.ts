@@ -1,5 +1,6 @@
 import { Terminal } from "@xterm/xterm";
 import { App } from "obsidian";
+import * as fs from "fs";
 import { PtySession } from "./ptySession";
 
 export interface KeyRouterContext {
@@ -19,11 +20,11 @@ export class TerminalKeyRouter {
 
 	private registerKeyboardHandler(context: KeyRouterContext): void {
 		const { app, terminal, ptySession, container } = context;
-		const appAny = app as any;
 
+		interface HotkeyEntry { modifiers: string[]; key: string }
 		const hotkeyToCommand = new Map<string, string>();
 
-		const addHotkeys = (cmdId: string, hotkeys: Array<{ modifiers: string[]; key: string }>) => {
+		const addHotkeys = (cmdId: string, hotkeys: Array<HotkeyEntry>) => {
 			for (const hk of hotkeys) {
 				const mods = hk.modifiers.map((m: string) => m === 'Mod' ? 'Ctrl' : m).sort().join('+');
 				const str = `${mods}${mods ? '+' : ''}${hk.key}`;
@@ -31,32 +32,36 @@ export class TerminalKeyRouter {
 			}
 		};
 
-		for (const [cmdId, hotkeys] of Object.entries(appAny?.hotkeyManager?.defaultKeys || {})) {
-			addHotkeys(cmdId, hotkeys as Array<{ modifiers: string[]; key: string }>);
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+		const defaultKeys = (app as unknown as Record<string, unknown>).hotkeyManager as Record<string, unknown> | undefined;
+		for (const [cmdId, hotkeys] of Object.entries((defaultKeys?.defaultKeys as Record<string, HotkeyEntry[]>) ?? {})) {
+			addHotkeys(cmdId, hotkeys);
 		}
 
 		try {
-			const adapter = appAny?.vault?.adapter;
-			const hotkeysPath = (adapter as any)?.getBasePath() + '/.obsidian/hotkeys.json';
-			const fs = require('fs');
-			if (fs.existsSync(hotkeysPath)) {
-				const custom = JSON.parse(fs.readFileSync(hotkeysPath, 'utf8'));
-				for (const [cmdId, hotkeys] of Object.entries(custom)) {
-					if (Array.isArray(hotkeys) && hotkeys.length > 0) {
-						addHotkeys(cmdId, hotkeys as Array<{ modifiers: string[]; key: string }>);
+			const adapter = app.vault.adapter;
+			if ('getBasePath' in adapter && typeof (adapter as unknown as Record<string, unknown>).getBasePath === 'function') {
+				const basePath = (adapter as unknown as Record<string, () => string>).getBasePath();
+				const hotkeysPath = `${basePath}/${app.vault.configDir}/hotkeys.json`;
+				if (fs.existsSync(hotkeysPath)) {
+					const custom = JSON.parse(fs.readFileSync(hotkeysPath, 'utf8')) as Record<string, HotkeyEntry[]>;
+					for (const [cmdId, hotkeys] of Object.entries(custom)) {
+						if (Array.isArray(hotkeys) && hotkeys.length > 0) {
+							addHotkeys(cmdId, hotkeys);
+						}
 					}
 				}
 			}
-		} catch (e) {
+		} catch {
 			// ignore
 		}
 
 		const allowedIds = new Set([
-			'opencode:open-opencode-terminal',
-			'opencode:toggle-opencode-terminal-sidebar',
-			'opencode:open-opencode-conversations',
-			'opencode:new-opencode-session',
-			'opencode:continue-last-opencode-session',
+			'opencode:open-terminal',
+			'opencode:toggle-terminal-sidebar',
+			'opencode:open-conversations',
+			'opencode:new-session',
+			'opencode:continue-last-session',
 			'app:toggle-right-sidebar',
 		]);
 
@@ -93,7 +98,8 @@ export class TerminalKeyRouter {
 
 			const cmdId = hotkeyToCommand.get(hotkeyStr);
 			if (cmdId && allowedIds.has(cmdId)) {
-				appAny.commands.executeCommandById(cmdId);
+				// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+				(app as unknown as { commands?: { executeCommandById(id: string): void } }).commands?.executeCommandById(cmdId);
 				e.stopImmediatePropagation();
 				return;
 			}
@@ -102,7 +108,7 @@ export class TerminalKeyRouter {
 			this.sendKeyToPty(e, ptySession);
 
 			if (e.key === 'Escape') {
-				setTimeout(() => {
+				window.setTimeout(() => {
 					const textarea = terminal.textarea;
 					if (textarea) textarea.focus();
 				}, 50);
@@ -111,8 +117,8 @@ export class TerminalKeyRouter {
 			e.stopImmediatePropagation();
 		};
 
-		document.addEventListener('keydown', handler, true);
-		this.disposers.push(() => document.removeEventListener('keydown', handler, true));
+		activeDocument.addEventListener('keydown', handler, true);
+		this.disposers.push(() => activeDocument.removeEventListener('keydown', handler, true));
 	}
 
 	private registerPasteHandler(context: KeyRouterContext): void {
@@ -199,7 +205,7 @@ export class TerminalKeyRouter {
 
 	dispose(): void {
 		for (const disposer of this.disposers) {
-			try { disposer(); } catch (e) { /* ignore */ }
+			try { disposer(); } catch { /* ignore */ }
 		}
 		this.disposers = [];
 	}

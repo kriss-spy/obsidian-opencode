@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, Notice, TFile, FileSystemAdapter } from "obsidian";
+import { Plugin, FileSystemAdapter } from "obsidian";
 import { OpencodePluginSettings, DEFAULT_SETTINGS } from "./settings";
 import { OpencodeSettingTab } from "./settingsTab";
 import { OpencodeTerminalView, OPENCODE_TERMINAL_VIEW_TYPE } from "./views/opencodeTerminalView";
@@ -64,40 +64,40 @@ export default class OpencodePlugin extends Plugin {
 		);
 
 		this.addRibbonIcon("terminal", "OpenCode Terminal", (evt: MouseEvent) => {
-			this.activateTerminalView();
+			void this.activateTerminalView();
 		});
 
 		this.addRibbonIcon("message-circle", "OpenCode Conversations", (evt: MouseEvent) => {
-			this.activateConversationView();
+			void this.activateConversationView();
 		});
 
 		this.addCommand({
-			id: "open-opencode-terminal",
-			name: "Open OpenCode Terminal",
+			id: "open-terminal",
+			name: "Open Terminal",
 			callback: () => this.activateTerminalView(),
 		});
 
 		this.addCommand({
-			id: "toggle-opencode-terminal-sidebar",
-			name: "Toggle OpenCode Terminal in Sidebar",
+			id: "toggle-terminal-sidebar",
+			name: "Toggle Terminal in Sidebar",
 			callback: () => this.toggleTerminalSidebar(),
 		});
 
 		this.addCommand({
-			id: "open-opencode-conversations",
-			name: "Open OpenCode Conversations",
+			id: "open-conversations",
+			name: "Open Conversations",
 			callback: () => this.activateConversationView(),
 		});
 
 		this.addCommand({
-			id: "new-opencode-session",
-			name: "New OpenCode Session",
+			id: "new-session",
+			name: "New Session",
 			callback: () => this.newSession(),
 		});
 
 		this.addCommand({
-			id: "continue-last-opencode-session",
-			name: "Continue Last OpenCode Session",
+			id: "continue-last-session",
+			name: "Continue Last Session",
 			callback: () => this.continueLastSession(),
 		});
 
@@ -145,9 +145,9 @@ export default class OpencodePlugin extends Plugin {
 		await this.viewCoordinator.openOrRestartTerminal(() => {
 			const leaf = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
 			if (leaf) {
-				const view = leaf.view as any;
-				if (view && typeof view.restartPty === "function") {
-					view.restartPty();
+				const view = leaf.view;
+				if (view && 'restartPty' in view && typeof (view as unknown as Record<string, unknown>).restartPty === 'function') {
+					(view as unknown as Record<string, () => void>).restartPty();
 				}
 			}
 		});

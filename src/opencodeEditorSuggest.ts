@@ -63,7 +63,7 @@ export class OpencodeEditorSuggest extends EditorSuggest<OpencodeSuggestion> {
 		// Store the prompt and trigger a new session
 		if (promptText) {
 			this.plugin.pendingPrompt = promptText;
-			this.plugin.newSession();
+			void this.plugin.newSession();
 		}
 
 		this.close();

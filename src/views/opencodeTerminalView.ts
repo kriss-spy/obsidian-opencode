@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, Notice } from "obsidian";
+import { ItemView, WorkspaceLeaf } from "obsidian";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -49,8 +49,8 @@ export class OpencodeTerminalView extends ItemView {
 		});
 
 		// Get computed styles from Obsidian for theme integration
-		const computedStyle = getComputedStyle(document.body);
-		const isDark = document.body.classList.contains("theme-dark");
+		const computedStyle = getComputedStyle(activeDocument.body);
+		const isDark = activeDocument.body.classList.contains("theme-dark");
 
 		const terminal = new Terminal({
 			fontSize: this.plugin.settings.terminalFontSize,
@@ -91,27 +91,27 @@ export class OpencodeTerminalView extends ItemView {
 		this.fitAddon = fitAddon;
 
 		// Debounced fit function to avoid excessive calls
-		let fitTimeout: NodeJS.Timeout | null = null;
+		let fitTimeout: number | null = null;
 		const doFit = () => {
-			if (fitTimeout) clearTimeout(fitTimeout);
-			fitTimeout = setTimeout(() => {
+			if (fitTimeout) window.clearTimeout(fitTimeout);
+			fitTimeout = window.setTimeout(() => {
 				if (termContainer.clientWidth > 0 && termContainer.clientHeight > 0) {
 					try {
 						fitAddon.fit();
 						// Send resize after fit completes
-						setTimeout(() => this.ptySession.sendResize(terminal), 50);
-					} catch (e) {
-						console.warn("Fit failed:", e);
+						window.setTimeout(() => this.ptySession.sendResize(terminal), 50);
+					} catch (err) {
+						console.warn("Fit failed:", err);
 					}
 				}
 			}, 50);
 		};
 
 		// Initial fit with multiple attempts to ensure proper sizing
-		setTimeout(doFit, 0);
-		setTimeout(doFit, 100);
-		setTimeout(doFit, 300);
-		setTimeout(doFit, 500);
+		window.setTimeout(doFit, 0);
+		window.setTimeout(doFit, 100);
+		window.setTimeout(doFit, 300);
+		window.setTimeout(doFit, 500);
 
 		// Observe container resize
 		const resizeObserver = new ResizeObserver(() => {
@@ -173,8 +173,9 @@ export class OpencodeTerminalView extends ItemView {
 			e.preventDefault();
 			e.stopImmediatePropagation();
 
+			const dragMgr = (this.app as unknown as Record<string, unknown>).dragManager as { draggable?: unknown } | undefined;
 			handleTerminalDrop({
-				dragManager: (this.app as any).dragManager,
+				dragManager: dragMgr,
 				dataTransfer: e.dataTransfer,
 				ptyWrite: this.ptySession.getStdin() ? (data: string) => this.ptySession.writeStdin(data) : undefined,
 				onFileDrop: this.editorServer ? (filePath: string) => {
@@ -191,7 +192,7 @@ export class OpencodeTerminalView extends ItemView {
 			container.removeEventListener('drop', dropHandler, true);
 		});
 
-		setTimeout(() => {
+		window.setTimeout(() => {
 			if (this.terminal) {
 				this.terminal.focus();
 			}
@@ -246,7 +247,7 @@ export class OpencodeTerminalView extends ItemView {
 		if (this.terminal) {
 			try {
 				this.terminal.dispose();
-			} catch (e) {
+			} catch {
 				// xterm WebGL addon has a known dispose bug
 			}
 			this.terminal = null;
