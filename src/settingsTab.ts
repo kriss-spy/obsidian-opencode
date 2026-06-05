@@ -13,8 +13,6 @@ export class OpencodeSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl).setName("OpenCode Settings").setHeading();
-
 		new Setting(containerEl)
 			.setName("OpenCode path")
 			.setDesc("Path to the opencode executable. Leave as 'opencode' to use PATH.")

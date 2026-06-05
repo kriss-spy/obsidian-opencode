@@ -17283,7 +17283,6 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("OpenCode Settings").setHeading();
     new import_obsidian.Setting(containerEl).setName("OpenCode path").setDesc("Path to the opencode executable. Leave as 'opencode' to use PATH.").addText(
       (text) => text.setPlaceholder("opencode").setValue(this.plugin.settings.opencodePath).onChange(async (value) => {
         this.plugin.settings.opencodePath = value || "opencode";
