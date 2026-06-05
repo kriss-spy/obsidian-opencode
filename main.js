@@ -17283,7 +17283,7 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "OpenCode Settings" });
+    new import_obsidian.Setting(containerEl).setName("OpenCode Settings").setHeading();
     new import_obsidian.Setting(containerEl).setName("OpenCode path").setDesc("Path to the opencode executable. Leave as 'opencode' to use PATH.").addText(
       (text) => text.setPlaceholder("opencode").setValue(this.plugin.settings.opencodePath).onChange(async (value) => {
         this.plugin.settings.opencodePath = value || "opencode";
@@ -17922,10 +17922,6 @@ var OpencodeTerminalView = class extends import_obsidian2.ItemView {
     container.empty();
     container.addClass("opencode-terminal-container");
     this.container = container;
-    const viewHeader = this.containerEl.children[0];
-    if (viewHeader) {
-      viewHeader.style.display = "none";
-    }
     const termContainer = container.createEl("div", {
       cls: "opencode-terminal"
     });
@@ -18665,10 +18661,6 @@ var OpencodePlugin = class extends import_obsidian7.Plugin {
     });
     this.addSettingTab(new OpencodeSettingTab(this.app, this));
     this.registerEditorSuggest(new OpencodeEditorSuggest(this));
-  }
-  onunload() {
-    this.app.workspace.detachLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE);
-    this.app.workspace.detachLeavesOfType(OPENCODE_CONVERSATION_VIEW_TYPE);
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());

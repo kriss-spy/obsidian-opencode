@@ -106,11 +106,6 @@ export default class OpencodePlugin extends Plugin {
 		this.registerEditorSuggest(new OpencodeEditorSuggest(this));
 	}
 
-	onunload() {
-		this.app.workspace.detachLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE);
-		this.app.workspace.detachLeavesOfType(OPENCODE_CONVERSATION_VIEW_TYPE);
-	}
-
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 	}

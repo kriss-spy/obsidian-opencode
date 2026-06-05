@@ -44,12 +44,6 @@ export class OpencodeTerminalView extends ItemView {
 		container.addClass("opencode-terminal-container");
 		this.container = container;
 
-		// Hide the view header for a cleaner terminal experience
-		const viewHeader = this.containerEl.children[0] as HTMLElement;
-		if (viewHeader) {
-			viewHeader.style.display = "none";
-		}
-
 		const termContainer = container.createEl("div", {
 			cls: "opencode-terminal",
 		});
