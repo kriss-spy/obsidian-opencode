@@ -10,7 +10,7 @@ export class SessionExporter {
 
 		try {
 			await this.app.vault.createFolder(folder);
-		} catch (e) {
+		} catch {
 			// Folder may already exist
 		}
 

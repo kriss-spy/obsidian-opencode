@@ -1,27 +1,45 @@
+interface DraggableFile {
+    path?: string;
+}
+
+interface DragManagerDraggable {
+    type?: string;
+    file?: DraggableFile;
+    files?: DraggableFile[];
+}
+
 export interface DropContext {
-    dragManager?: any;
-    dataTransfer?: any;
+    dragManager?: { draggable?: unknown };
+    dataTransfer?: DataTransfer | null;
     ptyWrite?: (data: string) => void;
     onFileDrop?: (filePath: string) => void;
+}
+
+function isDragManagerDraggable(val: unknown): val is DragManagerDraggable {
+    return typeof val === 'object' && val !== null;
 }
 
 export function handleTerminalDrop(context: DropContext): void {
     const filesToProcess: string[] = [];
 
-    if (context.dragManager?.draggable?.type === 'file') {
-        if (context.dragManager.draggable.file?.path) {
-            filesToProcess.push(context.dragManager.draggable.file.path);
+    const dragMgr = context.dragManager;
+    const draggable = dragMgr && isDragManagerDraggable(dragMgr.draggable) ? dragMgr.draggable : undefined;
+
+    if (draggable?.type === 'file') {
+        if (draggable.file?.path) {
+            filesToProcess.push(draggable.file.path);
         }
-    } else if (context.dragManager?.draggable?.type === 'files') {
-        if (Array.isArray(context.dragManager.draggable.files)) {
-            context.dragManager.draggable.files.forEach((file: any) => {
+    } else if (draggable?.type === 'files') {
+        if (Array.isArray(draggable.files)) {
+            for (const file of draggable.files) {
                 if (file?.path) filesToProcess.push(file.path);
-            });
+            }
         }
-    } else if (context.dataTransfer?.files?.length > 0) {
+    } else if (context.dataTransfer?.files && context.dataTransfer.files.length > 0) {
         for (let i = 0; i < context.dataTransfer.files.length; i++) {
-            if (context.dataTransfer.files[i]?.path) {
-                filesToProcess.push(context.dataTransfer.files[i].path);
+            const file = context.dataTransfer.files[i] as unknown as { path?: string };
+            if (file?.path) {
+                filesToProcess.push(file.path);
             }
         }
     }
@@ -34,7 +52,7 @@ export function handleTerminalDrop(context: DropContext): void {
             if (index >= filesToProcess.length) return;
             context.onFileDrop!(filesToProcess[index]);
             if (index < filesToProcess.length - 1) {
-                setTimeout(() => sendNext(index + 1), 75);
+                window.setTimeout(() => sendNext(index + 1), 75);
             }
         };
         sendNext(0);
@@ -50,7 +68,7 @@ export function handleTerminalDrop(context: DropContext): void {
         const filePath = filesToProcess[index];
         context.ptyWrite!(`@${filePath}`);
         
-        setTimeout(() => {
+        window.setTimeout(() => {
             // If there is a next file, insert a space so they don't stick together.
             // We DO NOT inject a space (or Enter/Tab) after the LAST file.
             // This guarantees the TUI mention menu stays OPEN for the user to manually confirm.
@@ -58,7 +76,7 @@ export function handleTerminalDrop(context: DropContext): void {
                 context.ptyWrite!(' ');
             }
             
-            setTimeout(() => {
+            window.setTimeout(() => {
                 processNext(index + 1);
             }, 50);
         }, 100);

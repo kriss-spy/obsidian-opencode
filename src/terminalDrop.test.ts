@@ -1,7 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { handleTerminalDrop } from './terminalDrop';
 
 describe('TerminalDropHandler', () => {
+    const originalWindow = globalThis.window;
+    beforeAll(() => {
+        (globalThis as unknown as { window: typeof globalThis }).window = globalThis;
+    });
+    afterAll(() => {
+        (globalThis as unknown as { window?: typeof globalThis }).window = originalWindow;
+    });
     it('should inject @filePath and stop (leaving menu open) for a single file', async () => {
         vi.useFakeTimers();
         const ptyWriteMock = vi.fn();
@@ -119,10 +126,10 @@ describe('TerminalDropHandler', () => {
             dragManager: {},
             dataTransfer: {
                 files: [
-                    { path: '/home/user/vault/external.md' },
-                    { path: '/home/user/vault/another.md' }
+                    { path: '/home/user/vault/external.md' } as unknown as File,
+                    { path: '/home/user/vault/another.md' } as unknown as File
                 ]
-            },
+            } as unknown as DataTransfer,
             onFileDrop: onFileDropMock
         });
 
@@ -144,9 +151,9 @@ describe('TerminalDropHandler', () => {
             dragManager: {},
             dataTransfer: {
                 files: [
-                    { path: 'fallback.md' }
+                    { path: 'fallback.md' } as unknown as File
                 ]
-            },
+            } as unknown as DataTransfer,
             ptyWrite: ptyWriteMock
         });
 
@@ -167,11 +174,11 @@ describe('TerminalDropHandler', () => {
             dragManager: {},
             dataTransfer: {
                 files: [
-                    { path: 'valid.md' },
-                    { name: 'invalid.html' },  // no path
-                    { path: 'also-valid.md' }
+                    { path: 'valid.md' } as unknown as File,
+                    { name: 'invalid.html' } as unknown as File,
+                    { path: 'also-valid.md' } as unknown as File
                 ]
-            },
+            } as unknown as DataTransfer,
             onFileDrop: onFileDropMock
         });
 

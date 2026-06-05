@@ -88,7 +88,7 @@ export class PtySession {
 
 		this.ptyProcess = spawn(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, options.opencodePath, ...options.args], {
 			cwd: options.cwd,
-			env: process.env as NodeJS.ProcessEnv,
+			env: process.env,
 			stdio: ["pipe", "pipe", "pipe", "pipe"],
 		});
 
@@ -110,7 +110,7 @@ export class PtySession {
 		});
 
 		// Initial resize after spawn
-		setTimeout(() => {
+		window.setTimeout(() => {
 			this.sendResize(terminal);
 		}, 300);
 	}
@@ -135,7 +135,7 @@ export class PtySession {
 	sendResize(terminal: Terminal): void {
 		if (!this.ptyProcess) return;
 		const { rows, cols } = terminal;
-		const cmdio = (this.ptyProcess as any).stdio?.[3];
+		const cmdio = this.ptyProcess.stdio?.[3] as import("stream").Writable | undefined;
 		if (cmdio && typeof cmdio.write === "function") {
 			cmdio.write(`${rows}x${cols}\n`);
 		}

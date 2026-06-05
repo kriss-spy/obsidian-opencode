@@ -35,6 +35,7 @@ export interface OpencodeMessage {
 	parts: Array<{
 		type: string;
 		text?: string;
+		name?: string;
 		id: string;
 		sessionID: string;
 		messageID: string;
@@ -117,15 +118,15 @@ export class OpencodeClient {
 		return new Promise((resolve, reject) => {
 			const tmpFile = path.join(os.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
 
-		const child = spawn(
-			`${this.resolvePath()} export ${sessionId} > "${tmpFile}" 2>/dev/null`,
-			[],
-			{
-				cwd: this.cwd,
-				env: process.env as NodeJS.ProcessEnv,
-				shell: true,
-			}
-		);
+			const child = spawn(
+				`${this.resolvePath()} export ${sessionId} > "${tmpFile}" 2>/dev/null`,
+				[],
+				{
+					cwd: this.cwd,
+					env: process.env,
+					shell: true,
+				}
+			);
 
 			child.on("error", (err) => {
 				fs.unlinkSync(tmpFile);
@@ -151,7 +152,7 @@ export class OpencodeClient {
 					resolve(data);
 				} catch (parseError) {
 					fs.unlinkSync(tmpFile);
-					reject(parseError);
+					reject(parseError instanceof Error ? parseError : new Error(String(parseError)));
 				}
 			});
 		});
@@ -172,7 +173,7 @@ export class OpencodeClient {
 		const args = extraArgs.length > 0 ? extraArgs : [];
 		return spawn(this.resolvePath(), args, {
 			cwd,
-			env: process.env as NodeJS.ProcessEnv,
+			env: process.env,
 		});
 	}
 }

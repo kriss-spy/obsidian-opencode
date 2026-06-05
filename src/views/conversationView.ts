@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, Notice, TFile, moment } from "obsidian";
+import { ItemView, WorkspaceLeaf, Notice, moment } from "obsidian";
 import OpencodePlugin from "../main";
 import { OpencodeClient, OpencodeSession, OpencodeExport, ExportTooLargeError } from "../utils/opencode";
 import { SessionExporter } from "../modules/sessionExporter";
@@ -39,8 +39,12 @@ export class OpencodeConversationView extends ItemView {
 		const header = container.createEl("div", { cls: "opencode-conversation-header" });
 		header.createEl("h3", { text: "OpenCode Sessions" });
 		const refreshBtn = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Refresh sessions" } });
-		refreshBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>`;
-		refreshBtn.addEventListener("click", () => this.loadSessions());
+		const svg = refreshBtn.createSvg("svg", { attr: { xmlns: "http://www.w3.org/2000/svg", width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" } });
+		svg.createSvg("path", { attr: { d: "M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" } });
+		svg.createSvg("path", { attr: { d: "M3 3v5h5" } });
+		svg.createSvg("path", { attr: { d: "M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" } });
+		svg.createSvg("path", { attr: { d: "M16 16h5v5" } });
+		refreshBtn.addEventListener("click", () => { void this.loadSessions(); });
 
 		const main = container.createEl("div", { cls: "opencode-conversation-main" });
 		this.listContainer = main.createEl("div", { cls: "opencode-session-list" });
@@ -75,11 +79,11 @@ export class OpencodeConversationView extends ItemView {
 			meta.createEl("span", { text: moment(session.updated).format("YYYY-MM-DD HH:mm") });
 			meta.createEl("span", { cls: "opencode-session-dir", text: session.directory });
 
-			item.addEventListener("click", async () => {
+			item.addEventListener("click", () => {
 				// Highlight selected
 				this.listContainer?.querySelectorAll(".opencode-session-item").forEach((el) => el.removeClass("is-active"));
 				item.addClass("is-active");
-				await this.showSessionDetail(session);
+				void this.showSessionDetail(session);
 			});
 		}
 	}
@@ -94,21 +98,24 @@ export class OpencodeConversationView extends ItemView {
 
 		const restoreBtn = actions.createEl("button", { text: "Restore in Terminal", cls: "mod-cta" });
 		restoreBtn.addEventListener("click", () => {
-			this.plugin.openTerminalWithSession(session.id, session.directory);
+			void this.plugin.openTerminalWithSession(session.id, session.directory);
 		});
 
 		const exportBtn = actions.createEl("button", { text: "Export to Note" });
-		exportBtn.addEventListener("click", () => this.exportSessionToNote(session));
+		exportBtn.addEventListener("click", () => {
+			void this.exportSessionToNote(session);
+		});
 
 		const deleteBtn = actions.createEl("button", { text: "Delete", cls: "mod-warning" });
-		deleteBtn.addEventListener("click", async () => {
+		deleteBtn.addEventListener("click", () => {
 			if (confirm(`Delete session "${session.title}"? This cannot be undone.`)) {
-				const ok = await this.client.deleteSession(session.id);
-				if (ok) {
-					new Notice("Session deleted");
-					await this.loadSessions();
-					this.detailContainer?.empty();
-				}
+				void this.client.deleteSession(session.id).then((ok) => {
+					if (ok) {
+						new Notice("Session deleted");
+						void this.loadSessions();
+						this.detailContainer?.empty();
+					}
+				});
 			}
 		});
 
@@ -154,7 +161,7 @@ export class OpencodeConversationView extends ItemView {
 				} else if (part.type === "step-start") {
 					body.createEl("div", { cls: "opencode-message-step", text: "[thinking...]" });
 				} else if (part.type === "tool-call") {
-					body.createEl("div", { cls: "opencode-message-tool", text: `[tool: ${(part as any).name || part.type}]` });
+					body.createEl("div", { cls: "opencode-message-tool", text: `[tool: ${part.name || part.type}]` });
 				}
 			}
 		}

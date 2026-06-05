@@ -17324,24 +17324,30 @@ var import_addon_web_links = __toESM(require_addon_web_links());
 var import_addon_webgl = __toESM(require_addon_webgl());
 
 // src/terminalDrop.ts
+function isDragManagerDraggable(val) {
+  return typeof val === "object" && val !== null;
+}
 function handleTerminalDrop(context) {
-  var _a, _b, _c, _d, _e, _f, _g, _h;
+  var _a, _b;
   const filesToProcess = [];
-  if (((_b = (_a = context.dragManager) == null ? void 0 : _a.draggable) == null ? void 0 : _b.type) === "file") {
-    if ((_c = context.dragManager.draggable.file) == null ? void 0 : _c.path) {
-      filesToProcess.push(context.dragManager.draggable.file.path);
+  const dragMgr = context.dragManager;
+  const draggable = dragMgr && isDragManagerDraggable(dragMgr.draggable) ? dragMgr.draggable : void 0;
+  if ((draggable == null ? void 0 : draggable.type) === "file") {
+    if ((_a = draggable.file) == null ? void 0 : _a.path) {
+      filesToProcess.push(draggable.file.path);
     }
-  } else if (((_e = (_d = context.dragManager) == null ? void 0 : _d.draggable) == null ? void 0 : _e.type) === "files") {
-    if (Array.isArray(context.dragManager.draggable.files)) {
-      context.dragManager.draggable.files.forEach((file) => {
+  } else if ((draggable == null ? void 0 : draggable.type) === "files") {
+    if (Array.isArray(draggable.files)) {
+      for (const file of draggable.files) {
         if (file == null ? void 0 : file.path)
           filesToProcess.push(file.path);
-      });
+      }
     }
-  } else if (((_g = (_f = context.dataTransfer) == null ? void 0 : _f.files) == null ? void 0 : _g.length) > 0) {
+  } else if (((_b = context.dataTransfer) == null ? void 0 : _b.files) && context.dataTransfer.files.length > 0) {
     for (let i = 0; i < context.dataTransfer.files.length; i++) {
-      if ((_h = context.dataTransfer.files[i]) == null ? void 0 : _h.path) {
-        filesToProcess.push(context.dataTransfer.files[i].path);
+      const file = context.dataTransfer.files[i];
+      if (file == null ? void 0 : file.path) {
+        filesToProcess.push(file.path);
       }
     }
   }
@@ -17353,7 +17359,7 @@ function handleTerminalDrop(context) {
         return;
       context.onFileDrop(filesToProcess[index]);
       if (index < filesToProcess.length - 1) {
-        setTimeout(() => sendNext(index + 1), 75);
+        window.setTimeout(() => sendNext(index + 1), 75);
       }
     };
     sendNext(0);
@@ -17366,11 +17372,11 @@ function handleTerminalDrop(context) {
       return;
     const filePath = filesToProcess[index];
     context.ptyWrite(`@${filePath}`);
-    setTimeout(() => {
+    window.setTimeout(() => {
       if (index < filesToProcess.length - 1) {
         context.ptyWrite(" ");
       }
-      setTimeout(() => {
+      window.setTimeout(() => {
         processNext(index + 1);
       }, 50);
     }, 100);
@@ -17611,7 +17617,7 @@ var PtySession = class {
 Error: ${err.message}\r
 `);
     });
-    setTimeout(() => {
+    window.setTimeout(() => {
       this.sendResize(terminal);
     }, 300);
   }
@@ -17645,6 +17651,7 @@ Error: ${err.message}\r
 };
 
 // src/modules/terminalKeyRouter.ts
+var fs2 = __toESM(require("fs"));
 var TerminalKeyRouter = class {
   constructor() {
     this.disposers = [];
@@ -17654,9 +17661,8 @@ var TerminalKeyRouter = class {
     this.registerPasteHandler(context);
   }
   registerKeyboardHandler(context) {
-    var _a, _b;
+    var _a;
     const { app, terminal, ptySession, container } = context;
-    const appAny = app;
     const hotkeyToCommand = /* @__PURE__ */ new Map();
     const addHotkeys = (cmdId, hotkeys) => {
       for (const hk of hotkeys) {
@@ -17665,32 +17671,36 @@ var TerminalKeyRouter = class {
         hotkeyToCommand.set(str, cmdId);
       }
     };
-    for (const [cmdId, hotkeys] of Object.entries(((_a = appAny == null ? void 0 : appAny.hotkeyManager) == null ? void 0 : _a.defaultKeys) || {})) {
+    const defaultKeys = app.hotkeyManager;
+    for (const [cmdId, hotkeys] of Object.entries((_a = defaultKeys == null ? void 0 : defaultKeys.defaultKeys) != null ? _a : {})) {
       addHotkeys(cmdId, hotkeys);
     }
     try {
-      const adapter = (_b = appAny == null ? void 0 : appAny.vault) == null ? void 0 : _b.adapter;
-      const hotkeysPath = (adapter == null ? void 0 : adapter.getBasePath()) + "/.obsidian/hotkeys.json";
-      const fs3 = require("fs");
-      if (fs3.existsSync(hotkeysPath)) {
-        const custom = JSON.parse(fs3.readFileSync(hotkeysPath, "utf8"));
-        for (const [cmdId, hotkeys] of Object.entries(custom)) {
-          if (Array.isArray(hotkeys) && hotkeys.length > 0) {
-            addHotkeys(cmdId, hotkeys);
+      const adapter = app.vault.adapter;
+      if ("getBasePath" in adapter && typeof adapter.getBasePath === "function") {
+        const basePath = adapter.getBasePath();
+        const hotkeysPath = `${basePath}/${app.vault.configDir}/hotkeys.json`;
+        if (fs2.existsSync(hotkeysPath)) {
+          const custom = JSON.parse(fs2.readFileSync(hotkeysPath, "utf8"));
+          for (const [cmdId, hotkeys] of Object.entries(custom)) {
+            if (Array.isArray(hotkeys) && hotkeys.length > 0) {
+              addHotkeys(cmdId, hotkeys);
+            }
           }
         }
       }
     } catch (e) {
     }
     const allowedIds = /* @__PURE__ */ new Set([
-      "opencode:open-opencode-terminal",
-      "opencode:toggle-opencode-terminal-sidebar",
-      "opencode:open-opencode-conversations",
-      "opencode:new-opencode-session",
-      "opencode:continue-last-opencode-session",
+      "opencode:open-terminal",
+      "opencode:toggle-terminal-sidebar",
+      "opencode:open-conversations",
+      "opencode:new-session",
+      "opencode:continue-last-session",
       "app:toggle-right-sidebar"
     ]);
     const handler = (e) => {
+      var _a2;
       if (!terminal)
         return;
       const target = e.target;
@@ -17724,14 +17734,14 @@ var TerminalKeyRouter = class {
       const hotkeyStr = `${mods.join("+")}${mods.length ? "+" : ""}${e.key}`;
       const cmdId = hotkeyToCommand.get(hotkeyStr);
       if (cmdId && allowedIds.has(cmdId)) {
-        appAny.commands.executeCommandById(cmdId);
+        (_a2 = app.commands) == null ? void 0 : _a2.executeCommandById(cmdId);
         e.stopImmediatePropagation();
         return;
       }
       e.preventDefault();
       this.sendKeyToPty(e, ptySession);
       if (e.key === "Escape") {
-        setTimeout(() => {
+        window.setTimeout(() => {
           const textarea = terminal.textarea;
           if (textarea)
             textarea.focus();
@@ -17739,8 +17749,8 @@ var TerminalKeyRouter = class {
       }
       e.stopImmediatePropagation();
     };
-    document.addEventListener("keydown", handler, true);
-    this.disposers.push(() => document.removeEventListener("keydown", handler, true));
+    activeDocument.addEventListener("keydown", handler, true);
+    this.disposers.push(() => activeDocument.removeEventListener("keydown", handler, true));
   }
   registerPasteHandler(context) {
     const { ptySession, container } = context;
@@ -17924,8 +17934,8 @@ var OpencodeTerminalView = class extends import_obsidian2.ItemView {
     const termContainer = container.createEl("div", {
       cls: "opencode-terminal"
     });
-    const computedStyle = getComputedStyle(document.body);
-    const isDark = document.body.classList.contains("theme-dark");
+    const computedStyle = getComputedStyle(activeDocument.body);
+    const isDark = activeDocument.body.classList.contains("theme-dark");
     const terminal = new import_xterm.Terminal({
       fontSize: this.plugin.settings.terminalFontSize,
       fontFamily: this.plugin.settings.terminalFontFamily,
@@ -17964,22 +17974,22 @@ var OpencodeTerminalView = class extends import_obsidian2.ItemView {
     let fitTimeout = null;
     const doFit = () => {
       if (fitTimeout)
-        clearTimeout(fitTimeout);
-      fitTimeout = setTimeout(() => {
+        window.clearTimeout(fitTimeout);
+      fitTimeout = window.setTimeout(() => {
         if (termContainer.clientWidth > 0 && termContainer.clientHeight > 0) {
           try {
             fitAddon.fit();
-            setTimeout(() => this.ptySession.sendResize(terminal), 50);
-          } catch (e) {
-            console.warn("Fit failed:", e);
+            window.setTimeout(() => this.ptySession.sendResize(terminal), 50);
+          } catch (err) {
+            console.warn("Fit failed:", err);
           }
         }
       }, 50);
     };
-    setTimeout(doFit, 0);
-    setTimeout(doFit, 100);
-    setTimeout(doFit, 300);
-    setTimeout(doFit, 500);
+    window.setTimeout(doFit, 0);
+    window.setTimeout(doFit, 100);
+    window.setTimeout(doFit, 300);
+    window.setTimeout(doFit, 500);
     const resizeObserver = new ResizeObserver(() => {
       doFit();
     });
@@ -18025,8 +18035,9 @@ var OpencodeTerminalView = class extends import_obsidian2.ItemView {
         return;
       e.preventDefault();
       e.stopImmediatePropagation();
+      const dragMgr = this.app.dragManager;
       handleTerminalDrop({
-        dragManager: this.app.dragManager,
+        dragManager: dragMgr,
         dataTransfer: e.dataTransfer,
         ptyWrite: this.ptySession.getStdin() ? (data) => this.ptySession.writeStdin(data) : void 0,
         onFileDrop: this.editorServer ? (filePath) => {
@@ -18041,7 +18052,7 @@ var OpencodeTerminalView = class extends import_obsidian2.ItemView {
       container.removeEventListener("dragover", dragOverHandler, true);
       container.removeEventListener("drop", dropHandler, true);
     });
-    setTimeout(() => {
+    window.setTimeout(() => {
       if (this.terminal) {
         this.terminal.focus();
       }
@@ -18105,7 +18116,7 @@ var import_obsidian5 = require("obsidian");
 var import_obsidian3 = require("obsidian");
 var import_child_process2 = require("child_process");
 var import_util = require("util");
-var fs2 = __toESM(require("fs"));
+var fs3 = __toESM(require("fs"));
 var os2 = __toESM(require("os"));
 var path3 = __toESM(require("path"));
 var execFileAsync = (0, import_util.promisify)(import_child_process2.execFile);
@@ -18159,29 +18170,29 @@ var OpencodeClient = class {
         }
       );
       child.on("error", (err) => {
-        fs2.unlinkSync(tmpFile);
+        fs3.unlinkSync(tmpFile);
         reject(err);
       });
       child.on("close", (code) => {
         if (code !== 0) {
-          fs2.unlinkSync(tmpFile);
+          fs3.unlinkSync(tmpFile);
           reject(new Error(`Export exited with code ${code}`));
           return;
         }
         try {
-          const stats = fs2.statSync(tmpFile);
+          const stats = fs3.statSync(tmpFile);
           if (stats.size > maxBytes) {
-            fs2.unlinkSync(tmpFile);
+            fs3.unlinkSync(tmpFile);
             reject(new ExportTooLargeError(sessionId));
             return;
           }
-          const stdout = fs2.readFileSync(tmpFile, "utf-8");
-          fs2.unlinkSync(tmpFile);
+          const stdout = fs3.readFileSync(tmpFile, "utf-8");
+          fs3.unlinkSync(tmpFile);
           const data = JSON.parse(stdout);
           resolve(data);
         } catch (parseError) {
-          fs2.unlinkSync(tmpFile);
-          reject(parseError);
+          fs3.unlinkSync(tmpFile);
+          reject(parseError instanceof Error ? parseError : new Error(String(parseError)));
         }
       });
     });
@@ -18308,8 +18319,14 @@ var OpencodeConversationView = class extends import_obsidian5.ItemView {
     const header = container.createEl("div", { cls: "opencode-conversation-header" });
     header.createEl("h3", { text: "OpenCode Sessions" });
     const refreshBtn = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Refresh sessions" } });
-    refreshBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>`;
-    refreshBtn.addEventListener("click", () => this.loadSessions());
+    const svg = refreshBtn.createSvg("svg", { attr: { xmlns: "http://www.w3.org/2000/svg", width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" } });
+    svg.createSvg("path", { attr: { d: "M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" } });
+    svg.createSvg("path", { attr: { d: "M3 3v5h5" } });
+    svg.createSvg("path", { attr: { d: "M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" } });
+    svg.createSvg("path", { attr: { d: "M16 16h5v5" } });
+    refreshBtn.addEventListener("click", () => {
+      void this.loadSessions();
+    });
     const main = container.createEl("div", { cls: "opencode-conversation-main" });
     this.listContainer = main.createEl("div", { cls: "opencode-session-list" });
     this.detailContainer = main.createEl("div", { cls: "opencode-session-detail" });
@@ -18335,11 +18352,11 @@ var OpencodeConversationView = class extends import_obsidian5.ItemView {
       const meta = item.createEl("div", { cls: "opencode-session-meta" });
       meta.createEl("span", { text: (0, import_obsidian5.moment)(session.updated).format("YYYY-MM-DD HH:mm") });
       meta.createEl("span", { cls: "opencode-session-dir", text: session.directory });
-      item.addEventListener("click", async () => {
+      item.addEventListener("click", () => {
         var _a;
         (_a = this.listContainer) == null ? void 0 : _a.querySelectorAll(".opencode-session-item").forEach((el) => el.removeClass("is-active"));
         item.addClass("is-active");
-        await this.showSessionDetail(session);
+        void this.showSessionDetail(session);
       });
     }
   }
@@ -18352,20 +18369,23 @@ var OpencodeConversationView = class extends import_obsidian5.ItemView {
     const actions = this.detailContainer.createEl("div", { cls: "opencode-session-actions" });
     const restoreBtn = actions.createEl("button", { text: "Restore in Terminal", cls: "mod-cta" });
     restoreBtn.addEventListener("click", () => {
-      this.plugin.openTerminalWithSession(session.id, session.directory);
+      void this.plugin.openTerminalWithSession(session.id, session.directory);
     });
     const exportBtn = actions.createEl("button", { text: "Export to Note" });
-    exportBtn.addEventListener("click", () => this.exportSessionToNote(session));
+    exportBtn.addEventListener("click", () => {
+      void this.exportSessionToNote(session);
+    });
     const deleteBtn = actions.createEl("button", { text: "Delete", cls: "mod-warning" });
-    deleteBtn.addEventListener("click", async () => {
-      var _a2;
+    deleteBtn.addEventListener("click", () => {
       if (confirm(`Delete session "${session.title}"? This cannot be undone.`)) {
-        const ok = await this.client.deleteSession(session.id);
-        if (ok) {
-          new import_obsidian5.Notice("Session deleted");
-          await this.loadSessions();
-          (_a2 = this.detailContainer) == null ? void 0 : _a2.empty();
-        }
+        void this.client.deleteSession(session.id).then((ok) => {
+          var _a2;
+          if (ok) {
+            new import_obsidian5.Notice("Session deleted");
+            void this.loadSessions();
+            (_a2 = this.detailContainer) == null ? void 0 : _a2.empty();
+          }
+        });
       }
     });
     this.detailContainer.createEl("div", { cls: "opencode-loading", text: "Loading conversation..." });
@@ -18469,7 +18489,7 @@ var OpencodeEditorSuggest = class extends import_obsidian6.EditorSuggest {
     editor.replaceRange(replacement, { line: start.line, ch: 0 }, { line: start.line, ch: fullLine.length });
     if (promptText) {
       this.plugin.pendingPrompt = promptText;
-      this.plugin.newSession();
+      void this.plugin.newSession();
     }
     this.close();
   }
@@ -18526,7 +18546,7 @@ var ViewCoordinator = class {
       }
     }
     if (leaf)
-      this.workspace.revealLeaf(leaf);
+      await this.workspace.revealLeaf(leaf);
     return leaf;
   }
   async activateConversationView() {
@@ -18539,7 +18559,7 @@ var ViewCoordinator = class {
       }
     }
     if (leaf)
-      this.workspace.revealLeaf(leaf);
+      await this.workspace.revealLeaf(leaf);
     return leaf;
   }
   async toggleTerminalSidebar() {
@@ -18559,7 +18579,7 @@ var ViewCoordinator = class {
         }
       }
       if (leaf)
-        this.workspace.revealLeaf(leaf);
+        await this.workspace.revealLeaf(leaf);
       return leaf;
     }
   }
@@ -18567,13 +18587,13 @@ var ViewCoordinator = class {
     let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
     if (leaf) {
       restartFn();
-      this.workspace.revealLeaf(leaf);
+      await this.workspace.revealLeaf(leaf);
       return leaf;
     } else {
       const rightLeaf = this.workspace.getRightLeaf(false);
       if (rightLeaf) {
         await rightLeaf.setViewState({ type: this.config.terminalViewType, active: true });
-        this.workspace.revealLeaf(rightLeaf);
+        await this.workspace.revealLeaf(rightLeaf);
         return rightLeaf;
       }
     }
@@ -18628,34 +18648,34 @@ var OpencodePlugin = class extends import_obsidian7.Plugin {
       (leaf) => new OpencodeConversationView(leaf, this)
     );
     this.addRibbonIcon("terminal", "OpenCode Terminal", (evt) => {
-      this.activateTerminalView();
+      void this.activateTerminalView();
     });
     this.addRibbonIcon("message-circle", "OpenCode Conversations", (evt) => {
-      this.activateConversationView();
+      void this.activateConversationView();
     });
     this.addCommand({
-      id: "open-opencode-terminal",
-      name: "Open OpenCode Terminal",
+      id: "open-terminal",
+      name: "Open Terminal",
       callback: () => this.activateTerminalView()
     });
     this.addCommand({
-      id: "toggle-opencode-terminal-sidebar",
-      name: "Toggle OpenCode Terminal in Sidebar",
+      id: "toggle-terminal-sidebar",
+      name: "Toggle Terminal in Sidebar",
       callback: () => this.toggleTerminalSidebar()
     });
     this.addCommand({
-      id: "open-opencode-conversations",
-      name: "Open OpenCode Conversations",
+      id: "open-conversations",
+      name: "Open Conversations",
       callback: () => this.activateConversationView()
     });
     this.addCommand({
-      id: "new-opencode-session",
-      name: "New OpenCode Session",
+      id: "new-session",
+      name: "New Session",
       callback: () => this.newSession()
     });
     this.addCommand({
-      id: "continue-last-opencode-session",
-      name: "Continue Last OpenCode Session",
+      id: "continue-last-session",
+      name: "Continue Last Session",
       callback: () => this.continueLastSession()
     });
     this.addSettingTab(new OpencodeSettingTab(this.app, this));
@@ -18693,7 +18713,7 @@ var OpencodePlugin = class extends import_obsidian7.Plugin {
       const leaf = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
       if (leaf) {
         const view = leaf.view;
-        if (view && typeof view.restartPty === "function") {
+        if (view && "restartPty" in view && typeof view.restartPty === "function") {
           view.restartPty();
         }
       }

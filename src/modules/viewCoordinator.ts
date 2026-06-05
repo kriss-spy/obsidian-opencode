@@ -20,7 +20,7 @@ export class ViewCoordinator {
 				await leaf.setViewState({ type: this.config.terminalViewType, active: true });
 			}
 		}
-		if (leaf) this.workspace.revealLeaf(leaf);
+		if (leaf) await this.workspace.revealLeaf(leaf);
 		return leaf;
 	}
 
@@ -33,7 +33,7 @@ export class ViewCoordinator {
 				await leaf.setViewState({ type: this.config.conversationViewType, active: true });
 			}
 		}
-		if (leaf) this.workspace.revealLeaf(leaf);
+		if (leaf) await this.workspace.revealLeaf(leaf);
 		return leaf;
 	}
 
@@ -55,7 +55,7 @@ export class ViewCoordinator {
 					await leaf.setViewState({ type: this.config.terminalViewType, active: true });
 				}
 			}
-			if (leaf) this.workspace.revealLeaf(leaf);
+			if (leaf) await this.workspace.revealLeaf(leaf);
 			return leaf;
 		}
 	}
@@ -64,13 +64,13 @@ export class ViewCoordinator {
 		let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
 		if (leaf) {
 			restartFn();
-			this.workspace.revealLeaf(leaf);
+			await this.workspace.revealLeaf(leaf);
 			return leaf;
 		} else {
 			const rightLeaf = this.workspace.getRightLeaf(false);
 			if (rightLeaf) {
 				await rightLeaf.setViewState({ type: this.config.terminalViewType, active: true });
-				this.workspace.revealLeaf(rightLeaf);
+				await this.workspace.revealLeaf(rightLeaf);
 				return rightLeaf;
 			}
 		}
