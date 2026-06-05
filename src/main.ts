@@ -107,7 +107,8 @@ export default class OpencodePlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const data = (await this.loadData()) as Partial<OpencodePluginSettings> | null;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, data ?? {});
 	}
 
 	async saveSettings() {
