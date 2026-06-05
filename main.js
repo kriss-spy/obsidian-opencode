@@ -17262,7 +17262,7 @@ __export(main_exports, {
   default: () => OpencodePlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/settings.ts
 var DEFAULT_SETTINGS = {
@@ -17323,7 +17323,6 @@ var import_xterm = __toESM(require_xterm());
 var import_addon_fit = __toESM(require_addon_fit());
 var import_addon_web_links = __toESM(require_addon_web_links());
 var import_addon_webgl = __toESM(require_addon_webgl());
-var import_child_process = require("child_process");
 
 // src/terminalDrop.ts
 function handleTerminalDrop(context) {
@@ -17511,8 +17510,8 @@ function normalizeVaultPath(filePath, vaultRoot) {
   return relative2;
 }
 
-// src/views/opencodeTerminalView.ts
-var OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
+// src/modules/ptySession.ts
+var import_child_process = require("child_process");
 var UNIX_PSEUDOTERMINAL_PY = `
 import sys
 from os import execvp, read, write, waitpid, waitstatus_to_exitcode
@@ -17580,165 +17579,19 @@ def handle_resize(pty_fd):
 if __name__ == "__main__":
     main()
 `;
-var OpencodeTerminalView = class extends import_obsidian2.ItemView {
-  constructor(leaf, plugin) {
-    super(leaf);
-    this.plugin = plugin;
-    this.terminal = null;
-    this.fitAddon = null;
+var PtySession = class {
+  constructor() {
     this.ptyProcess = null;
-    this.cmdioFd = null;
-    this.container = null;
-    this.editorServer = null;
   }
-  getViewType() {
-    return OPENCODE_TERMINAL_VIEW_TYPE;
-  }
-  getDisplayText() {
-    return "OpenCode";
-  }
-  getIcon() {
-    return "terminal";
-  }
-  async onOpen() {
-    const container = this.containerEl.children[1];
-    container.empty();
-    container.addClass("opencode-terminal-container");
-    this.container = container;
-    const viewHeader = this.containerEl.children[0];
-    if (viewHeader) {
-      viewHeader.style.display = "none";
-    }
-    const termContainer = container.createEl("div", {
-      cls: "opencode-terminal"
-    });
-    const computedStyle = getComputedStyle(document.body);
-    const isDark = document.body.classList.contains("theme-dark");
-    const terminal = new import_xterm.Terminal({
-      fontSize: this.plugin.settings.terminalFontSize,
-      fontFamily: this.plugin.settings.terminalFontFamily,
-      lineHeight: 1.2,
-      theme: {
-        background: computedStyle.getPropertyValue("--background-primary").trim() || (isDark ? "#1e1e1e" : "#ffffff"),
-        foreground: computedStyle.getPropertyValue("--text-normal").trim() || (isDark ? "#d4d4d4" : "#333333"),
-        cursor: computedStyle.getPropertyValue("--text-normal").trim() || (isDark ? "#d4d4d4" : "#333333"),
-        cursorAccent: computedStyle.getPropertyValue("--background-primary").trim() || (isDark ? "#1e1e1e" : "#ffffff"),
-        selectionBackground: computedStyle.getPropertyValue("--text-selection").trim() || (isDark ? "#264f78" : "#add6ff"),
-        black: computedStyle.getPropertyValue("--text-faint").trim() || (isDark ? "#666666" : "#666666"),
-        red: computedStyle.getPropertyValue("--text-error").trim() || (isDark ? "#f44747" : "#cd3131"),
-        green: computedStyle.getPropertyValue("--text-success").trim() || (isDark ? "#6a9955" : "#0bc765"),
-        yellow: computedStyle.getPropertyValue("--text-warning").trim() || (isDark ? "#dcdcaa" : "#e5e510"),
-        blue: computedStyle.getPropertyValue("--text-accent").trim() || (isDark ? "#569cd6" : "#2470fe"),
-        magenta: computedStyle.getPropertyValue("--text-accent-hover").trim() || (isDark ? "#c586c0" : "#bc3fbc"),
-        cyan: "#4ec9b0",
-        white: computedStyle.getPropertyValue("--text-normal").trim() || (isDark ? "#d4d4d4" : "#333333")
-      },
-      cursorBlink: true,
-      scrollback: 1e4,
-      convertEol: true,
-      allowProposedApi: true
-    });
-    const fitAddon = new import_addon_fit.FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.loadAddon(new import_addon_web_links.WebLinksAddon());
-    terminal.open(termContainer);
-    try {
-      terminal.loadAddon(new import_addon_webgl.WebglAddon());
-    } catch (e) {
-      console.warn("WebGL addon failed to load, falling back to canvas", e);
-    }
-    this.terminal = terminal;
-    this.fitAddon = fitAddon;
-    let fitTimeout = null;
-    const doFit = () => {
-      if (fitTimeout)
-        clearTimeout(fitTimeout);
-      fitTimeout = setTimeout(() => {
-        if (termContainer.clientWidth > 0 && termContainer.clientHeight > 0) {
-          try {
-            fitAddon.fit();
-            setTimeout(() => this.sendResize(), 50);
-          } catch (e) {
-            console.warn("Fit failed:", e);
-          }
-        }
-      }, 50);
-    };
-    setTimeout(doFit, 0);
-    setTimeout(doFit, 100);
-    setTimeout(doFit, 300);
-    setTimeout(doFit, 500);
-    const resizeObserver = new ResizeObserver(() => {
-      doFit();
-    });
-    resizeObserver.observe(termContainer);
-    resizeObserver.observe(container);
-    this.register(() => resizeObserver.disconnect());
-    this.registerEvent(
-      this.app.workspace.on("resize", () => {
-        doFit();
-      })
-    );
-    this.registerEvent(
-      this.app.workspace.on("layout-change", () => {
-        doFit();
-      })
-    );
-    window.addEventListener("resize", doFit);
-    this.register(() => window.removeEventListener("resize", doFit));
-    terminal.onData((data) => {
-      var _a;
-      if ((_a = this.ptyProcess) == null ? void 0 : _a.stdin) {
-        this.ptyProcess.stdin.write(data);
-      }
-    });
-    this.registerKeyInterception();
-    this.spawnPty(terminal);
-    this.editorServer = new EditorServer();
-    this.editorServer.start(this.plugin.vaultRoot).catch((err) => {
-      console.warn("OpenCode editor server failed to start:", err);
-    });
-    setTimeout(() => {
-      if (this.terminal) {
-        this.terminal.focus();
-      }
-    }, 600);
-  }
-  restartPty() {
-    if (this.ptyProcess) {
-      this.ptyProcess.kill();
-      this.ptyProcess = null;
-    }
-    if (this.terminal) {
-      this.terminal.clear();
-      this.spawnPty(this.terminal);
-    }
-  }
-  spawnPty(terminal) {
+  spawn(terminal, options) {
     var _a, _b;
-    const defaultCwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
-    const cwd = this.plugin.sessionCwd || defaultCwd;
-    const opencodePath = this.plugin.settings.opencodePath || "opencode";
-    let args = [];
-    if (this.plugin.sessionArgs) {
-      args = [...this.plugin.sessionArgs];
-    } else {
-      args = this.plugin.settings.newSessionArgs ? this.plugin.settings.newSessionArgs.split(/\s+/).filter(Boolean) : [];
-    }
-    this.plugin.sessionArgs = null;
-    this.plugin.sessionCwd = null;
-    if (this.plugin.pendingPrompt) {
-      args.push("--prompt", this.plugin.pendingPrompt);
-      this.plugin.pendingPrompt = null;
-    }
     const pythonPath = process.platform === "win32" ? "python" : "python3";
     if (process.platform === "win32") {
       terminal.writeln("\r\nWindows PTY support not yet implemented.\r\n");
-      new import_obsidian2.Notice("OpenCode terminal not supported on Windows yet.");
       return;
     }
-    this.ptyProcess = (0, import_child_process.spawn)(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, opencodePath, ...args], {
-      cwd,
+    this.ptyProcess = (0, import_child_process.spawn)(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, options.opencodePath, ...options.args], {
+      cwd: options.cwd,
       env: process.env,
       stdio: ["pipe", "pipe", "pipe", "pipe"]
     });
@@ -17758,29 +17611,53 @@ var OpencodeTerminalView = class extends import_obsidian2.ItemView {
       terminal.writeln(`\r
 Error: ${err.message}\r
 `);
-      new import_obsidian2.Notice(`Failed to start OpenCode: ${err.message}`);
     });
     setTimeout(() => {
-      this.sendResize();
+      this.sendResize(terminal);
     }, 300);
   }
-  sendResize() {
+  kill() {
+    if (this.ptyProcess) {
+      this.ptyProcess.kill();
+      this.ptyProcess = null;
+    }
+  }
+  getStdin() {
+    var _a, _b;
+    return (_b = (_a = this.ptyProcess) == null ? void 0 : _a.stdin) != null ? _b : null;
+  }
+  writeStdin(data) {
     var _a;
-    if (!this.ptyProcess || !this.terminal)
+    if ((_a = this.ptyProcess) == null ? void 0 : _a.stdin) {
+      this.ptyProcess.stdin.write(data);
+    }
+  }
+  sendResize(terminal) {
+    var _a;
+    if (!this.ptyProcess)
       return;
-    const { rows, cols } = this.terminal;
-    const pty = this.ptyProcess;
-    const cmdio = (_a = pty.stdio) == null ? void 0 : _a[3];
+    const { rows, cols } = terminal;
+    const cmdio = (_a = this.ptyProcess.stdio) == null ? void 0 : _a[3];
     if (cmdio && typeof cmdio.write === "function") {
       cmdio.write(`${rows}x${cols}
 `);
     }
   }
-  registerKeyInterception() {
-    const container = this.container;
-    if (!container)
-      return;
-    const app = this.app;
+};
+
+// src/modules/terminalKeyRouter.ts
+var TerminalKeyRouter = class {
+  constructor() {
+    this.disposers = [];
+  }
+  register(context) {
+    this.registerKeyboardHandler(context);
+    this.registerPasteHandler(context);
+  }
+  registerKeyboardHandler(context) {
+    var _a, _b;
+    const { app, terminal, ptySession, container } = context;
+    const appAny = app;
     const hotkeyToCommand = /* @__PURE__ */ new Map();
     const addHotkeys = (cmdId, hotkeys) => {
       for (const hk of hotkeys) {
@@ -17789,15 +17666,15 @@ Error: ${err.message}\r
         hotkeyToCommand.set(str, cmdId);
       }
     };
-    for (const [cmdId, hotkeys] of Object.entries(app.hotkeyManager.defaultKeys || {})) {
+    for (const [cmdId, hotkeys] of Object.entries(((_a = appAny == null ? void 0 : appAny.hotkeyManager) == null ? void 0 : _a.defaultKeys) || {})) {
       addHotkeys(cmdId, hotkeys);
     }
     try {
-      const adapter = app.vault.adapter;
-      const hotkeysPath = adapter.getBasePath() + "/.obsidian/hotkeys.json";
-      const fs2 = require("fs");
-      if (fs2.existsSync(hotkeysPath)) {
-        const custom = JSON.parse(fs2.readFileSync(hotkeysPath, "utf8"));
+      const adapter = (_b = appAny == null ? void 0 : appAny.vault) == null ? void 0 : _b.adapter;
+      const hotkeysPath = (adapter == null ? void 0 : adapter.getBasePath()) + "/.obsidian/hotkeys.json";
+      const fs3 = require("fs");
+      if (fs3.existsSync(hotkeysPath)) {
+        const custom = JSON.parse(fs3.readFileSync(hotkeysPath, "utf8"));
         for (const [cmdId, hotkeys] of Object.entries(custom)) {
           if (Array.isArray(hotkeys) && hotkeys.length > 0) {
             addHotkeys(cmdId, hotkeys);
@@ -17815,7 +17692,7 @@ Error: ${err.message}\r
       "app:toggle-right-sidebar"
     ]);
     const handler = (e) => {
-      if (!this.terminal)
+      if (!terminal)
         return;
       const target = e.target;
       const inContainer = container.contains(target);
@@ -17829,10 +17706,9 @@ Error: ${err.message}\r
         e.preventDefault();
         e.stopImmediatePropagation();
         navigator.clipboard.readText().then((text) => {
-          var _a;
-          if (text && ((_a = this.ptyProcess) == null ? void 0 : _a.stdin)) {
+          if (text && ptySession.getStdin()) {
             const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-            this.ptyProcess.stdin.write(normalized);
+            ptySession.writeStdin(normalized);
           }
         }).catch(() => {
         });
@@ -17849,16 +17725,15 @@ Error: ${err.message}\r
       const hotkeyStr = `${mods.join("+")}${mods.length ? "+" : ""}${e.key}`;
       const cmdId = hotkeyToCommand.get(hotkeyStr);
       if (cmdId && allowedIds.has(cmdId)) {
-        app.commands.executeCommandById(cmdId);
+        appAny.commands.executeCommandById(cmdId);
         e.stopImmediatePropagation();
         return;
       }
       e.preventDefault();
-      this.sendKeyToPty(e);
+      this.sendKeyToPty(e, ptySession);
       if (e.key === "Escape") {
         setTimeout(() => {
-          var _a;
-          const textarea = (_a = this.terminal) == null ? void 0 : _a.textarea;
+          const textarea = terminal.textarea;
           if (textarea)
             textarea.focus();
         }, 50);
@@ -17866,57 +17741,30 @@ Error: ${err.message}\r
       e.stopImmediatePropagation();
     };
     document.addEventListener("keydown", handler, true);
-    this.register(() => document.removeEventListener("keydown", handler, true));
+    this.disposers.push(() => document.removeEventListener("keydown", handler, true));
+  }
+  registerPasteHandler(context) {
+    const { ptySession, container } = context;
     const pasteHandler = (e) => {
-      var _a, _b;
-      if (!this.terminal || !((_a = this.ptyProcess) == null ? void 0 : _a.stdin))
+      var _a;
+      if (!ptySession.getStdin())
         return;
       const target = e.target;
       if (!container.contains(target))
         return;
-      const text = (_b = e.clipboardData) == null ? void 0 : _b.getData("text/plain");
+      const text = (_a = e.clipboardData) == null ? void 0 : _a.getData("text/plain");
       if (text) {
         e.preventDefault();
         e.stopImmediatePropagation();
         const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-        this.ptyProcess.stdin.write(normalized);
+        ptySession.writeStdin(normalized);
       }
     };
     container.addEventListener("paste", pasteHandler, true);
-    this.register(() => container.removeEventListener("paste", pasteHandler, true));
-    const dragOverHandler = (e) => {
-      const target = e.target;
-      if (!container.contains(target))
-        return;
-      e.preventDefault();
-    };
-    const dropHandler = (e) => {
-      var _a;
-      const target = e.target;
-      if (!container.contains(target))
-        return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      handleTerminalDrop({
-        dragManager: this.app.dragManager,
-        dataTransfer: e.dataTransfer,
-        ptyWrite: ((_a = this.ptyProcess) == null ? void 0 : _a.stdin) ? (data) => this.ptyProcess.stdin.write(data) : void 0,
-        onFileDrop: this.editorServer ? (filePath) => {
-          const normalized = normalizeVaultPath(filePath, this.plugin.vaultRoot);
-          this.editorServer.notifyAtMentioned(normalized);
-        } : void 0
-      });
-    };
-    container.addEventListener("dragover", dragOverHandler, true);
-    container.addEventListener("drop", dropHandler, true);
-    this.register(() => {
-      container.removeEventListener("dragover", dragOverHandler, true);
-      container.removeEventListener("drop", dropHandler, true);
-    });
+    this.disposers.push(() => container.removeEventListener("paste", pasteHandler, true));
   }
-  sendKeyToPty(e) {
-    var _a;
-    if (!((_a = this.ptyProcess) == null ? void 0 : _a.stdin))
+  sendKeyToPty(e, ptySession) {
+    if (!ptySession.getStdin())
       return;
     const key = e.key;
     const ctrl = e.ctrlKey || e.metaKey;
@@ -18034,17 +17882,211 @@ Error: ${err.message}\r
           break;
       }
     }
-    this.ptyProcess.stdin.write(seq);
+    ptySession.writeStdin(seq);
+  }
+  dispose() {
+    for (const disposer of this.disposers) {
+      try {
+        disposer();
+      } catch (e) {
+      }
+    }
+    this.disposers = [];
+  }
+};
+
+// src/views/opencodeTerminalView.ts
+var OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
+var OpencodeTerminalView = class extends import_obsidian2.ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    this.plugin = plugin;
+    this.terminal = null;
+    this.fitAddon = null;
+    this.container = null;
+    this.editorServer = null;
+    this.ptySession = new PtySession();
+    this.keyRouter = new TerminalKeyRouter();
+  }
+  getViewType() {
+    return OPENCODE_TERMINAL_VIEW_TYPE;
+  }
+  getDisplayText() {
+    return "OpenCode";
+  }
+  getIcon() {
+    return "terminal";
+  }
+  async onOpen() {
+    const container = this.containerEl.children[1];
+    container.empty();
+    container.addClass("opencode-terminal-container");
+    this.container = container;
+    const viewHeader = this.containerEl.children[0];
+    if (viewHeader) {
+      viewHeader.style.display = "none";
+    }
+    const termContainer = container.createEl("div", {
+      cls: "opencode-terminal"
+    });
+    const computedStyle = getComputedStyle(document.body);
+    const isDark = document.body.classList.contains("theme-dark");
+    const terminal = new import_xterm.Terminal({
+      fontSize: this.plugin.settings.terminalFontSize,
+      fontFamily: this.plugin.settings.terminalFontFamily,
+      lineHeight: 1.2,
+      theme: {
+        background: computedStyle.getPropertyValue("--background-primary").trim() || (isDark ? "#1e1e1e" : "#ffffff"),
+        foreground: computedStyle.getPropertyValue("--text-normal").trim() || (isDark ? "#d4d4d4" : "#333333"),
+        cursor: computedStyle.getPropertyValue("--text-normal").trim() || (isDark ? "#d4d4d4" : "#333333"),
+        cursorAccent: computedStyle.getPropertyValue("--background-primary").trim() || (isDark ? "#1e1e1e" : "#ffffff"),
+        selectionBackground: computedStyle.getPropertyValue("--text-selection").trim() || (isDark ? "#264f78" : "#add6ff"),
+        black: computedStyle.getPropertyValue("--text-faint").trim() || (isDark ? "#666666" : "#666666"),
+        red: computedStyle.getPropertyValue("--text-error").trim() || (isDark ? "#f44747" : "#cd3131"),
+        green: computedStyle.getPropertyValue("--text-success").trim() || (isDark ? "#6a9955" : "#0bc765"),
+        yellow: computedStyle.getPropertyValue("--text-warning").trim() || (isDark ? "#dcdcaa" : "#e5e510"),
+        blue: computedStyle.getPropertyValue("--text-accent").trim() || (isDark ? "#569cd6" : "#2470fe"),
+        magenta: computedStyle.getPropertyValue("--text-accent-hover").trim() || (isDark ? "#c586c0" : "#bc3fbc"),
+        cyan: "#4ec9b0",
+        white: computedStyle.getPropertyValue("--text-normal").trim() || (isDark ? "#d4d4d4" : "#333333")
+      },
+      cursorBlink: true,
+      scrollback: 1e4,
+      convertEol: true,
+      allowProposedApi: true
+    });
+    const fitAddon = new import_addon_fit.FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.loadAddon(new import_addon_web_links.WebLinksAddon());
+    terminal.open(termContainer);
+    try {
+      terminal.loadAddon(new import_addon_webgl.WebglAddon());
+    } catch (e) {
+      console.warn("WebGL addon failed to load, falling back to canvas", e);
+    }
+    this.terminal = terminal;
+    this.fitAddon = fitAddon;
+    let fitTimeout = null;
+    const doFit = () => {
+      if (fitTimeout)
+        clearTimeout(fitTimeout);
+      fitTimeout = setTimeout(() => {
+        if (termContainer.clientWidth > 0 && termContainer.clientHeight > 0) {
+          try {
+            fitAddon.fit();
+            setTimeout(() => this.ptySession.sendResize(terminal), 50);
+          } catch (e) {
+            console.warn("Fit failed:", e);
+          }
+        }
+      }, 50);
+    };
+    setTimeout(doFit, 0);
+    setTimeout(doFit, 100);
+    setTimeout(doFit, 300);
+    setTimeout(doFit, 500);
+    const resizeObserver = new ResizeObserver(() => {
+      doFit();
+    });
+    resizeObserver.observe(termContainer);
+    resizeObserver.observe(container);
+    this.register(() => resizeObserver.disconnect());
+    this.registerEvent(
+      this.app.workspace.on("resize", () => {
+        doFit();
+      })
+    );
+    this.registerEvent(
+      this.app.workspace.on("layout-change", () => {
+        doFit();
+      })
+    );
+    window.addEventListener("resize", doFit);
+    this.register(() => window.removeEventListener("resize", doFit));
+    terminal.onData((data) => {
+      this.ptySession.writeStdin(data);
+    });
+    this.spawnPty(terminal);
+    this.editorServer = new EditorServer();
+    this.editorServer.start(this.plugin.vaultRoot).catch((err) => {
+      console.warn("OpenCode editor server failed to start:", err);
+    });
+    this.keyRouter.register({
+      app: this.app,
+      terminal,
+      ptySession: this.ptySession,
+      container
+    });
+    this.register(() => this.keyRouter.dispose());
+    const dragOverHandler = (e) => {
+      const target = e.target;
+      if (!container.contains(target))
+        return;
+      e.preventDefault();
+    };
+    const dropHandler = (e) => {
+      const target = e.target;
+      if (!container.contains(target))
+        return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      handleTerminalDrop({
+        dragManager: this.app.dragManager,
+        dataTransfer: e.dataTransfer,
+        ptyWrite: this.ptySession.getStdin() ? (data) => this.ptySession.writeStdin(data) : void 0,
+        onFileDrop: this.editorServer ? (filePath) => {
+          const normalized = normalizeVaultPath(filePath, this.plugin.vaultRoot);
+          this.editorServer.notifyAtMentioned(normalized);
+        } : void 0
+      });
+    };
+    container.addEventListener("dragover", dragOverHandler, true);
+    container.addEventListener("drop", dropHandler, true);
+    this.register(() => {
+      container.removeEventListener("dragover", dragOverHandler, true);
+      container.removeEventListener("drop", dropHandler, true);
+    });
+    setTimeout(() => {
+      if (this.terminal) {
+        this.terminal.focus();
+      }
+    }, 600);
+  }
+  restartPty() {
+    this.ptySession.kill();
+    if (this.terminal) {
+      this.terminal.clear();
+      this.spawnPty(this.terminal);
+    }
+  }
+  spawnPty(terminal) {
+    const defaultCwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
+    const cwd = this.plugin.sessionCwd || defaultCwd;
+    const opencodePath = this.plugin.settings.opencodePath || "opencode";
+    let args = [];
+    if (this.plugin.sessionArgs) {
+      args = [...this.plugin.sessionArgs];
+    } else {
+      args = this.plugin.settings.newSessionArgs ? this.plugin.settings.newSessionArgs.split(/\s+/).filter(Boolean) : [];
+    }
+    this.plugin.sessionArgs = null;
+    this.plugin.sessionCwd = null;
+    if (this.plugin.pendingPrompt) {
+      args.push("--prompt", this.plugin.pendingPrompt);
+      this.plugin.pendingPrompt = null;
+    }
+    this.ptySession.spawn(terminal, {
+      opencodePath,
+      cwd,
+      args
+    });
   }
   async onClose() {
     if (this.editorServer) {
       await this.editorServer.stop();
       this.editorServer = null;
     }
-    if (this.ptyProcess) {
-      this.ptyProcess.kill();
-      this.ptyProcess = null;
-    }
+    this.ptySession.kill();
     if (this.terminal) {
       try {
         this.terminal.dispose();
@@ -18052,6 +18094,7 @@ Error: ${err.message}\r
       }
       this.terminal = null;
     }
+    this.keyRouter.dispose();
   }
   focusTerminal() {
     if (this.terminal) {
@@ -18061,13 +18104,22 @@ Error: ${err.message}\r
 };
 
 // src/views/conversationView.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/utils/opencode.ts
 var import_obsidian3 = require("obsidian");
 var import_child_process2 = require("child_process");
 var import_util = require("util");
+var fs2 = __toESM(require("fs"));
+var os2 = __toESM(require("os"));
+var path3 = __toESM(require("path"));
 var execFileAsync = (0, import_util.promisify)(import_child_process2.execFile);
+var ExportTooLargeError = class extends Error {
+  constructor(sessionId) {
+    super(`Session ${sessionId} is too large to export`);
+    this.name = "ExportTooLargeError";
+  }
+};
 var OpencodeClient = class {
   constructor(opencodePath, cwd) {
     this.opencodePath = opencodePath;
@@ -18088,13 +18140,56 @@ var OpencodeClient = class {
   }
   async exportSession(sessionId) {
     try {
-      const { stdout } = await execFileAsync(this.resolvePath(), ["export", sessionId], { cwd: this.cwd, maxBuffer: 100 * 1024 * 1024 });
-      return JSON.parse(stdout);
+      return await this.exportSessionStreamed(sessionId);
     } catch (error) {
+      if (error instanceof ExportTooLargeError) {
+        console.warn("Session too large to preview:", sessionId);
+        throw error;
+      }
       console.error("Failed to export session:", error);
       new import_obsidian3.Notice(`Failed to export session ${sessionId}`);
       return null;
     }
+  }
+  exportSessionStreamed(sessionId, maxBytes = 200 * 1024 * 1024) {
+    return new Promise((resolve, reject) => {
+      const tmpFile = path3.join(os2.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
+      const child = (0, import_child_process2.spawn)(
+        `${this.resolvePath()} export ${sessionId} > "${tmpFile}" 2>/dev/null`,
+        [],
+        {
+          cwd: this.cwd,
+          env: process.env,
+          shell: true
+        }
+      );
+      child.on("error", (err) => {
+        fs2.unlinkSync(tmpFile);
+        reject(err);
+      });
+      child.on("close", (code) => {
+        if (code !== 0) {
+          fs2.unlinkSync(tmpFile);
+          reject(new Error(`Export exited with code ${code}`));
+          return;
+        }
+        try {
+          const stats = fs2.statSync(tmpFile);
+          if (stats.size > maxBytes) {
+            fs2.unlinkSync(tmpFile);
+            reject(new ExportTooLargeError(sessionId));
+            return;
+          }
+          const stdout = fs2.readFileSync(tmpFile, "utf-8");
+          fs2.unlinkSync(tmpFile);
+          const data = JSON.parse(stdout);
+          resolve(data);
+        } catch (parseError) {
+          fs2.unlinkSync(tmpFile);
+          reject(parseError);
+        }
+      });
+    });
   }
   async deleteSession(sessionId) {
     try {
@@ -18114,9 +18209,84 @@ var OpencodeClient = class {
   }
 };
 
+// src/modules/sessionExporter.ts
+var import_obsidian4 = require("obsidian");
+var SessionExporter = class {
+  constructor(app) {
+    this.app = app;
+  }
+  async exportToNote(session, data) {
+    const fileName = `OpenCode/${session.title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5\-_ ]/g, "_")}.md`;
+    const folder = "OpenCode";
+    try {
+      await this.app.vault.createFolder(folder);
+    } catch (e) {
+    }
+    let content = this.buildMarkdown(session, data);
+    try {
+      const existing = this.app.vault.getAbstractFileByPath(fileName);
+      if (existing instanceof import_obsidian4.TFile) {
+        await this.app.vault.modify(existing, content);
+        new import_obsidian4.Notice(`Updated ${fileName}`);
+      } else {
+        const file = await this.app.vault.create(fileName, content);
+        new import_obsidian4.Notice(`Created ${file.name}`);
+      }
+    } catch (e) {
+      console.error(e);
+      new import_obsidian4.Notice("Failed to create note");
+    }
+  }
+  buildMarkdown(session, data) {
+    var _a;
+    let content = `---
+`;
+    content += `opencode-session: ${session.id}
+`;
+    content += `opencode-model: ${((_a = data.info.model) == null ? void 0 : _a.id) || "unknown"}
+`;
+    content += `opencode-agent: ${data.info.agent || "default"}
+`;
+    content += `opencode-cost: ${data.info.cost || 0}
+`;
+    content += `opencode-created: ${(0, import_obsidian4.moment)(data.info.time.created).format("YYYY-MM-DD HH:mm:ss")}
+`;
+    content += `opencode-updated: ${(0, import_obsidian4.moment)(data.info.time.updated).format("YYYY-MM-DD HH:mm:ss")}
+`;
+    content += `---
+
+`;
+    content += `# ${session.title}
+
+`;
+    for (const msg of data.messages) {
+      const role = msg.info.role === "assistant" ? "Assistant" : "User";
+      content += `## ${role}
+
+`;
+      for (const part of msg.parts) {
+        if (part.type === "text" && part.text) {
+          content += `${part.text}
+
+`;
+        } else if (part.type === "step-start") {
+          content += `*(thinking...)*
+
+`;
+        } else if (part.type === "tool-call") {
+          content += `*(tool call)*
+
+`;
+        }
+      }
+    }
+    return content;
+  }
+};
+
 // src/views/conversationView.ts
 var OPENCODE_CONVERSATION_VIEW_TYPE = "opencode-conversations";
-var OpencodeConversationView = class extends import_obsidian4.ItemView {
+var OpencodeConversationView = class extends import_obsidian5.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -18125,6 +18295,7 @@ var OpencodeConversationView = class extends import_obsidian4.ItemView {
     this.detailContainer = null;
     const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
     this.client = new OpencodeClient(plugin.settings.opencodePath, cwd);
+    this.exporter = new SessionExporter(this.app);
   }
   getViewType() {
     return OPENCODE_CONVERSATION_VIEW_TYPE;
@@ -18167,7 +18338,7 @@ var OpencodeConversationView = class extends import_obsidian4.ItemView {
       const item = this.listContainer.createEl("div", { cls: "opencode-session-item" });
       item.createEl("div", { cls: "opencode-session-title", text: session.title || "Untitled" });
       const meta = item.createEl("div", { cls: "opencode-session-meta" });
-      meta.createEl("span", { text: (0, import_obsidian4.moment)(session.updated).format("YYYY-MM-DD HH:mm") });
+      meta.createEl("span", { text: (0, import_obsidian5.moment)(session.updated).format("YYYY-MM-DD HH:mm") });
       meta.createEl("span", { cls: "opencode-session-dir", text: session.directory });
       item.addEventListener("click", async () => {
         var _a;
@@ -18178,7 +18349,7 @@ var OpencodeConversationView = class extends import_obsidian4.ItemView {
     }
   }
   async showSessionDetail(session) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     if (!this.detailContainer)
       return;
     this.detailContainer.empty();
@@ -18196,30 +18367,41 @@ var OpencodeConversationView = class extends import_obsidian4.ItemView {
       if (confirm(`Delete session "${session.title}"? This cannot be undone.`)) {
         const ok = await this.client.deleteSession(session.id);
         if (ok) {
-          new import_obsidian4.Notice("Session deleted");
+          new import_obsidian5.Notice("Session deleted");
           await this.loadSessions();
           (_a2 = this.detailContainer) == null ? void 0 : _a2.empty();
         }
       }
     });
     this.detailContainer.createEl("div", { cls: "opencode-loading", text: "Loading conversation..." });
-    const data = await this.client.exportSession(session.id);
-    (_a = this.detailContainer.querySelector(".opencode-loading")) == null ? void 0 : _a.remove();
+    let data;
+    try {
+      data = await this.client.exportSession(session.id);
+    } catch (error) {
+      (_a = this.detailContainer.querySelector(".opencode-loading")) == null ? void 0 : _a.remove();
+      if (error instanceof ExportTooLargeError) {
+        this.detailContainer.createEl("div", { cls: "opencode-warning", text: "Session too large to preview." });
+      } else {
+        this.detailContainer.createEl("div", { cls: "opencode-error", text: "Failed to load conversation." });
+      }
+      return;
+    }
+    (_b = this.detailContainer.querySelector(".opencode-loading")) == null ? void 0 : _b.remove();
     if (!data) {
       this.detailContainer.createEl("div", { cls: "opencode-error", text: "Failed to load conversation." });
       return;
     }
     const info = this.detailContainer.createEl("div", { cls: "opencode-session-info" });
-    info.createEl("div", { text: `Model: ${((_b = data.info.model) == null ? void 0 : _b.id) || "unknown"}` });
+    info.createEl("div", { text: `Model: ${((_c = data.info.model) == null ? void 0 : _c.id) || "unknown"}` });
     info.createEl("div", { text: `Agent: ${data.info.agent || "default"}` });
-    info.createEl("div", { text: `Tokens: ${((_c = data.info.tokens) == null ? void 0 : _c.input) || 0} in / ${((_d = data.info.tokens) == null ? void 0 : _d.output) || 0} out` });
+    info.createEl("div", { text: `Tokens: ${((_d = data.info.tokens) == null ? void 0 : _d.input) || 0} in / ${((_e = data.info.tokens) == null ? void 0 : _e.output) || 0} out` });
     info.createEl("div", { text: `Cost: $${(data.info.cost || 0).toFixed(4)}` });
     const messages = this.detailContainer.createEl("div", { cls: "opencode-messages" });
     for (const msg of data.messages) {
       const msgEl = messages.createEl("div", { cls: `opencode-message opencode-message-${msg.info.role}` });
       const header = msgEl.createEl("div", { cls: "opencode-message-header" });
       header.createEl("span", { cls: "opencode-message-role", text: msg.info.role });
-      header.createEl("span", { cls: "opencode-message-time", text: (0, import_obsidian4.moment)(msg.info.time.created).format("HH:mm:ss") });
+      header.createEl("span", { cls: "opencode-message-time", text: (0, import_obsidian5.moment)(msg.info.time.created).format("HH:mm:ss") });
       const body = msgEl.createEl("div", { cls: "opencode-message-body" });
       for (const part of msg.parts) {
         if (part.type === "text" && part.text) {
@@ -18234,80 +18416,20 @@ var OpencodeConversationView = class extends import_obsidian4.ItemView {
     }
   }
   async exportSessionToNote(session) {
-    var _a;
     const data = await this.client.exportSession(session.id);
     if (!data) {
-      new import_obsidian4.Notice("Failed to export session");
+      new import_obsidian5.Notice("Failed to export session");
       return;
     }
-    const fileName = `OpenCode/${session.title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5\-_ ]/g, "_")}.md`;
-    const folder = "OpenCode";
-    try {
-      await this.app.vault.createFolder(folder);
-    } catch (e) {
-    }
-    let content = `---
-`;
-    content += `opencode-session: ${session.id}
-`;
-    content += `opencode-model: ${((_a = data.info.model) == null ? void 0 : _a.id) || "unknown"}
-`;
-    content += `opencode-agent: ${data.info.agent || "default"}
-`;
-    content += `opencode-cost: ${data.info.cost || 0}
-`;
-    content += `opencode-created: ${(0, import_obsidian4.moment)(data.info.time.created).format("YYYY-MM-DD HH:mm:ss")}
-`;
-    content += `opencode-updated: ${(0, import_obsidian4.moment)(data.info.time.updated).format("YYYY-MM-DD HH:mm:ss")}
-`;
-    content += `---
-
-`;
-    content += `# ${session.title}
-
-`;
-    for (const msg of data.messages) {
-      const role = msg.info.role === "assistant" ? "Assistant" : "User";
-      content += `## ${role}
-
-`;
-      for (const part of msg.parts) {
-        if (part.type === "text" && part.text) {
-          content += `${part.text}
-
-`;
-        } else if (part.type === "step-start") {
-          content += `*(thinking...)*
-
-`;
-        } else if (part.type === "tool-call") {
-          content += `*(tool call)*
-
-`;
-        }
-      }
-    }
-    try {
-      const existing = this.app.vault.getAbstractFileByPath(fileName);
-      if (existing instanceof import_obsidian4.TFile) {
-        await this.app.vault.modify(existing, content);
-        new import_obsidian4.Notice(`Updated ${fileName}`);
-      } else {
-        const file = await this.app.vault.create(fileName, content);
-        new import_obsidian4.Notice(`Created ${file.name}`);
-      }
-    } catch (e) {
-      console.error(e);
-      new import_obsidian4.Notice("Failed to create note");
-    }
+    await this.exporter.exportToNote(session, data);
   }
   async onClose() {
   }
 };
 
 // src/opencodeEditorSuggest.ts
-var import_obsidian5 = require("obsidian");
-var OpencodeEditorSuggest = class extends import_obsidian5.EditorSuggest {
+var import_obsidian6 = require("obsidian");
+var OpencodeEditorSuggest = class extends import_obsidian6.EditorSuggest {
   constructor(plugin) {
     super(plugin.app);
     this.plugin = plugin;
@@ -18358,19 +18480,145 @@ var OpencodeEditorSuggest = class extends import_obsidian5.EditorSuggest {
   }
 };
 
+// src/modules/sessionState.ts
+var SessionState = class {
+  constructor() {
+    this.sessionArgs = null;
+    this.sessionCwd = null;
+    this.pendingPrompt = null;
+  }
+  setNewSession() {
+    this.sessionArgs = [];
+    this.sessionCwd = null;
+  }
+  setContinueLastSession() {
+    this.sessionArgs = ["-c"];
+    this.sessionCwd = null;
+  }
+  setOpenSession(sessionId, directory) {
+    this.sessionArgs = ["-s", sessionId];
+    this.sessionCwd = directory;
+  }
+  setPendingPrompt(prompt) {
+    this.pendingPrompt = prompt;
+  }
+  consumeArgs() {
+    const result = {
+      args: this.sessionArgs,
+      cwd: this.sessionCwd,
+      prompt: this.pendingPrompt
+    };
+    this.sessionArgs = null;
+    this.sessionCwd = null;
+    this.pendingPrompt = null;
+    return result;
+  }
+};
+
+// src/modules/viewCoordinator.ts
+var ViewCoordinator = class {
+  constructor(workspace, config) {
+    this.workspace = workspace;
+    this.config = config;
+  }
+  async activateTerminalView() {
+    let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
+    if (!leaf) {
+      const rightLeaf = this.workspace.getRightLeaf(false);
+      if (rightLeaf) {
+        leaf = rightLeaf;
+        await leaf.setViewState({ type: this.config.terminalViewType, active: true });
+      }
+    }
+    if (leaf)
+      this.workspace.revealLeaf(leaf);
+    return leaf;
+  }
+  async activateConversationView() {
+    let leaf = this.workspace.getLeavesOfType(this.config.conversationViewType)[0];
+    if (!leaf) {
+      const rightLeaf = this.workspace.getRightLeaf(false);
+      if (rightLeaf) {
+        leaf = rightLeaf;
+        await leaf.setViewState({ type: this.config.conversationViewType, active: true });
+      }
+    }
+    if (leaf)
+      this.workspace.revealLeaf(leaf);
+    return leaf;
+  }
+  async toggleTerminalSidebar() {
+    var _a;
+    const rightSplit = this.workspace.rightSplit;
+    const isCollapsed = (_a = rightSplit == null ? void 0 : rightSplit.collapsed) != null ? _a : true;
+    if (!isCollapsed) {
+      rightSplit == null ? void 0 : rightSplit.toggle();
+      return null;
+    } else {
+      let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
+      if (!leaf) {
+        const newLeaf = this.workspace.getRightLeaf(false);
+        if (newLeaf) {
+          leaf = newLeaf;
+          await leaf.setViewState({ type: this.config.terminalViewType, active: true });
+        }
+      }
+      if (leaf)
+        this.workspace.revealLeaf(leaf);
+      return leaf;
+    }
+  }
+  async openOrRestartTerminal(restartFn) {
+    let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
+    if (leaf) {
+      restartFn();
+      this.workspace.revealLeaf(leaf);
+      return leaf;
+    } else {
+      const rightLeaf = this.workspace.getRightLeaf(false);
+      if (rightLeaf) {
+        await rightLeaf.setViewState({ type: this.config.terminalViewType, active: true });
+        this.workspace.revealLeaf(rightLeaf);
+        return rightLeaf;
+      }
+    }
+    return null;
+  }
+};
+
 // src/main.ts
-var OpencodePlugin = class extends import_obsidian6.Plugin {
+var OpencodePlugin = class extends import_obsidian7.Plugin {
   constructor() {
     super(...arguments);
     this.vaultRoot = "";
     this.vaultConfigDir = "";
-    this.pendingPrompt = null;
-    this.sessionArgs = null;
-    this.sessionCwd = null;
+  }
+  get pendingPrompt() {
+    return this.sessionState.pendingPrompt;
+  }
+  set pendingPrompt(value) {
+    this.sessionState.pendingPrompt = value;
+  }
+  get sessionArgs() {
+    return this.sessionState.sessionArgs;
+  }
+  set sessionArgs(value) {
+    this.sessionState.sessionArgs = value;
+  }
+  get sessionCwd() {
+    return this.sessionState.sessionCwd;
+  }
+  set sessionCwd(value) {
+    this.sessionState.sessionCwd = value;
   }
   async onload() {
+    this.sessionState = new SessionState();
+    this.viewCoordinator = new ViewCoordinator(this.app.workspace, {
+      terminalViewType: OPENCODE_TERMINAL_VIEW_TYPE,
+      conversationViewType: OPENCODE_CONVERSATION_VIEW_TYPE
+    });
     await this.loadSettings();
-    if (this.app.vault.adapter instanceof import_obsidian6.FileSystemAdapter) {
+    if (this.app.vault.adapter instanceof import_obsidian7.FileSystemAdapter) {
       this.vaultRoot = this.app.vault.adapter.getBasePath();
     } else {
       this.vaultRoot = "/";
@@ -18429,82 +18677,36 @@ var OpencodePlugin = class extends import_obsidian6.Plugin {
     await this.saveData(this.settings);
   }
   async activateTerminalView() {
-    const { workspace } = this.app;
-    let leaf = workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
-    if (!leaf) {
-      const rightLeaf = workspace.getRightLeaf(false);
-      if (rightLeaf) {
-        leaf = rightLeaf;
-        await leaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
-      }
-    }
-    if (leaf)
-      workspace.revealLeaf(leaf);
+    await this.viewCoordinator.activateTerminalView();
   }
   async activateConversationView() {
-    const { workspace } = this.app;
-    let leaf = workspace.getLeavesOfType(OPENCODE_CONVERSATION_VIEW_TYPE)[0];
-    if (!leaf) {
-      const rightLeaf = workspace.getRightLeaf(false);
-      if (rightLeaf) {
-        leaf = rightLeaf;
-        await leaf.setViewState({ type: OPENCODE_CONVERSATION_VIEW_TYPE, active: true });
-      }
-    }
-    if (leaf)
-      workspace.revealLeaf(leaf);
+    await this.viewCoordinator.activateConversationView();
   }
   async toggleTerminalSidebar() {
-    var _a;
-    const { workspace } = this.app;
-    const rightSplit = workspace.rightSplit;
-    const isCollapsed = (_a = rightSplit == null ? void 0 : rightSplit.collapsed) != null ? _a : true;
-    if (!isCollapsed) {
-      rightSplit == null ? void 0 : rightSplit.toggle();
-    } else {
-      let leaf = workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
-      if (!leaf) {
-        const newLeaf = workspace.getRightLeaf(false);
-        if (newLeaf) {
-          leaf = newLeaf;
-          await leaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
-        }
-      }
-      if (leaf)
-        workspace.revealLeaf(leaf);
-    }
+    await this.viewCoordinator.toggleTerminalSidebar();
   }
   async newSession() {
-    this.sessionArgs = [];
-    this.sessionCwd = null;
+    this.sessionState.setNewSession();
     await this.openOrRestartTerminal();
   }
   async continueLastSession() {
-    this.sessionArgs = ["-c"];
-    this.sessionCwd = null;
+    this.sessionState.setContinueLastSession();
     await this.openOrRestartTerminal();
   }
   async openTerminalWithSession(sessionId, directory) {
-    this.sessionArgs = ["-s", sessionId];
-    this.sessionCwd = directory;
+    this.sessionState.setOpenSession(sessionId, directory);
     await this.openOrRestartTerminal();
   }
   async openOrRestartTerminal() {
-    const { workspace } = this.app;
-    let leaf = workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
-    if (leaf) {
-      const view = leaf.view;
-      if (view && typeof view.restartPty === "function") {
-        view.restartPty();
+    await this.viewCoordinator.openOrRestartTerminal(() => {
+      const leaf = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
+      if (leaf) {
+        const view = leaf.view;
+        if (view && typeof view.restartPty === "function") {
+          view.restartPty();
+        }
       }
-      workspace.revealLeaf(leaf);
-    } else {
-      const rightLeaf = workspace.getRightLeaf(false);
-      if (rightLeaf) {
-        await rightLeaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
-        workspace.revealLeaf(rightLeaf);
-      }
-    }
+    });
   }
 };
 // Annotate the CommonJS export names for ESM import in node:

@@ -4,14 +4,47 @@ import { OpencodeSettingTab } from "./settingsTab";
 import { OpencodeTerminalView, OPENCODE_TERMINAL_VIEW_TYPE } from "./views/opencodeTerminalView";
 import { OpencodeConversationView, OPENCODE_CONVERSATION_VIEW_TYPE } from "./views/conversationView";
 import { OpencodeEditorSuggest } from "./opencodeEditorSuggest";
+import { SessionState } from "./modules/sessionState";
+import { ViewCoordinator } from "./modules/viewCoordinator";
 
 export default class OpencodePlugin extends Plugin {
 	settings: OpencodePluginSettings;
 	vaultRoot: string = "";
 	vaultConfigDir: string = "";
-	pendingPrompt: string | null = null;
+	private sessionState: SessionState;
+	private viewCoordinator: ViewCoordinator;
+
+	get pendingPrompt(): string | null {
+		return this.sessionState.pendingPrompt;
+	}
+
+	set pendingPrompt(value: string | null) {
+		this.sessionState.pendingPrompt = value;
+	}
+
+	get sessionArgs(): string[] | null {
+		return this.sessionState.sessionArgs;
+	}
+
+	set sessionArgs(value: string[] | null) {
+		this.sessionState.sessionArgs = value;
+	}
+
+	get sessionCwd(): string | null {
+		return this.sessionState.sessionCwd;
+	}
+
+	set sessionCwd(value: string | null) {
+		this.sessionState.sessionCwd = value;
+	}
 
 	async onload() {
+		this.sessionState = new SessionState();
+		this.viewCoordinator = new ViewCoordinator(this.app.workspace, {
+			terminalViewType: OPENCODE_TERMINAL_VIEW_TYPE,
+			conversationViewType: OPENCODE_CONVERSATION_VIEW_TYPE,
+		});
+
 		await this.loadSettings();
 		if (this.app.vault.adapter instanceof FileSystemAdapter) {
 			this.vaultRoot = this.app.vault.adapter.getBasePath();
@@ -87,89 +120,41 @@ export default class OpencodePlugin extends Plugin {
 	}
 
 	async activateTerminalView() {
-		const { workspace } = this.app;
-		let leaf = workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
-		if (!leaf) {
-			const rightLeaf = workspace.getRightLeaf(false);
-			if (rightLeaf) {
-				leaf = rightLeaf;
-				await leaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
-			}
-		}
-		if (leaf) workspace.revealLeaf(leaf);
+		await this.viewCoordinator.activateTerminalView();
 	}
 
 	async activateConversationView() {
-		const { workspace } = this.app;
-		let leaf = workspace.getLeavesOfType(OPENCODE_CONVERSATION_VIEW_TYPE)[0];
-		if (!leaf) {
-			const rightLeaf = workspace.getRightLeaf(false);
-			if (rightLeaf) {
-				leaf = rightLeaf;
-				await leaf.setViewState({ type: OPENCODE_CONVERSATION_VIEW_TYPE, active: true });
-			}
-		}
-		if (leaf) workspace.revealLeaf(leaf);
+		await this.viewCoordinator.activateConversationView();
 	}
 
 	async toggleTerminalSidebar() {
-		const { workspace } = this.app;
-		const rightSplit = workspace.rightSplit;
-		const isCollapsed = rightSplit?.collapsed ?? true;
-
-		if (!isCollapsed) {
-			// Right sidebar is visible — collapse it (leaf stays alive)
-			rightSplit?.toggle();
-		} else {
-			// Right sidebar is collapsed — ensure leaf exists, then reveal
-			let leaf = workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
-			if (!leaf) {
-				const newLeaf = workspace.getRightLeaf(false);
-				if (newLeaf) {
-					leaf = newLeaf;
-					await leaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
-				}
-			}
-			if (leaf) workspace.revealLeaf(leaf);
-		}
+		await this.viewCoordinator.toggleTerminalSidebar();
 	}
 
-	sessionArgs: string[] | null = null;
-	sessionCwd: string | null = null;
-
 	async newSession() {
-		this.sessionArgs = [];
-		this.sessionCwd = null;
+		this.sessionState.setNewSession();
 		await this.openOrRestartTerminal();
 	}
 
 	async continueLastSession() {
-		this.sessionArgs = ["-c"];
-		this.sessionCwd = null;
+		this.sessionState.setContinueLastSession();
 		await this.openOrRestartTerminal();
 	}
 
 	async openTerminalWithSession(sessionId: string, directory: string) {
-		this.sessionArgs = ["-s", sessionId];
-		this.sessionCwd = directory;
+		this.sessionState.setOpenSession(sessionId, directory);
 		await this.openOrRestartTerminal();
 	}
 
 	private async openOrRestartTerminal() {
-		const { workspace } = this.app;
-		let leaf = workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
-		if (leaf) {
-			const view = leaf.view as any;
-			if (view && typeof view.restartPty === "function") {
-				view.restartPty();
+		await this.viewCoordinator.openOrRestartTerminal(() => {
+			const leaf = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
+			if (leaf) {
+				const view = leaf.view as any;
+				if (view && typeof view.restartPty === "function") {
+					view.restartPty();
+				}
 			}
-			workspace.revealLeaf(leaf);
-		} else {
-			const rightLeaf = workspace.getRightLeaf(false);
-			if (rightLeaf) {
-				await rightLeaf.setViewState({ type: OPENCODE_TERMINAL_VIEW_TYPE, active: true });
-				workspace.revealLeaf(rightLeaf);
-			}
-		}
+		});
 	}
 }

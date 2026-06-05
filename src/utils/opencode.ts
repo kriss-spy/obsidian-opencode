@@ -1,6 +1,9 @@
 import { Notice } from "obsidian";
 import { execFile, spawn } from "child_process";
 import { promisify } from "util";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 
 const execFileAsync = promisify(execFile);
 
@@ -71,6 +74,13 @@ export interface OpencodeExport {
 	messages: OpencodeMessage[];
 }
 
+export class ExportTooLargeError extends Error {
+	constructor(sessionId: string) {
+		super(`Session ${sessionId} is too large to export`);
+		this.name = "ExportTooLargeError";
+	}
+}
+
 export class OpencodeClient {
 	constructor(private opencodePath: string, private cwd: string) {}
 
@@ -91,13 +101,60 @@ export class OpencodeClient {
 
 	async exportSession(sessionId: string): Promise<OpencodeExport | null> {
 		try {
-			const { stdout } = await execFileAsync(this.resolvePath(), ["export", sessionId], { cwd: this.cwd, maxBuffer: 100 * 1024 * 1024 });
-			return JSON.parse(stdout) as OpencodeExport;
+			return await this.exportSessionStreamed(sessionId);
 		} catch (error) {
+			if (error instanceof ExportTooLargeError) {
+				console.warn("Session too large to preview:", sessionId);
+				throw error;
+			}
 			console.error("Failed to export session:", error);
 			new Notice(`Failed to export session ${sessionId}`);
 			return null;
 		}
+	}
+
+	private exportSessionStreamed(sessionId: string, maxBytes = 200 * 1024 * 1024): Promise<OpencodeExport> {
+		return new Promise((resolve, reject) => {
+			const tmpFile = path.join(os.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
+
+		const child = spawn(
+			`${this.resolvePath()} export ${sessionId} > "${tmpFile}" 2>/dev/null`,
+			[],
+			{
+				cwd: this.cwd,
+				env: process.env as NodeJS.ProcessEnv,
+				shell: true,
+			}
+		);
+
+			child.on("error", (err) => {
+				fs.unlinkSync(tmpFile);
+				reject(err);
+			});
+
+			child.on("close", (code) => {
+				if (code !== 0) {
+					fs.unlinkSync(tmpFile);
+					reject(new Error(`Export exited with code ${code}`));
+					return;
+				}
+				try {
+					const stats = fs.statSync(tmpFile);
+					if (stats.size > maxBytes) {
+						fs.unlinkSync(tmpFile);
+						reject(new ExportTooLargeError(sessionId));
+						return;
+					}
+					const stdout = fs.readFileSync(tmpFile, "utf-8");
+					fs.unlinkSync(tmpFile);
+					const data = JSON.parse(stdout) as OpencodeExport;
+					resolve(data);
+				} catch (parseError) {
+					fs.unlinkSync(tmpFile);
+					reject(parseError);
+				}
+			});
+		});
 	}
 
 	async deleteSession(sessionId: string): Promise<boolean> {

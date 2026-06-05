@@ -1,6 +1,7 @@
 import { ItemView, WorkspaceLeaf, Notice, TFile, moment } from "obsidian";
 import OpencodePlugin from "../main";
-import { OpencodeClient, OpencodeSession, OpencodeExport } from "../utils/opencode";
+import { OpencodeClient, OpencodeSession, OpencodeExport, ExportTooLargeError } from "../utils/opencode";
+import { SessionExporter } from "../modules/sessionExporter";
 
 export const OPENCODE_CONVERSATION_VIEW_TYPE = "opencode-conversations";
 
@@ -9,11 +10,13 @@ export class OpencodeConversationView extends ItemView {
 	sessions: OpencodeSession[] = [];
 	listContainer: HTMLElement | null = null;
 	detailContainer: HTMLElement | null = null;
+	private exporter: SessionExporter;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
 		const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
 		this.client = new OpencodeClient(plugin.settings.opencodePath, cwd);
+		this.exporter = new SessionExporter(this.app);
 	}
 
 	getViewType() {
@@ -111,7 +114,18 @@ export class OpencodeConversationView extends ItemView {
 
 		this.detailContainer.createEl("div", { cls: "opencode-loading", text: "Loading conversation..." });
 
-		const data = await this.client.exportSession(session.id);
+		let data: OpencodeExport | null;
+		try {
+			data = await this.client.exportSession(session.id);
+		} catch (error) {
+			this.detailContainer.querySelector(".opencode-loading")?.remove();
+			if (error instanceof ExportTooLargeError) {
+				this.detailContainer.createEl("div", { cls: "opencode-warning", text: "Session too large to preview." });
+			} else {
+				this.detailContainer.createEl("div", { cls: "opencode-error", text: "Failed to load conversation." });
+			}
+			return;
+		}
 		this.detailContainer.querySelector(".opencode-loading")?.remove();
 
 		if (!data) {
@@ -153,53 +167,7 @@ export class OpencodeConversationView extends ItemView {
 			return;
 		}
 
-		const fileName = `OpenCode/${session.title.replace(/[^a-zA-Z0-9\u4e00-\u9fa5\-_ ]/g, "_")}.md`;
-		const folder = "OpenCode";
-
-		// Ensure folder exists
-		try {
-			await this.app.vault.createFolder(folder);
-		} catch (e) {
-			// Folder may already exist
-		}
-
-		let content = `---\n`;
-		content += `opencode-session: ${session.id}\n`;
-		content += `opencode-model: ${data.info.model?.id || "unknown"}\n`;
-		content += `opencode-agent: ${data.info.agent || "default"}\n`;
-		content += `opencode-cost: ${data.info.cost || 0}\n`;
-		content += `opencode-created: ${moment(data.info.time.created).format("YYYY-MM-DD HH:mm:ss")}\n`;
-		content += `opencode-updated: ${moment(data.info.time.updated).format("YYYY-MM-DD HH:mm:ss")}\n`;
-		content += `---\n\n`;
-		content += `# ${session.title}\n\n`;
-
-		for (const msg of data.messages) {
-			const role = msg.info.role === "assistant" ? "Assistant" : "User";
-			content += `## ${role}\n\n`;
-			for (const part of msg.parts) {
-				if (part.type === "text" && part.text) {
-					content += `${part.text}\n\n`;
-				} else if (part.type === "step-start") {
-					content += `*(thinking...)*\n\n`;
-				} else if (part.type === "tool-call") {
-					content += `*(tool call)*\n\n`;
-				}
-			}
-		}
-
-		try {
-			const existing = this.app.vault.getAbstractFileByPath(fileName);
-			if (existing instanceof TFile) {
-				await this.app.vault.modify(existing, content);
-				new Notice(`Updated ${fileName}`);
-			} else {
-				const file = await this.app.vault.create(fileName, content);
-				new Notice(`Created ${file.name}`);
-			}
-		} catch (e) {
-			console.error(e);
-			new Notice("Failed to create note");
-		}
+		await this.exporter.exportToNote(session, data);
 	}
 
 	async onClose() {
