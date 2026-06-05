@@ -32,7 +32,6 @@ export class TerminalKeyRouter {
 			}
 		};
 
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
 		const defaultKeys = (app as unknown as Record<string, unknown>).hotkeyManager as Record<string, unknown> | undefined;
 		for (const [cmdId, hotkeys] of Object.entries((defaultKeys?.defaultKeys as Record<string, HotkeyEntry[]>) ?? {})) {
 			addHotkeys(cmdId, hotkeys);
@@ -98,7 +97,6 @@ export class TerminalKeyRouter {
 
 			const cmdId = hotkeyToCommand.get(hotkeyStr);
 			if (cmdId && allowedIds.has(cmdId)) {
-				// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
 				(app as unknown as { commands?: { executeCommandById(id: string): void } }).commands?.executeCommandById(cmdId);
 				e.stopImmediatePropagation();
 				return;

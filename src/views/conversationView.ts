@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, Notice, moment } from "obsidian";
+import { ItemView, WorkspaceLeaf, Notice, moment, Modal, App } from "obsidian";
 import OpencodePlugin from "../main";
 import { OpencodeClient, OpencodeSession, OpencodeExport, ExportTooLargeError } from "../utils/opencode";
 import { SessionExporter } from "../modules/sessionExporter";
@@ -108,15 +108,14 @@ export class OpencodeConversationView extends ItemView {
 
 		const deleteBtn = actions.createEl("button", { text: "Delete", cls: "mod-warning" });
 		deleteBtn.addEventListener("click", () => {
-			if (confirm(`Delete session "${session.title}"? This cannot be undone.`)) {
-				void this.client.deleteSession(session.id).then((ok) => {
-					if (ok) {
-						new Notice("Session deleted");
-						void this.loadSessions();
-						this.detailContainer?.empty();
-					}
-				});
-			}
+			new ConfirmDeleteModal(this.app, session.title, async () => {
+				const ok = await this.client.deleteSession(session.id);
+				if (ok) {
+					new Notice("Session deleted");
+					void this.loadSessions();
+					this.detailContainer?.empty();
+				}
+			}).open();
 		});
 
 		this.detailContainer.createEl("div", { cls: "opencode-loading", text: "Loading conversation..." });
@@ -179,5 +178,38 @@ export class OpencodeConversationView extends ItemView {
 
 	async onClose() {
 		// cleanup if needed
+	}
+}
+
+class ConfirmDeleteModal extends Modal {
+	private title: string;
+	private onConfirm: () => void | Promise<void>;
+
+	constructor(app: App, title: string, onConfirm: () => void | Promise<void>) {
+		super(app);
+		this.title = title;
+		this.onConfirm = onConfirm;
+	}
+
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.createEl("p", {
+			text: `Delete session "${this.title}"? This cannot be undone.`,
+		});
+
+		const buttonRow = contentEl.createDiv({ cls: "modal-button-container" });
+		const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });
+		cancelBtn.addEventListener("click", () => this.close());
+
+		const confirmBtn = buttonRow.createEl("button", { text: "Delete", cls: "mod-warning" });
+		confirmBtn.addEventListener("click", () => {
+			void this.onConfirm();
+			this.close();
+		});
+	}
+
+	onClose() {
+		this.contentEl.empty();
 	}
 }

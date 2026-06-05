@@ -18377,16 +18377,15 @@ var OpencodeConversationView = class extends import_obsidian5.ItemView {
     });
     const deleteBtn = actions.createEl("button", { text: "Delete", cls: "mod-warning" });
     deleteBtn.addEventListener("click", () => {
-      if (confirm(`Delete session "${session.title}"? This cannot be undone.`)) {
-        void this.client.deleteSession(session.id).then((ok) => {
-          var _a2;
-          if (ok) {
-            new import_obsidian5.Notice("Session deleted");
-            void this.loadSessions();
-            (_a2 = this.detailContainer) == null ? void 0 : _a2.empty();
-          }
-        });
-      }
+      new ConfirmDeleteModal(this.app, session.title, async () => {
+        var _a2;
+        const ok = await this.client.deleteSession(session.id);
+        if (ok) {
+          new import_obsidian5.Notice("Session deleted");
+          void this.loadSessions();
+          (_a2 = this.detailContainer) == null ? void 0 : _a2.empty();
+        }
+      }).open();
     });
     this.detailContainer.createEl("div", { cls: "opencode-loading", text: "Loading conversation..." });
     let data;
@@ -18439,6 +18438,31 @@ var OpencodeConversationView = class extends import_obsidian5.ItemView {
     await this.exporter.exportToNote(session, data);
   }
   async onClose() {
+  }
+};
+var ConfirmDeleteModal = class extends import_obsidian5.Modal {
+  constructor(app, title, onConfirm) {
+    super(app);
+    this.title = title;
+    this.onConfirm = onConfirm;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("p", {
+      text: `Delete session "${this.title}"? This cannot be undone.`
+    });
+    const buttonRow = contentEl.createDiv({ cls: "modal-button-container" });
+    const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });
+    cancelBtn.addEventListener("click", () => this.close());
+    const confirmBtn = buttonRow.createEl("button", { text: "Delete", cls: "mod-warning" });
+    confirmBtn.addEventListener("click", () => {
+      void this.onConfirm();
+      this.close();
+    });
+  }
+  onClose() {
+    this.contentEl.empty();
   }
 };
 
@@ -18682,7 +18706,8 @@ var OpencodePlugin = class extends import_obsidian7.Plugin {
     this.registerEditorSuggest(new OpencodeEditorSuggest(this));
   }
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const data = await this.loadData();
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, data != null ? data : {});
   }
   async saveSettings() {
     await this.saveData(this.settings);
