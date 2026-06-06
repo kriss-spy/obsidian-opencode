@@ -52,9 +52,17 @@ export class EditorServer {
 				ws.on("close", () => {
 					this.clients.delete(ws);
 				});
-				ws.on("message", (rawData) => {
-					this.handleMessage(ws, rawData.toString());
-				});
+			ws.on("message", (rawData) => {
+				let text: string;
+				if (Array.isArray(rawData)) {
+					text = Buffer.concat(rawData).toString("utf8");
+				} else if (rawData instanceof ArrayBuffer) {
+					text = new TextDecoder().decode(rawData);
+				} else {
+					text = rawData.toString("utf8");
+				}
+				this.handleMessage(ws, text);
+			});
 			});
 		});
 	}
