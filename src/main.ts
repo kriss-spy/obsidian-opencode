@@ -69,12 +69,12 @@ export default class OpencodePlugin extends Plugin {
 
 		this.registerView(
 			OPENCODE_TERMINAL_VIEW_TYPE,
-			(leaf) => new OpencodeTerminalView(leaf, this)
+			(leaf) => new OpencodeTerminalView(leaf, this, "sidebar")
 		);
 
 		this.registerView(
 			OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE,
-			(leaf) => new OpencodeTerminalView(leaf, this)
+			(leaf) => new OpencodeTerminalView(leaf, this, "bottom")
 		);
 
 		this.registerView(
@@ -95,9 +95,9 @@ export default class OpencodePlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: "toggle-terminal-sidebar",
-			name: "Toggle terminal in sidebar",
-			callback: () => this.toggleTerminalSidebar(),
+			id: "toggle-terminal",
+			name: "Toggle terminal",
+			callback: () => this.toggleTerminal(),
 		});
 
 		this.addCommand({
@@ -137,7 +137,7 @@ export default class OpencodePlugin extends Plugin {
 	}
 
 	async activateTerminalInMode(mode: PanelMode) {
-		await this.viewCoordinator.activateInMode(mode);
+		await this.panelMigrator.openInMode(mode);
 	}
 
 	async handlePanelModeChange(newMode: PanelMode) {
@@ -148,8 +148,8 @@ export default class OpencodePlugin extends Plugin {
 		await this.viewCoordinator.activateConversationView();
 	}
 
-	async toggleTerminalSidebar() {
-		await this.viewCoordinator.toggleTerminalSidebar();
+	async toggleTerminal() {
+		await this.viewCoordinator.toggleTerminal();
 	}
 
 	async newSession() {

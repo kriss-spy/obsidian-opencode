@@ -29,6 +29,7 @@ const createMockWorkspace = () => {
 			return leaf;
 		}),
 		revealLeaf: vi.fn(),
+		activeLeaf: null as any,
 		rightSplit: {
 			collapsed: false,
 			toggle: vi.fn(),
@@ -84,41 +85,6 @@ describe('ViewCoordinator', () => {
 
 		expect(workspace.getRightLeaf).toHaveBeenCalledWith(false);
 		expect(workspace.revealLeaf).toHaveBeenCalled();
-	});
-
-	it('should toggle sidebar when not collapsed', async () => {
-		const workspace = createMockWorkspace();
-		workspace.rightSplit.collapsed = false;
-		const coordinator = new ViewCoordinator(workspace as any, baseConfig());
-
-		await coordinator.toggleTerminalSidebar();
-
-		expect(workspace.rightSplit.toggle).toHaveBeenCalled();
-	});
-
-	it('should open terminal when sidebar is collapsed', async () => {
-		const workspace = createMockWorkspace();
-		workspace.rightSplit.collapsed = true;
-		const coordinator = new ViewCoordinator(workspace as any, baseConfig());
-
-		await coordinator.toggleTerminalSidebar();
-
-		expect(workspace.getRightLeaf).toHaveBeenCalledWith(false);
-		expect(workspace.revealLeaf).toHaveBeenCalled();
-	});
-
-	it('should restart existing terminal view', async () => {
-		const existingLeaf = { ...createMockLeaf('existing'), viewType: 'opencode-terminal' };
-		const workspace = createMockWorkspace();
-		workspace._addLeaf(existingLeaf);
-
-		const coordinator = new ViewCoordinator(workspace as any, baseConfig());
-
-		const restartFn = vi.fn();
-		await coordinator.openOrRestartTerminal(restartFn);
-
-		expect(restartFn).toHaveBeenCalled();
-		expect(workspace.revealLeaf).toHaveBeenCalledWith(existingLeaf);
 	});
 
 	describe('panelMode dispatch', () => {
@@ -180,6 +146,113 @@ describe('ViewCoordinator', () => {
 			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
 
 			expect(coordinator.getActiveTerminalLeaf()).toBeNull();
+		});
+	});
+
+	describe('toggleTerminal', () => {
+		it('creates a sidebar leaf in the active mode when none exists', async () => {
+			const workspace = createMockWorkspace();
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
+
+			await coordinator.toggleTerminal();
+
+			expect(workspace.getRightLeaf).toHaveBeenCalled();
+		});
+
+		it('creates a bottom leaf in the active mode when none exists and panelMode=bottom', async () => {
+			const workspace = createMockWorkspace();
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig({
+				getPanelMode: () => 'bottom',
+			}));
+
+			await coordinator.toggleTerminal();
+
+			expect(workspace.createLeafInParent).toHaveBeenCalled();
+		});
+
+		it('expands a collapsed right sidebar when the sidebar leaf exists', async () => {
+			const sidebarLeaf = { ...createMockLeaf('s'), viewType: 'opencode-terminal' };
+			const workspace = createMockWorkspace();
+			workspace._addLeaf(sidebarLeaf);
+			workspace.rightSplit.collapsed = true;
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
+
+			await coordinator.toggleTerminal();
+
+			expect(workspace.revealLeaf).toHaveBeenCalledWith(sidebarLeaf);
+		});
+
+		it('collapses the right sidebar when the sidebar leaf is shown and focused', async () => {
+			const sidebarLeaf = { ...createMockLeaf('s'), viewType: 'opencode-terminal' };
+			const workspace = createMockWorkspace();
+			workspace._addLeaf(sidebarLeaf);
+			workspace.rightSplit.collapsed = false;
+			workspace.activeLeaf = sidebarLeaf;
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
+
+			await coordinator.toggleTerminal();
+
+			expect(workspace.rightSplit.toggle).toHaveBeenCalled();
+		});
+
+		it('focuses the sidebar leaf when it is shown but not focused', async () => {
+			const sidebarLeaf = { ...createMockLeaf('s'), viewType: 'opencode-terminal' };
+			const otherLeaf = { ...createMockLeaf('o'), viewType: 'markdown' };
+			const workspace = createMockWorkspace();
+			workspace._addLeaf(sidebarLeaf);
+			workspace.rightSplit.collapsed = false;
+			workspace.activeLeaf = otherLeaf;
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
+
+			await coordinator.toggleTerminal();
+
+			expect(workspace.revealLeaf).toHaveBeenCalledWith(sidebarLeaf);
+			expect(workspace.rightSplit.toggle).not.toHaveBeenCalled();
+		});
+
+		it('focuses a bottom leaf that is shown but not focused (does not toggle the right split)', async () => {
+			const bottomLeaf = { ...createMockLeaf('b'), viewType: 'opencode-terminal-bottom', focusTerminal: vi.fn() };
+			const otherLeaf = { ...createMockLeaf('o'), viewType: 'markdown' };
+			const workspace = createMockWorkspace();
+			workspace._addLeaf(bottomLeaf);
+			workspace.activeLeaf = otherLeaf;
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
+
+			await coordinator.toggleTerminal();
+
+			expect(workspace.revealLeaf).toHaveBeenCalledWith(bottomLeaf);
+		});
+
+		it('collapses a focused bottom leaf by adding the collapsed class to its container', async () => {
+			const bottomLeaf = {
+				...createMockLeaf('b'),
+				viewType: 'opencode-terminal-bottom',
+				view: { containerEl: { classList: { add: vi.fn(), remove: vi.fn(), contains: vi.fn(() => false) } } },
+			};
+			const workspace = createMockWorkspace();
+			workspace._addLeaf(bottomLeaf);
+			workspace.activeLeaf = bottomLeaf;
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
+
+			await coordinator.toggleTerminal();
+
+			expect(bottomLeaf.view.containerEl.classList.add).toHaveBeenCalledWith('opencode-terminal-collapsed');
+		});
+
+		it('reveals a collapsed bottom leaf by removing the collapsed class and focusing', async () => {
+			const bottomLeaf = {
+				...createMockLeaf('b'),
+				viewType: 'opencode-terminal-bottom',
+				view: { containerEl: { classList: { add: vi.fn(), remove: vi.fn(), contains: vi.fn(() => true) } } },
+			};
+			const workspace = createMockWorkspace();
+			workspace._addLeaf(bottomLeaf);
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
+
+			await coordinator.toggleTerminal();
+
+			expect(bottomLeaf.view.containerEl.classList.remove).toHaveBeenCalledWith('opencode-terminal-collapsed');
+			expect(workspace.revealLeaf).toHaveBeenCalledWith(bottomLeaf);
 		});
 	});
 

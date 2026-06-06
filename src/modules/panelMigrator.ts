@@ -18,6 +18,15 @@ export class PanelMigrator {
 			: this.deps.bottomViewType;
 		this.deps.viewCoordinator.destroyLeaf(oldViewType);
 		this.deps.sessionState.replayLastSession();
-		await this.deps.viewCoordinator.activateTerminalView();
+		await this.deps.viewCoordinator.activateInMode(mode);
+	}
+
+	async openInMode(mode: PanelMode): Promise<void> {
+		const myViewType = mode === "bottom"
+			? this.deps.bottomViewType
+			: this.deps.terminalViewType;
+		const focused = await this.deps.viewCoordinator.focusLeafOfType(myViewType);
+		if (focused) return;
+		await this.migrateTo(mode);
 	}
 }

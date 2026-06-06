@@ -63,6 +63,20 @@
 	width: 100%;
 }
 
+.workspace-leaf-content[data-type="opencode-terminal-bottom"] .view-header,
+.opencode-terminal-bottom-container ~ .view-header,
+.workspace-leaf-content[data-type="opencode-terminal-bottom"] .workspace-tab-header-container {
+	display: none;
+}
+
+.workspace-leaf-content[data-type="opencode-terminal-bottom"] {
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.opencode-terminal-collapsed {
+	display: none;
+}
+
 .opencode-terminal-error {
 	padding: 20px;
 	color: var(--text-error);

@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, Menu, WorkspaceLeaf } from "obsidian";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -9,7 +9,9 @@ import { EditorServer } from "../editorServer";
 import { normalizeVaultPath } from "../utils/path";
 import { PtySession } from "../modules/ptySession";
 import { TerminalKeyRouter } from "../modules/terminalKeyRouter";
-import { OPENCODE_TERMINAL_VIEW_TYPE } from "./viewTypes";
+import { OPENCODE_TERMINAL_VIEW_TYPE, OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE } from "./viewTypes";
+import { terminalChromeClasses } from "../modules/terminalChrome";
+import type { PanelMode } from "../settings";
 
 export { OPENCODE_TERMINAL_VIEW_TYPE, OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE } from "./viewTypes";
 
@@ -20,15 +22,17 @@ export class OpencodeTerminalView extends ItemView {
 	editorServer: EditorServer | null = null;
 	private ptySession: PtySession;
 	private keyRouter: TerminalKeyRouter;
+	private readonly mode: PanelMode;
 
-	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
+	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin, mode: PanelMode = "sidebar") {
 		super(leaf);
+		this.mode = mode;
 		this.ptySession = new PtySession();
 		this.keyRouter = new TerminalKeyRouter();
 	}
 
 	getViewType() {
-		return OPENCODE_TERMINAL_VIEW_TYPE;
+		return this.mode === "bottom" ? OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE : OPENCODE_TERMINAL_VIEW_TYPE;
 	}
 
 	getDisplayText() {
@@ -43,12 +47,18 @@ export class OpencodeTerminalView extends ItemView {
 	async onOpen() {
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
-		container.addClass("opencode-terminal-container");
+		for (const cls of terminalChromeClasses(this.mode)) {
+			container.addClass(cls);
+		}
 		this.container = container;
 
 		const termContainer = container.createEl("div", {
 			cls: "opencode-terminal",
 		});
+
+		if (this.mode === "bottom") {
+			this.registerBottomContextMenu(container);
+		}
 
 		// Get computed styles from Obsidian for theme integration
 		const computedStyle = getComputedStyle(activeDocument.body);
@@ -261,5 +271,31 @@ export class OpencodeTerminalView extends ItemView {
 		if (this.terminal) {
 			this.terminal.focus();
 		}
+	}
+
+	private registerBottomContextMenu(container: HTMLElement) {
+		const handler = (event: MouseEvent) => {
+			event.preventDefault();
+			const menu = new Menu();
+			menu.addItem((item) =>
+				item
+					.setTitle("Close terminal")
+					.setIcon("trash")
+					.onClick(() => {
+						this.leaf.detach();
+					})
+			);
+			menu.addItem((item) =>
+				item
+					.setTitle("Restart terminal")
+					.setIcon("refresh-ccw")
+					.onClick(() => {
+						this.restartPty();
+					})
+			);
+			menu.showAtMouseEvent(event);
+		};
+		container.addEventListener("contextmenu", handler);
+		this.register(() => container.removeEventListener("contextmenu", handler));
 	}
 }

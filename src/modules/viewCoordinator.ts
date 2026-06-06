@@ -1,6 +1,7 @@
 import { WorkspaceLeaf, Workspace } from "obsidian";
 import type { PanelMode } from "../settings";
 import { BottomPanelDocking } from "./bottomPanelDocking";
+import { decideToggleAction } from "./toggleAction";
 
 export interface ViewCoordinatorConfig {
 	terminalViewType: string;
@@ -73,6 +74,53 @@ export class ViewCoordinator {
 		}
 	}
 
+	async focusLeafOfType(viewType: string): Promise<WorkspaceLeaf | null> {
+		const leaf = this.workspace.getLeavesOfType(viewType)[0];
+		if (leaf) {
+			await this.workspace.revealLeaf(leaf);
+			return leaf;
+		}
+		return null;
+	}
+
+	async toggleTerminal(): Promise<WorkspaceLeaf | null> {
+		const active = this.getActiveTerminalLeaf();
+		if (!active) {
+			return this.activateTerminalView();
+		}
+		const mode = (active as unknown as { viewType: string }).viewType === this.config.bottomViewType ? "bottom" : "sidebar";
+		const isFocused = this.workspace.activeLeaf === active;
+		const isCollapsed = mode === "bottom"
+			? active.view?.containerEl?.classList?.contains("opencode-terminal-collapsed") ?? false
+			: this.workspace.rightSplit?.collapsed ?? false;
+		const action = decideToggleAction({ hasLeaf: true, isCollapsed, isFocused });
+
+		if (mode === "sidebar") {
+			if (action === "reveal") {
+				if (this.workspace.rightSplit?.collapsed) {
+					this.workspace.rightSplit.collapsed = false;
+				}
+				await this.workspace.revealLeaf(active);
+			} else if (action === "collapse") {
+				this.workspace.rightSplit?.toggle();
+			} else {
+				await this.workspace.revealLeaf(active);
+			}
+			return active;
+		}
+
+		// bottom mode
+		if (action === "reveal") {
+			active.view?.containerEl?.classList?.remove?.("opencode-terminal-collapsed");
+			await this.workspace.revealLeaf(active);
+		} else if (action === "collapse") {
+			active.view?.containerEl?.classList?.add?.("opencode-terminal-collapsed");
+		} else {
+			await this.workspace.revealLeaf(active);
+		}
+		return active;
+	}
+
 	async activateConversationView(): Promise<WorkspaceLeaf | null> {
 		let leaf = this.workspace.getLeavesOfType(this.config.conversationViewType)[0];
 		if (!leaf) {
@@ -84,27 +132,6 @@ export class ViewCoordinator {
 		}
 		if (leaf) await this.workspace.revealLeaf(leaf);
 		return leaf;
-	}
-
-	async toggleTerminalSidebar(): Promise<WorkspaceLeaf | null> {
-		const rightSplit = this.workspace.rightSplit;
-		const isCollapsed = rightSplit?.collapsed ?? true;
-
-		if (!isCollapsed) {
-			rightSplit?.toggle();
-			return null;
-		} else {
-			let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
-			if (!leaf) {
-				const newLeaf = this.workspace.getRightLeaf(false);
-				if (newLeaf) {
-					leaf = newLeaf;
-					await leaf.setViewState({ type: this.config.terminalViewType, active: true });
-				}
-			}
-			if (leaf) await this.workspace.revealLeaf(leaf);
-			return leaf;
-		}
 	}
 
 	async openOrRestartTerminal(restartFn: () => void): Promise<WorkspaceLeaf | null> {

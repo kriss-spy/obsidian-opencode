@@ -57,7 +57,7 @@ export class TerminalKeyRouter {
 
 		const allowedIds = new Set([
 			'opencode:open-terminal',
-			'opencode:toggle-terminal-sidebar',
+			'opencode:toggle-terminal',
 			'opencode:open-conversations',
 			'opencode:new-session',
 			'opencode:continue-last-session',
