@@ -1,5 +1,7 @@
-import { App, TFile, Notice, moment } from "obsidian";
+import { App, TFile, Notice, moment as obsidianMoment } from "obsidian";
 import { OpencodeSession, OpencodeExport } from "../utils/opencode";
+
+const moment: (input: number) => { format: (fmt: string) => string } = obsidianMoment;
 
 export class SessionExporter {
 	constructor(private app: App) {}

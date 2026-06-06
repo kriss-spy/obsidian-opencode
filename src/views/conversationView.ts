@@ -1,7 +1,9 @@
-import { ItemView, WorkspaceLeaf, Notice, moment, Modal, App } from "obsidian";
+import { ItemView, WorkspaceLeaf, Notice, moment as obsidianMoment, Modal, App } from "obsidian";
 import OpencodePlugin from "../main";
 import { OpencodeClient, OpencodeSession, OpencodeExport, ExportTooLargeError } from "../utils/opencode";
 import { SessionExporter } from "../modules/sessionExporter";
+
+const moment: (input: number) => { format: (fmt: string) => string } = obsidianMoment;
 
 export const OPENCODE_CONVERSATION_VIEW_TYPE = "opencode-conversations";
 
@@ -24,6 +26,7 @@ export class OpencodeConversationView extends ItemView {
 	}
 
 	getDisplayText() {
+		// eslint-disable-next-line obsidianmd/ui/sentence-case
 		return "OpenCode Conversations";
 	}
 
@@ -37,6 +40,7 @@ export class OpencodeConversationView extends ItemView {
 		container.addClass("opencode-conversation-container");
 
 		const header = container.createEl("div", { cls: "opencode-conversation-header" });
+		// eslint-disable-next-line obsidianmd/ui/sentence-case
 		header.createEl("h3", { text: "OpenCode Sessions" });
 		const refreshBtn = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Refresh sessions" } });
 		const svg = refreshBtn.createSvg("svg", { attr: { xmlns: "http://www.w3.org/2000/svg", width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" } });
@@ -96,12 +100,12 @@ export class OpencodeConversationView extends ItemView {
 
 		const actions = this.detailContainer.createEl("div", { cls: "opencode-session-actions" });
 
-		const restoreBtn = actions.createEl("button", { text: "Restore in Terminal", cls: "mod-cta" });
+		const restoreBtn = actions.createEl("button", { text: "Restore in terminal", cls: "mod-cta" });
 		restoreBtn.addEventListener("click", () => {
 			void this.plugin.openTerminalWithSession(session.id, session.directory);
 		});
 
-		const exportBtn = actions.createEl("button", { text: "Export to Note" });
+		const exportBtn = actions.createEl("button", { text: "Export to note" });
 		exportBtn.addEventListener("click", () => {
 			void this.exportSessionToNote(session);
 		});
