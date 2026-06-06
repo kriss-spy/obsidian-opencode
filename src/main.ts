@@ -63,41 +63,43 @@ export default class OpencodePlugin extends Plugin {
 			(leaf) => new OpencodeConversationView(leaf, this)
 		);
 
+		// eslint-disable-next-line obsidianmd/ui/sentence-case
 		this.addRibbonIcon("terminal", "OpenCode Terminal", (evt: MouseEvent) => {
 			void this.activateTerminalView();
 		});
 
+		// eslint-disable-next-line obsidianmd/ui/sentence-case
 		this.addRibbonIcon("message-circle", "OpenCode Conversations", (evt: MouseEvent) => {
 			void this.activateConversationView();
 		});
 
 		this.addCommand({
 			id: "open-terminal",
-			name: "Open Terminal",
+			name: "Open terminal",
 			callback: () => this.activateTerminalView(),
 		});
 
 		this.addCommand({
 			id: "toggle-terminal-sidebar",
-			name: "Toggle Terminal in Sidebar",
+			name: "Toggle terminal in sidebar",
 			callback: () => this.toggleTerminalSidebar(),
 		});
 
 		this.addCommand({
 			id: "open-conversations",
-			name: "Open Conversations",
+			name: "Open conversations",
 			callback: () => this.activateConversationView(),
 		});
 
 		this.addCommand({
 			id: "new-session",
-			name: "New Session",
+			name: "New session",
 			callback: () => this.newSession(),
 		});
 
 		this.addCommand({
 			id: "continue-last-session",
-			name: "Continue Last Session",
+			name: "Continue last session",
 			callback: () => this.continueLastSession(),
 		});
 

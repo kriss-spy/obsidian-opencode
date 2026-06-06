@@ -14,11 +14,11 @@ export class OpencodeSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName("OpenCode path")
-			.setDesc("Path to the opencode executable. Leave as 'opencode' to use PATH.")
+			.setName("OpenCode path") // eslint-disable-line obsidianmd/ui/sentence-case
+			.setDesc("Path to the opencode executable. Leave as 'opencode' to use PATH.") // eslint-disable-line obsidianmd/ui/sentence-case
 			.addText((text) =>
 				text
-					.setPlaceholder("opencode")
+					.setPlaceholder("opencode") // eslint-disable-line obsidianmd/ui/sentence-case
 					.setValue(this.plugin.settings.opencodePath)
 					.onChange(async (value) => {
 						this.plugin.settings.opencodePath = value || "opencode";
@@ -58,7 +58,7 @@ export class OpencodeSettingTab extends PluginSettingTab {
 			.setDesc("Font family for the integrated terminal.")
 			.addText((text) =>
 				text
-					.setPlaceholder("monospace")
+					.setPlaceholder("Monospace")
 					.setValue(this.plugin.settings.terminalFontFamily)
 					.onChange(async (value) => {
 						this.plugin.settings.terminalFontFamily = value || "monospace";

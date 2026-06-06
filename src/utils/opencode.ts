@@ -95,7 +95,7 @@ export class OpencodeClient {
 			return JSON.parse(stdout) as OpencodeSession[];
 		} catch (error) {
 			console.error("Failed to list sessions:", error);
-			new Notice("Failed to list OpenCode sessions. Check your OpenCode path in settings.");
+			new Notice("Failed to list OpenCode sessions. Check your OpenCode path in settings."); // eslint-disable-line obsidianmd/ui/sentence-case
 			return [];
 		}
 	}

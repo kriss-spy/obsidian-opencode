@@ -31,6 +31,7 @@ export class OpencodeTerminalView extends ItemView {
 	}
 
 	getDisplayText() {
+		// eslint-disable-next-line obsidianmd/ui/sentence-case
 		return "OpenCode";
 	}
 
