@@ -1,5 +1,6 @@
 import { WorkspaceLeaf, Workspace } from "obsidian";
 import type { PanelMode } from "../settings";
+import { BottomPanelDocking } from "./bottomPanelDocking";
 
 export interface ViewCoordinatorConfig {
 	terminalViewType: string;
@@ -10,12 +11,14 @@ export interface ViewCoordinatorConfig {
 
 export class ViewCoordinator {
 	private readonly getPanelMode: () => PanelMode;
+	private readonly bottomDocking: BottomPanelDocking;
 
 	constructor(
 		private workspace: Workspace,
 		private config: ViewCoordinatorConfig
 	) {
 		this.getPanelMode = config.getPanelMode ?? (() => "sidebar");
+		this.bottomDocking = new BottomPanelDocking(workspace);
 	}
 
 	private viewTypeForMode(mode: PanelMode): string {
@@ -33,7 +36,16 @@ export class ViewCoordinator {
 	}
 
 	async activateBottomTerminalView(): Promise<WorkspaceLeaf | null> {
-		return this.activateViewOfType(this.config.bottomViewType, () => this.workspace.getLeaf("split"));
+		let leaf = this.workspace.getLeavesOfType(this.config.bottomViewType)[0];
+		if (leaf) {
+			await this.workspace.revealLeaf(leaf);
+			return leaf;
+		}
+		this.bottomDocking.enter();
+		const newLeaf = this.bottomDocking.createBottomLeaf();
+		await newLeaf.setViewState({ type: this.config.bottomViewType, active: true });
+		await this.workspace.revealLeaf(newLeaf);
+		return newLeaf;
 	}
 
 	async activateInMode(mode: PanelMode): Promise<WorkspaceLeaf | null> {
@@ -55,6 +67,9 @@ export class ViewCoordinator {
 	destroyLeaf(viewType: string): void {
 		for (const leaf of this.workspace.getLeavesOfType(viewType)) {
 			leaf.detach();
+		}
+		if (viewType === this.config.bottomViewType) {
+			this.bottomDocking.maybeExit();
 		}
 	}
 
@@ -99,17 +114,10 @@ export class ViewCoordinator {
 			restartFn();
 			await this.workspace.revealLeaf(leaf);
 			return leaf;
-		} else {
-			const newLeaf = this.getPanelMode() === "bottom"
-				? this.workspace.getLeaf("split")
-				: this.workspace.getRightLeaf(false);
-			if (newLeaf) {
-				await newLeaf.setViewState({ type: viewType, active: true });
-				await this.workspace.revealLeaf(newLeaf);
-				return newLeaf;
-			}
 		}
-		return null;
+		return this.getPanelMode() === "bottom"
+			? this.activateBottomTerminalView()
+			: this.activateSidebarTerminalView();
 	}
 
 	private async activateViewOfType(

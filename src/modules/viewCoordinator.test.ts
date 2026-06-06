@@ -10,16 +10,31 @@ const createMockLeaf = (id: string) => ({
 
 const createMockWorkspace = () => {
 	const leaves: any[] = [];
+	const rootChildren: any[] = [];
+	const root = {
+		direction: 'vertical' as 'vertical' | 'horizontal',
+		children: rootChildren,
+		setDirection: vi.fn((d: 'vertical' | 'horizontal') => { root.direction = d; }),
+		containerEl: { classList: { add: vi.fn(), remove: vi.fn() } },
+	};
 	return {
 		getLeavesOfType: vi.fn((type: string) => leaves.filter(l => l.viewType === type || l.type === type)),
 		getRightLeaf: vi.fn(() => createMockLeaf('right-leaf')),
 		getLeaf: vi.fn((split: string) => createMockLeaf(split === 'split' ? 'split-leaf' : 'tab-leaf')),
+		rootSplit: root,
+		createLeafInParent: vi.fn((_parent: any, index: number) => {
+			const leaf = { ...createMockLeaf(`bottom-${index}`), setViewState: vi.fn().mockResolvedValue(undefined) };
+			leaves.push(leaf);
+			rootChildren.push(leaf);
+			return leaf;
+		}),
 		revealLeaf: vi.fn(),
 		rightSplit: {
 			collapsed: false,
 			toggle: vi.fn(),
 		},
 		_leaves: leaves,
+		_rootChildren: rootChildren,
 		_addLeaf: (leaf: any) => { leaves.push(leaf); },
 	};
 };
@@ -115,9 +130,10 @@ describe('ViewCoordinator', () => {
 
 			await coordinator.activateTerminalView();
 
-			expect(workspace.getLeaf).toHaveBeenCalled();
+			expect(workspace.createLeafInParent).toHaveBeenCalled();
 			expect(workspace.getRightLeaf).not.toHaveBeenCalled();
 			expect(workspace.revealLeaf).toHaveBeenCalled();
+			expect(workspace.rootSplit.setDirection).toHaveBeenCalledWith('horizontal');
 		});
 
 		it('should reuse an existing bottom leaf when getPanelMode returns "bottom"', async () => {

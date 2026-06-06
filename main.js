@@ -18593,6 +18593,45 @@ var SessionState = class {
   }
 };
 
+// src/modules/bottomPanelDocking.ts
+var BottomPanelDocking = class {
+  constructor(workspace) {
+    this.originalDirection = null;
+    this.workspace = workspace;
+    this.rootSplit = this.workspace.rootSplit;
+  }
+  isActive() {
+    return this.originalDirection !== null;
+  }
+  enter() {
+    if (this.originalDirection !== null)
+      return;
+    this.originalDirection = this.rootSplit.direction;
+    this.setDirection("horizontal");
+  }
+  maybeExit() {
+    if (this.originalDirection === null)
+      return;
+    if (this.rootSplit.children.length === 0) {
+      this.setDirection(this.originalDirection);
+      this.originalDirection = null;
+    }
+  }
+  createBottomLeaf() {
+    return this.workspace.createLeafInParent(this.rootSplit, this.rootSplit.children.length);
+  }
+  setDirection(d) {
+    var _a, _b, _c, _d, _e, _f;
+    if (typeof this.rootSplit.setDirection === "function") {
+      this.rootSplit.setDirection(d);
+      return;
+    }
+    this.rootSplit.direction = d;
+    (_c = (_b = (_a = this.rootSplit.containerEl) == null ? void 0 : _a.classList) == null ? void 0 : _b.remove) == null ? void 0 : _c.call(_b, "mod-vertical");
+    (_f = (_e = (_d = this.rootSplit.containerEl) == null ? void 0 : _d.classList) == null ? void 0 : _e.add) == null ? void 0 : _f.call(_e, "mod-horizontal");
+  }
+};
+
 // src/modules/viewCoordinator.ts
 var ViewCoordinator = class {
   constructor(workspace, config) {
@@ -18600,6 +18639,7 @@ var ViewCoordinator = class {
     this.config = config;
     var _a;
     this.getPanelMode = (_a = config.getPanelMode) != null ? _a : () => "sidebar";
+    this.bottomDocking = new BottomPanelDocking(workspace);
   }
   viewTypeForMode(mode) {
     return mode === "bottom" ? this.config.bottomViewType : this.config.terminalViewType;
@@ -18611,7 +18651,16 @@ var ViewCoordinator = class {
     return this.activateViewOfType(this.config.terminalViewType, () => this.workspace.getRightLeaf(false));
   }
   async activateBottomTerminalView() {
-    return this.activateViewOfType(this.config.bottomViewType, () => this.workspace.getLeaf("split"));
+    let leaf = this.workspace.getLeavesOfType(this.config.bottomViewType)[0];
+    if (leaf) {
+      await this.workspace.revealLeaf(leaf);
+      return leaf;
+    }
+    this.bottomDocking.enter();
+    const newLeaf = this.bottomDocking.createBottomLeaf();
+    await newLeaf.setViewState({ type: this.config.bottomViewType, active: true });
+    await this.workspace.revealLeaf(newLeaf);
+    return newLeaf;
   }
   async activateInMode(mode) {
     return mode === "bottom" ? this.activateBottomTerminalView() : this.activateSidebarTerminalView();
@@ -18629,6 +18678,9 @@ var ViewCoordinator = class {
   destroyLeaf(viewType) {
     for (const leaf of this.workspace.getLeavesOfType(viewType)) {
       leaf.detach();
+    }
+    if (viewType === this.config.bottomViewType) {
+      this.bottomDocking.maybeExit();
     }
   }
   async activateConversationView() {
@@ -18672,15 +18724,8 @@ var ViewCoordinator = class {
       restartFn();
       await this.workspace.revealLeaf(leaf);
       return leaf;
-    } else {
-      const newLeaf = this.getPanelMode() === "bottom" ? this.workspace.getLeaf("split") : this.workspace.getRightLeaf(false);
-      if (newLeaf) {
-        await newLeaf.setViewState({ type: viewType, active: true });
-        await this.workspace.revealLeaf(newLeaf);
-        return newLeaf;
-      }
     }
-    return null;
+    return this.getPanelMode() === "bottom" ? this.activateBottomTerminalView() : this.activateSidebarTerminalView();
   }
   async activateViewOfType(viewType, leafFactory) {
     let leaf = this.workspace.getLeavesOfType(viewType)[0];
