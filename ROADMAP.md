@@ -5,7 +5,7 @@
 | Version | Theme | Status |
 |---------|-------|--------|
 | v1.3.0 | Internal Refactoring | Done |
-| v1.4.0 | Panel Mode | Planned |
+| v1.4.0 | Panel Mode | In progress |
 | v1.5.0 | Terminal Integration | Planned |
 | v1.6.0 | Session Management | Planned |
 

@@ -17302,7 +17302,7 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
       })
     );
     new import_obsidian.Setting(containerEl).setName("Terminal font family").setDesc("Font family for the integrated terminal.").addText(
-      (text) => text.setPlaceholder("monospace").setValue(this.plugin.settings.terminalFontFamily).onChange(async (value) => {
+      (text) => text.setPlaceholder("Monospace").setValue(this.plugin.settings.terminalFontFamily).onChange(async (value) => {
         this.plugin.settings.terminalFontFamily = value || "monospace";
         await this.plugin.saveSettings();
       })
@@ -17435,7 +17435,15 @@ var EditorServer = class {
           this.clients.delete(ws);
         });
         ws.on("message", (rawData) => {
-          this.handleMessage(ws, rawData.toString());
+          let text;
+          if (Array.isArray(rawData)) {
+            text = Buffer.concat(rawData).toString("utf8");
+          } else if (rawData instanceof ArrayBuffer) {
+            text = new TextDecoder().decode(rawData);
+          } else {
+            text = rawData.toString("utf8");
+          }
+          this.handleMessage(ws, text);
         });
       });
     });
@@ -18217,6 +18225,7 @@ var OpencodeClient = class {
 
 // src/modules/sessionExporter.ts
 var import_obsidian4 = require("obsidian");
+var moment = import_obsidian4.moment;
 var SessionExporter = class {
   constructor(app) {
     this.app = app;
@@ -18255,9 +18264,9 @@ var SessionExporter = class {
 `;
     content += `opencode-cost: ${data.info.cost || 0}
 `;
-    content += `opencode-created: ${(0, import_obsidian4.moment)(data.info.time.created).format("YYYY-MM-DD HH:mm:ss")}
+    content += `opencode-created: ${moment(data.info.time.created).format("YYYY-MM-DD HH:mm:ss")}
 `;
-    content += `opencode-updated: ${(0, import_obsidian4.moment)(data.info.time.updated).format("YYYY-MM-DD HH:mm:ss")}
+    content += `opencode-updated: ${moment(data.info.time.updated).format("YYYY-MM-DD HH:mm:ss")}
 `;
     content += `---
 
@@ -18291,6 +18300,7 @@ var SessionExporter = class {
 };
 
 // src/views/conversationView.ts
+var moment2 = import_obsidian5.moment;
 var OPENCODE_CONVERSATION_VIEW_TYPE = "opencode-conversations";
 var OpencodeConversationView = class extends import_obsidian5.ItemView {
   constructor(leaf, plugin) {
@@ -18350,7 +18360,7 @@ var OpencodeConversationView = class extends import_obsidian5.ItemView {
       const item = this.listContainer.createEl("div", { cls: "opencode-session-item" });
       item.createEl("div", { cls: "opencode-session-title", text: session.title || "Untitled" });
       const meta = item.createEl("div", { cls: "opencode-session-meta" });
-      meta.createEl("span", { text: (0, import_obsidian5.moment)(session.updated).format("YYYY-MM-DD HH:mm") });
+      meta.createEl("span", { text: moment2(session.updated).format("YYYY-MM-DD HH:mm") });
       meta.createEl("span", { cls: "opencode-session-dir", text: session.directory });
       item.addEventListener("click", () => {
         var _a;
@@ -18367,11 +18377,11 @@ var OpencodeConversationView = class extends import_obsidian5.ItemView {
     this.detailContainer.empty();
     this.detailContainer.createEl("h4", { text: session.title || "Untitled" });
     const actions = this.detailContainer.createEl("div", { cls: "opencode-session-actions" });
-    const restoreBtn = actions.createEl("button", { text: "Restore in Terminal", cls: "mod-cta" });
+    const restoreBtn = actions.createEl("button", { text: "Restore in terminal", cls: "mod-cta" });
     restoreBtn.addEventListener("click", () => {
       void this.plugin.openTerminalWithSession(session.id, session.directory);
     });
-    const exportBtn = actions.createEl("button", { text: "Export to Note" });
+    const exportBtn = actions.createEl("button", { text: "Export to note" });
     exportBtn.addEventListener("click", () => {
       void this.exportSessionToNote(session);
     });
@@ -18415,7 +18425,7 @@ var OpencodeConversationView = class extends import_obsidian5.ItemView {
       const msgEl = messages.createEl("div", { cls: `opencode-message opencode-message-${msg.info.role}` });
       const header = msgEl.createEl("div", { cls: "opencode-message-header" });
       header.createEl("span", { cls: "opencode-message-role", text: msg.info.role });
-      header.createEl("span", { cls: "opencode-message-time", text: (0, import_obsidian5.moment)(msg.info.time.created).format("HH:mm:ss") });
+      header.createEl("span", { cls: "opencode-message-time", text: moment2(msg.info.time.created).format("HH:mm:ss") });
       const body = msgEl.createEl("div", { cls: "opencode-message-body" });
       for (const part of msg.parts) {
         if (part.type === "text" && part.text) {
@@ -18679,27 +18689,27 @@ var OpencodePlugin = class extends import_obsidian7.Plugin {
     });
     this.addCommand({
       id: "open-terminal",
-      name: "Open Terminal",
+      name: "Open terminal",
       callback: () => this.activateTerminalView()
     });
     this.addCommand({
       id: "toggle-terminal-sidebar",
-      name: "Toggle Terminal in Sidebar",
+      name: "Toggle terminal in sidebar",
       callback: () => this.toggleTerminalSidebar()
     });
     this.addCommand({
       id: "open-conversations",
-      name: "Open Conversations",
+      name: "Open conversations",
       callback: () => this.activateConversationView()
     });
     this.addCommand({
       id: "new-session",
-      name: "New Session",
+      name: "New session",
       callback: () => this.newSession()
     });
     this.addCommand({
       id: "continue-last-session",
-      name: "Continue Last Session",
+      name: "Continue last session",
       callback: () => this.continueLastSession()
     });
     this.addSettingTab(new OpencodeSettingTab(this.app, this));

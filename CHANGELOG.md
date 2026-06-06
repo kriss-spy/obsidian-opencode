@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - Unreleased
+
+### Added
+
+- **Panel mode setting** — New `panelMode: "sidebar" | "bottom"` setting. Choose between the existing right-sidebar terminal and a VS Code-style bottom panel. ([#15](https://github.com/kriss-spy/obsidian-opencode/issues/15))
+- **Bottom panel docking** — When `panelMode === "bottom"`, the terminal leaf docks into a bottom container via `workspace.getContainerOfLeaf()` (with a horizontal-split fallback). ([#19](https://github.com/kriss-spy/obsidian-opencode/issues/19))
+- **Clean panel chrome** — Bottom-panel terminal leaves hide their tab header; a right-click context menu adds "Close terminal" / "Restart terminal" to compensate. ([#16](https://github.com/kriss-spy/obsidian-opencode/issues/16))
+- **Open-in-mode commands** — `Open terminal in sidebar` and `Open terminal in bottom panel` destroy the other mode's leaf (if any) and re-spawn the active session via `SessionState.lastSession`. ([#17](https://github.com/kriss-spy/obsidian-opencode/issues/17))
+- **Toggle terminal command** — Single `Toggle terminal` command cycles shown-focused → shown-unfocused → hidden for the active mode. ([#18](https://github.com/kriss-spy/obsidian-opencode/issues/18))
+
+### Changed
+
+- Removed both ribbon icons (terminal + conversations); the plugin is now command-palette-only. ([#15](https://github.com/kriss-spy/obsidian-opencode/issues/15))
+- `SessionState` gains a `lastSession: { args, cwd } | null` snapshot that survives `consumeArgs()` so mode-switch commands can re-spawn the original session. ([#15](https://github.com/kriss-spy/obsidian-opencode/issues/15))
+- `OpencodePlugin` now registers two terminal view types: `OPENCODE_TERMINAL_VIEW_TYPE` (sidebar) and `OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE` (bottom). Only one ever has a live leaf at a time.
+
 ## [1.3.0] - 2026-06-05
 
 ### Added
@@ -102,7 +118,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session manager with history browser, conversation preview, one-click restore, and Markdown export.
 - Settings for `opencode` binary path, default CLI arguments, and terminal styling.
 
-[Unreleased]: https://github.com/kriss-spy/obsidian-opencode/compare/1.2.1...HEAD
+[Unreleased]: https://github.com/kriss-spy/obsidian-opencode/compare/1.3.4...HEAD
+[1.3.0]: https://github.com/kriss-spy/obsidian-opencode/compare/1.2.1...1.3.0
 [1.2.1]: https://github.com/kriss-spy/obsidian-opencode/compare/1.2.0...1.2.1
 [1.2.0]: https://github.com/kriss-spy/obsidian-opencode/compare/1.1.1...1.2.0
 [1.1.1]: https://github.com/kriss-spy/obsidian-opencode/compare/1.1.0...1.1.1
