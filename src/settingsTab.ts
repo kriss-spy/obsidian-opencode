@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import OpencodePlugin from "./main";
+import type { PanelMode } from "./settings";
 
 export class OpencodeSettingTab extends PluginSettingTab {
 	plugin: OpencodePlugin;
@@ -76,6 +77,23 @@ export class OpencodeSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.newSessionArgs = value;
 						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Panel mode")
+			.setDesc("Where the OpenCode terminal is docked. \"sidebar\" uses the right rail; \"bottom\" uses a bottom panel.")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("sidebar", "Sidebar")
+					.addOption("bottom", "Bottom panel")
+					.setValue(this.plugin.settings.panelMode)
+					.onChange(async (value) => {
+						const newMode = value as PanelMode;
+						if (newMode === this.plugin.settings.panelMode) return;
+						this.plugin.settings.panelMode = newMode;
+						await this.plugin.saveSettings();
+						await this.plugin.handlePanelModeChange(newMode);
 					})
 			);
 	}

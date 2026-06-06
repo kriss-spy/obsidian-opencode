@@ -5,29 +5,42 @@ const createMockLeaf = (id: string) => ({
 	id,
 	view: {},
 	setViewState: vi.fn().mockResolvedValue(undefined),
+	detach: vi.fn(),
 });
 
 const createMockWorkspace = () => {
 	const leaves: any[] = [];
 	return {
-		getLeavesOfType: vi.fn((type: string) => leaves.filter(l => l.type === type)),
+		getLeavesOfType: vi.fn((type: string) => leaves.filter(l => l.viewType === type || l.type === type)),
 		getRightLeaf: vi.fn(() => createMockLeaf('right-leaf')),
+		getLeaf: vi.fn((split: string) => createMockLeaf(split === 'split' ? 'split-leaf' : 'tab-leaf')),
 		revealLeaf: vi.fn(),
 		rightSplit: {
 			collapsed: false,
 			toggle: vi.fn(),
 		},
 		_leaves: leaves,
+		_addLeaf: (leaf: any) => { leaves.push(leaf); },
 	};
 };
+
+const baseConfig = (overrides: Partial<{
+	terminalViewType: string;
+	bottomViewType: string;
+	conversationViewType: string;
+	getPanelMode: () => 'sidebar' | 'bottom';
+}> = {}) => ({
+	terminalViewType: 'opencode-terminal',
+	bottomViewType: 'opencode-terminal-bottom',
+	conversationViewType: 'opencode-conversations',
+	getPanelMode: () => 'sidebar' as const,
+	...overrides,
+});
 
 describe('ViewCoordinator', () => {
 	it('should activate terminal view by creating a new leaf if none exists', async () => {
 		const workspace = createMockWorkspace();
-		const coordinator = new ViewCoordinator(workspace as any, {
-			terminalViewType: 'opencode-terminal',
-			conversationViewType: 'opencode-conversations',
-		});
+		const coordinator = new ViewCoordinator(workspace as any, baseConfig());
 
 		await coordinator.activateTerminalView();
 
@@ -36,14 +49,11 @@ describe('ViewCoordinator', () => {
 	});
 
 	it('should activate terminal view by reusing existing leaf', async () => {
-		const existingLeaf = { ...createMockLeaf('existing'), type: 'opencode-terminal' };
+		const existingLeaf = { ...createMockLeaf('existing'), viewType: 'opencode-terminal' };
 		const workspace = createMockWorkspace();
-		workspace._leaves.push(existingLeaf);
+		workspace._addLeaf(existingLeaf);
 
-		const coordinator = new ViewCoordinator(workspace as any, {
-			terminalViewType: 'opencode-terminal',
-			conversationViewType: 'opencode-conversations',
-		});
+		const coordinator = new ViewCoordinator(workspace as any, baseConfig());
 
 		await coordinator.activateTerminalView();
 
@@ -53,10 +63,7 @@ describe('ViewCoordinator', () => {
 
 	it('should activate conversation view', async () => {
 		const workspace = createMockWorkspace();
-		const coordinator = new ViewCoordinator(workspace as any, {
-			terminalViewType: 'opencode-terminal',
-			conversationViewType: 'opencode-conversations',
-		});
+		const coordinator = new ViewCoordinator(workspace as any, baseConfig());
 
 		await coordinator.activateConversationView();
 
@@ -67,10 +74,7 @@ describe('ViewCoordinator', () => {
 	it('should toggle sidebar when not collapsed', async () => {
 		const workspace = createMockWorkspace();
 		workspace.rightSplit.collapsed = false;
-		const coordinator = new ViewCoordinator(workspace as any, {
-			terminalViewType: 'opencode-terminal',
-			conversationViewType: 'opencode-conversations',
-		});
+		const coordinator = new ViewCoordinator(workspace as any, baseConfig());
 
 		await coordinator.toggleTerminalSidebar();
 
@@ -80,10 +84,7 @@ describe('ViewCoordinator', () => {
 	it('should open terminal when sidebar is collapsed', async () => {
 		const workspace = createMockWorkspace();
 		workspace.rightSplit.collapsed = true;
-		const coordinator = new ViewCoordinator(workspace as any, {
-			terminalViewType: 'opencode-terminal',
-			conversationViewType: 'opencode-conversations',
-		});
+		const coordinator = new ViewCoordinator(workspace as any, baseConfig());
 
 		await coordinator.toggleTerminalSidebar();
 
@@ -92,19 +93,104 @@ describe('ViewCoordinator', () => {
 	});
 
 	it('should restart existing terminal view', async () => {
-		const existingLeaf = { ...createMockLeaf('existing'), type: 'opencode-terminal' };
+		const existingLeaf = { ...createMockLeaf('existing'), viewType: 'opencode-terminal' };
 		const workspace = createMockWorkspace();
-		workspace._leaves.push(existingLeaf);
+		workspace._addLeaf(existingLeaf);
 
-		const coordinator = new ViewCoordinator(workspace as any, {
-			terminalViewType: 'opencode-terminal',
-			conversationViewType: 'opencode-conversations',
-		});
+		const coordinator = new ViewCoordinator(workspace as any, baseConfig());
 
 		const restartFn = vi.fn();
 		await coordinator.openOrRestartTerminal(restartFn);
 
 		expect(restartFn).toHaveBeenCalled();
 		expect(workspace.revealLeaf).toHaveBeenCalledWith(existingLeaf);
+	});
+
+	describe('panelMode dispatch', () => {
+		it('should create a bottom leaf when getPanelMode returns "bottom"', async () => {
+			const workspace = createMockWorkspace();
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig({
+				getPanelMode: () => 'bottom',
+			}));
+
+			await coordinator.activateTerminalView();
+
+			expect(workspace.getLeaf).toHaveBeenCalled();
+			expect(workspace.getRightLeaf).not.toHaveBeenCalled();
+			expect(workspace.revealLeaf).toHaveBeenCalled();
+		});
+
+		it('should reuse an existing bottom leaf when getPanelMode returns "bottom"', async () => {
+			const existingBottom = { ...createMockLeaf('bottom-existing'), viewType: 'opencode-terminal-bottom' };
+			const workspace = createMockWorkspace();
+			workspace._addLeaf(existingBottom);
+
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig({
+				getPanelMode: () => 'bottom',
+			}));
+
+			await coordinator.activateTerminalView();
+
+			expect(workspace.getLeaf).not.toHaveBeenCalled();
+			expect(workspace.revealLeaf).toHaveBeenCalledWith(existingBottom);
+		});
+	});
+
+	describe('getActiveTerminalLeaf', () => {
+		it('returns the sidebar terminal leaf when present', () => {
+			const sidebar = { ...createMockLeaf('s'), viewType: 'opencode-terminal' };
+			const bottom = { ...createMockLeaf('b'), viewType: 'opencode-terminal-bottom' };
+			const workspace = createMockWorkspace();
+			workspace._addLeaf(sidebar);
+			workspace._addLeaf(bottom);
+
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
+
+			expect(coordinator.getActiveTerminalLeaf()).toBe(sidebar);
+		});
+
+		it('returns the bottom terminal leaf when only the bottom exists', () => {
+			const bottom = { ...createMockLeaf('b'), viewType: 'opencode-terminal-bottom' };
+			const workspace = createMockWorkspace();
+			workspace._addLeaf(bottom);
+
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
+
+			expect(coordinator.getActiveTerminalLeaf()).toBe(bottom);
+		});
+
+		it('returns null when neither leaf exists', () => {
+			const workspace = createMockWorkspace();
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
+
+			expect(coordinator.getActiveTerminalLeaf()).toBeNull();
+		});
+	});
+
+	describe('destroyLeaf', () => {
+		it('detaches all leaves of the given view type', () => {
+			const a = { ...createMockLeaf('a'), viewType: 'opencode-terminal' };
+			const b = { ...createMockLeaf('b'), viewType: 'opencode-terminal' };
+			const other = { ...createMockLeaf('c'), viewType: 'opencode-conversations' };
+			const workspace = createMockWorkspace();
+			workspace._addLeaf(a);
+			workspace._addLeaf(b);
+			workspace._addLeaf(other);
+
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
+
+			coordinator.destroyLeaf('opencode-terminal');
+
+			expect(a.detach).toHaveBeenCalled();
+			expect(b.detach).toHaveBeenCalled();
+			expect(other.detach).not.toHaveBeenCalled();
+		});
+
+		it('does nothing when no leaf of the given type exists', () => {
+			const workspace = createMockWorkspace();
+			const coordinator = new ViewCoordinator(workspace as any, baseConfig());
+
+			expect(() => coordinator.destroyLeaf('opencode-terminal')).not.toThrow();
+		});
 	});
 });

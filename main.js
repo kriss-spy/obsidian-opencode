@@ -17270,7 +17270,8 @@ var DEFAULT_SETTINGS = {
   defaultWorkingDirectory: "",
   terminalFontSize: 14,
   terminalFontFamily: "monospace",
-  newSessionArgs: ""
+  newSessionArgs: "",
+  panelMode: "sidebar"
 };
 
 // src/settingsTab.ts
@@ -17311,6 +17312,16 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
       (text) => text.setPlaceholder("--model opencode-go/kimi-k2.6").setValue(this.plugin.settings.newSessionArgs).onChange(async (value) => {
         this.plugin.settings.newSessionArgs = value;
         await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("Panel mode").setDesc('Where the OpenCode terminal is docked. "sidebar" uses the right rail; "bottom" uses a bottom panel.').addDropdown(
+      (dropdown) => dropdown.addOption("sidebar", "Sidebar").addOption("bottom", "Bottom panel").setValue(this.plugin.settings.panelMode).onChange(async (value) => {
+        const newMode = value;
+        if (newMode === this.plugin.settings.panelMode)
+          return;
+        this.plugin.settings.panelMode = newMode;
+        await this.plugin.saveSettings();
+        await this.plugin.handlePanelModeChange(newMode);
       })
     );
   }
@@ -17912,8 +17923,12 @@ var TerminalKeyRouter = class {
   }
 };
 
-// src/views/opencodeTerminalView.ts
+// src/views/viewTypes.ts
 var OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
+var OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE = "opencode-terminal-bottom";
+var OPENCODE_CONVERSATION_VIEW_TYPE = "opencode-conversations";
+
+// src/views/opencodeTerminalView.ts
 var OpencodeTerminalView = class extends import_obsidian2.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -18301,7 +18316,6 @@ var SessionExporter = class {
 
 // src/views/conversationView.ts
 var moment2 = import_obsidian5.moment;
-var OPENCODE_CONVERSATION_VIEW_TYPE = "opencode-conversations";
 var OpencodeConversationView = class extends import_obsidian5.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -18535,18 +18549,27 @@ var SessionState = class {
     this.sessionArgs = null;
     this.sessionCwd = null;
     this.pendingPrompt = null;
+    this.lastSession = null;
+  }
+  snapshot() {
+    if (this.sessionArgs === null)
+      return;
+    this.lastSession = { args: [...this.sessionArgs], cwd: this.sessionCwd };
   }
   setNewSession() {
     this.sessionArgs = [];
     this.sessionCwd = null;
+    this.snapshot();
   }
   setContinueLastSession() {
     this.sessionArgs = ["-c"];
     this.sessionCwd = null;
+    this.snapshot();
   }
   setOpenSession(sessionId, directory) {
     this.sessionArgs = ["-s", sessionId];
     this.sessionCwd = directory;
+    this.snapshot();
   }
   setPendingPrompt(prompt) {
     this.pendingPrompt = prompt;
@@ -18562,6 +18585,12 @@ var SessionState = class {
     this.pendingPrompt = null;
     return result;
   }
+  replayLastSession() {
+    if (!this.lastSession)
+      return;
+    this.sessionArgs = [...this.lastSession.args];
+    this.sessionCwd = this.lastSession.cwd;
+  }
 };
 
 // src/modules/viewCoordinator.ts
@@ -18569,19 +18598,38 @@ var ViewCoordinator = class {
   constructor(workspace, config) {
     this.workspace = workspace;
     this.config = config;
+    var _a;
+    this.getPanelMode = (_a = config.getPanelMode) != null ? _a : () => "sidebar";
+  }
+  viewTypeForMode(mode) {
+    return mode === "bottom" ? this.config.bottomViewType : this.config.terminalViewType;
   }
   async activateTerminalView() {
-    let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
-    if (!leaf) {
-      const rightLeaf = this.workspace.getRightLeaf(false);
-      if (rightLeaf) {
-        leaf = rightLeaf;
-        await leaf.setViewState({ type: this.config.terminalViewType, active: true });
-      }
+    return this.getPanelMode() === "bottom" ? this.activateBottomTerminalView() : this.activateSidebarTerminalView();
+  }
+  async activateSidebarTerminalView() {
+    return this.activateViewOfType(this.config.terminalViewType, () => this.workspace.getRightLeaf(false));
+  }
+  async activateBottomTerminalView() {
+    return this.activateViewOfType(this.config.bottomViewType, () => this.workspace.getLeaf("split"));
+  }
+  async activateInMode(mode) {
+    return mode === "bottom" ? this.activateBottomTerminalView() : this.activateSidebarTerminalView();
+  }
+  getActiveTerminalLeaf() {
+    var _a;
+    const sidebar = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
+    if (sidebar)
+      return sidebar;
+    return (_a = this.workspace.getLeavesOfType(this.config.bottomViewType)[0]) != null ? _a : null;
+  }
+  getPanelModeSnapshot() {
+    return this.getPanelMode();
+  }
+  destroyLeaf(viewType) {
+    for (const leaf of this.workspace.getLeavesOfType(viewType)) {
+      leaf.detach();
     }
-    if (leaf)
-      await this.workspace.revealLeaf(leaf);
-    return leaf;
   }
   async activateConversationView() {
     let leaf = this.workspace.getLeavesOfType(this.config.conversationViewType)[0];
@@ -18618,20 +18666,47 @@ var ViewCoordinator = class {
     }
   }
   async openOrRestartTerminal(restartFn) {
-    let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
+    const viewType = this.viewTypeForMode(this.getPanelMode());
+    let leaf = this.workspace.getLeavesOfType(viewType)[0];
     if (leaf) {
       restartFn();
       await this.workspace.revealLeaf(leaf);
       return leaf;
     } else {
-      const rightLeaf = this.workspace.getRightLeaf(false);
-      if (rightLeaf) {
-        await rightLeaf.setViewState({ type: this.config.terminalViewType, active: true });
-        await this.workspace.revealLeaf(rightLeaf);
-        return rightLeaf;
+      const newLeaf = this.getPanelMode() === "bottom" ? this.workspace.getLeaf("split") : this.workspace.getRightLeaf(false);
+      if (newLeaf) {
+        await newLeaf.setViewState({ type: viewType, active: true });
+        await this.workspace.revealLeaf(newLeaf);
+        return newLeaf;
       }
     }
     return null;
+  }
+  async activateViewOfType(viewType, leafFactory) {
+    let leaf = this.workspace.getLeavesOfType(viewType)[0];
+    if (!leaf) {
+      const candidate = leafFactory();
+      if (candidate) {
+        leaf = candidate;
+        await leaf.setViewState({ type: viewType, active: true });
+      }
+    }
+    if (leaf)
+      await this.workspace.revealLeaf(leaf);
+    return leaf;
+  }
+};
+
+// src/modules/panelMigrator.ts
+var PanelMigrator = class {
+  constructor(deps) {
+    this.deps = deps;
+  }
+  async migrateTo(mode) {
+    const oldViewType = mode === "bottom" ? this.deps.terminalViewType : this.deps.bottomViewType;
+    this.deps.viewCoordinator.destroyLeaf(oldViewType);
+    this.deps.sessionState.replayLastSession();
+    await this.deps.viewCoordinator.activateTerminalView();
   }
 };
 
@@ -18664,7 +18739,15 @@ var OpencodePlugin = class extends import_obsidian7.Plugin {
     this.sessionState = new SessionState();
     this.viewCoordinator = new ViewCoordinator(this.app.workspace, {
       terminalViewType: OPENCODE_TERMINAL_VIEW_TYPE,
-      conversationViewType: OPENCODE_CONVERSATION_VIEW_TYPE
+      bottomViewType: OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE,
+      conversationViewType: OPENCODE_CONVERSATION_VIEW_TYPE,
+      getPanelMode: () => this.settings.panelMode
+    });
+    this.panelMigrator = new PanelMigrator({
+      sessionState: this.sessionState,
+      viewCoordinator: this.viewCoordinator,
+      terminalViewType: OPENCODE_TERMINAL_VIEW_TYPE,
+      bottomViewType: OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE
     });
     await this.loadSettings();
     if (this.app.vault.adapter instanceof import_obsidian7.FileSystemAdapter) {
@@ -18678,19 +18761,22 @@ var OpencodePlugin = class extends import_obsidian7.Plugin {
       (leaf) => new OpencodeTerminalView(leaf, this)
     );
     this.registerView(
+      OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE,
+      (leaf) => new OpencodeTerminalView(leaf, this)
+    );
+    this.registerView(
       OPENCODE_CONVERSATION_VIEW_TYPE,
       (leaf) => new OpencodeConversationView(leaf, this)
     );
-    this.addRibbonIcon("terminal", "OpenCode Terminal", (evt) => {
-      void this.activateTerminalView();
-    });
-    this.addRibbonIcon("message-circle", "OpenCode Conversations", (evt) => {
-      void this.activateConversationView();
+    this.addCommand({
+      id: "open-terminal-sidebar",
+      name: "Open terminal in sidebar",
+      callback: () => this.activateTerminalInMode("sidebar")
     });
     this.addCommand({
-      id: "open-terminal",
-      name: "Open terminal",
-      callback: () => this.activateTerminalView()
+      id: "open-terminal-bottom",
+      name: "Open terminal in bottom panel",
+      callback: () => this.activateTerminalInMode("bottom")
     });
     this.addCommand({
       id: "toggle-terminal-sidebar",
@@ -18725,6 +18811,12 @@ var OpencodePlugin = class extends import_obsidian7.Plugin {
   async activateTerminalView() {
     await this.viewCoordinator.activateTerminalView();
   }
+  async activateTerminalInMode(mode) {
+    await this.viewCoordinator.activateInMode(mode);
+  }
+  async handlePanelModeChange(newMode) {
+    await this.panelMigrator.migrateTo(newMode);
+  }
   async activateConversationView() {
     await this.viewCoordinator.activateConversationView();
   }
@@ -18744,10 +18836,10 @@ var OpencodePlugin = class extends import_obsidian7.Plugin {
     await this.openOrRestartTerminal();
   }
   async openOrRestartTerminal() {
+    const active = this.viewCoordinator.getActiveTerminalLeaf();
     await this.viewCoordinator.openOrRestartTerminal(() => {
-      const leaf = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
-      if (leaf) {
-        const view = leaf.view;
+      if (active) {
+        const view = active.view;
         if (view && "restartPty" in view && typeof view.restartPty === "function") {
           view.restartPty();
         }

@@ -1,21 +1,35 @@
+export interface LastSession {
+	args: string[];
+	cwd: string | null;
+}
+
 export class SessionState {
 	sessionArgs: string[] | null = null;
 	sessionCwd: string | null = null;
 	pendingPrompt: string | null = null;
+	lastSession: LastSession | null = null;
+
+	private snapshot(): void {
+		if (this.sessionArgs === null) return;
+		this.lastSession = { args: [...this.sessionArgs], cwd: this.sessionCwd };
+	}
 
 	setNewSession(): void {
 		this.sessionArgs = [];
 		this.sessionCwd = null;
+		this.snapshot();
 	}
 
 	setContinueLastSession(): void {
 		this.sessionArgs = ["-c"];
 		this.sessionCwd = null;
+		this.snapshot();
 	}
 
 	setOpenSession(sessionId: string, directory: string): void {
 		this.sessionArgs = ["-s", sessionId];
 		this.sessionCwd = directory;
+		this.snapshot();
 	}
 
 	setPendingPrompt(prompt: string): void {
@@ -32,5 +46,11 @@ export class SessionState {
 		this.sessionCwd = null;
 		this.pendingPrompt = null;
 		return result;
+	}
+
+	replayLastSession(): void {
+		if (!this.lastSession) return;
+		this.sessionArgs = [...this.lastSession.args];
+		this.sessionCwd = this.lastSession.cwd;
 	}
 }

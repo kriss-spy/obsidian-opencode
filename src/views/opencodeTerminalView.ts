@@ -9,8 +9,9 @@ import { EditorServer } from "../editorServer";
 import { normalizeVaultPath } from "../utils/path";
 import { PtySession } from "../modules/ptySession";
 import { TerminalKeyRouter } from "../modules/terminalKeyRouter";
+import { OPENCODE_TERMINAL_VIEW_TYPE } from "./viewTypes";
 
-export const OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
+export { OPENCODE_TERMINAL_VIEW_TYPE, OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE } from "./viewTypes";
 
 export class OpencodeTerminalView extends ItemView {
 	terminal: Terminal | null = null;

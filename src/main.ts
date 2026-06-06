@@ -1,11 +1,16 @@
 import { Plugin, FileSystemAdapter } from "obsidian";
-import { OpencodePluginSettings, DEFAULT_SETTINGS } from "./settings";
+import { OpencodePluginSettings, DEFAULT_SETTINGS, PanelMode } from "./settings";
 import { OpencodeSettingTab } from "./settingsTab";
-import { OpencodeTerminalView, OPENCODE_TERMINAL_VIEW_TYPE } from "./views/opencodeTerminalView";
+import { OpencodeTerminalView } from "./views/opencodeTerminalView";
+import {
+	OPENCODE_TERMINAL_VIEW_TYPE,
+	OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE,
+} from "./views/viewTypes";
 import { OpencodeConversationView, OPENCODE_CONVERSATION_VIEW_TYPE } from "./views/conversationView";
 import { OpencodeEditorSuggest } from "./opencodeEditorSuggest";
 import { SessionState } from "./modules/sessionState";
 import { ViewCoordinator } from "./modules/viewCoordinator";
+import { PanelMigrator } from "./modules/panelMigrator";
 
 export default class OpencodePlugin extends Plugin {
 	settings: OpencodePluginSettings;
@@ -13,6 +18,7 @@ export default class OpencodePlugin extends Plugin {
 	vaultConfigDir: string = "";
 	private sessionState: SessionState;
 	private viewCoordinator: ViewCoordinator;
+	private panelMigrator: PanelMigrator;
 
 	get pendingPrompt(): string | null {
 		return this.sessionState.pendingPrompt;
@@ -42,7 +48,15 @@ export default class OpencodePlugin extends Plugin {
 		this.sessionState = new SessionState();
 		this.viewCoordinator = new ViewCoordinator(this.app.workspace, {
 			terminalViewType: OPENCODE_TERMINAL_VIEW_TYPE,
+			bottomViewType: OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE,
 			conversationViewType: OPENCODE_CONVERSATION_VIEW_TYPE,
+			getPanelMode: () => this.settings.panelMode,
+		});
+		this.panelMigrator = new PanelMigrator({
+			sessionState: this.sessionState,
+			viewCoordinator: this.viewCoordinator,
+			terminalViewType: OPENCODE_TERMINAL_VIEW_TYPE,
+			bottomViewType: OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE,
 		});
 
 		await this.loadSettings();
@@ -59,24 +73,25 @@ export default class OpencodePlugin extends Plugin {
 		);
 
 		this.registerView(
+			OPENCODE_TERMINAL_BOTTOM_VIEW_TYPE,
+			(leaf) => new OpencodeTerminalView(leaf, this)
+		);
+
+		this.registerView(
 			OPENCODE_CONVERSATION_VIEW_TYPE,
 			(leaf) => new OpencodeConversationView(leaf, this)
 		);
 
-		// eslint-disable-next-line obsidianmd/ui/sentence-case
-		this.addRibbonIcon("terminal", "OpenCode Terminal", (evt: MouseEvent) => {
-			void this.activateTerminalView();
-		});
-
-		// eslint-disable-next-line obsidianmd/ui/sentence-case
-		this.addRibbonIcon("message-circle", "OpenCode Conversations", (evt: MouseEvent) => {
-			void this.activateConversationView();
+		this.addCommand({
+			id: "open-terminal-sidebar",
+			name: "Open terminal in sidebar",
+			callback: () => this.activateTerminalInMode("sidebar"),
 		});
 
 		this.addCommand({
-			id: "open-terminal",
-			name: "Open terminal",
-			callback: () => this.activateTerminalView(),
+			id: "open-terminal-bottom",
+			name: "Open terminal in bottom panel",
+			callback: () => this.activateTerminalInMode("bottom"),
 		});
 
 		this.addCommand({
@@ -121,6 +136,14 @@ export default class OpencodePlugin extends Plugin {
 		await this.viewCoordinator.activateTerminalView();
 	}
 
+	async activateTerminalInMode(mode: PanelMode) {
+		await this.viewCoordinator.activateInMode(mode);
+	}
+
+	async handlePanelModeChange(newMode: PanelMode) {
+		await this.panelMigrator.migrateTo(newMode);
+	}
+
 	async activateConversationView() {
 		await this.viewCoordinator.activateConversationView();
 	}
@@ -145,10 +168,10 @@ export default class OpencodePlugin extends Plugin {
 	}
 
 	private async openOrRestartTerminal() {
+		const active = this.viewCoordinator.getActiveTerminalLeaf();
 		await this.viewCoordinator.openOrRestartTerminal(() => {
-			const leaf = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
-			if (leaf) {
-				const view = leaf.view;
+			if (active) {
+				const view = active.view;
 				if (view && 'restartPty' in view && typeof (view as unknown as Record<string, unknown>).restartPty === 'function') {
 					(view as unknown as Record<string, () => void>).restartPty();
 				}

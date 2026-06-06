@@ -5,7 +5,9 @@ import { SessionExporter } from "../modules/sessionExporter";
 
 const moment: (input: number) => { format: (fmt: string) => string } = obsidianMoment;
 
-export const OPENCODE_CONVERSATION_VIEW_TYPE = "opencode-conversations";
+import { OPENCODE_CONVERSATION_VIEW_TYPE } from "./viewTypes";
+
+export { OPENCODE_CONVERSATION_VIEW_TYPE } from "./viewTypes";
 
 export class OpencodeConversationView extends ItemView {
 	client: OpencodeClient;
