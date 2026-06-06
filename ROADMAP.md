@@ -5,7 +5,7 @@
 | Version | Theme | Status |
 |---------|-------|--------|
 | v1.3.0 | Internal Refactoring | Done |
-| v1.4.0 | Panel Mode | In progress |
+| v1.4.0 | Panel Mode | Done |
 | v1.5.0 | Terminal Integration | Planned |
 | v1.6.0 | Session Management | Planned |
 
@@ -32,13 +32,13 @@
 
 > **Goal:** Add a VS Code-style bottom terminal panel while keeping the existing sidebar mode intact.
 
-| # | Feature | Description |
-|---|---------|-------------|
-| 1 | **Panel mode setting** | New setting: `panelMode: "sidebar" | "bottom"`. Default remains `"sidebar"`. |
-| 2 | **Bottom panel docking** | When `panelMode === "bottom"`, create the terminal leaf via horizontal split at the bottom of the workspace. |
-| 3 | **Clean panel chrome** | Hide the tab header for OpenCode terminal leaves to remove the close button. |
-| 4 | **Instance-preserving toggle** | Toggle command collapses or expands the parent split instead of closing the leaf. |
-| 5 | **Toggle focus vs hide** | When the right sidebar is already showing the terminal, `toggleTerminalSidebar` focuses the terminal instead of hiding the sidebar. |
+| # | Issue | Description |
+|---|-------|-------------|
+| 1 | [#15](https://github.com/kriss-spy/obsidian-opencode/issues/15) | **Panel mode setting + `lastSession` snapshot** — `panelMode: "sidebar" | "bottom"`, removed both ribbon icons, registered two view types, added the `PanelMigrator`. |
+| 2 | [#19](https://github.com/kriss-spy/obsidian-opencode/issues/19) | **Bottom panel docking** — When `panelMode === "bottom"`, flip the workspace root split to horizontal and create the terminal leaf as the last child of the root split. |
+| 3 | [#16](https://github.com/kriss-spy/obsidian-opencode/issues/16) | **Clean panel chrome** — Hide the tab header for bottom-panel terminal leaves; right-click "Close terminal" / "Restart terminal" menu compensates. |
+| 4 | [#17](https://github.com/kriss-spy/obsidian-opencode/issues/17) | **Open-in-mode commands** — `Open terminal in sidebar` and `Open terminal in bottom panel` destroy the other mode's leaf and re-spawn the last session. |
+| 5 | [#18](https://github.com/kriss-spy/obsidian-opencode/issues/18) | **3-state toggle** — Single `Toggle terminal` command cycles shown-focused → shown-unfocused → hidden for the active mode. |
 
 **Blocked by:** v1.3.0 (`PtySession` refactor for testability; `ViewCoordinator` for leaf management reuse).
 

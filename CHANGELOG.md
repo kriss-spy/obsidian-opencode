@@ -7,12 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.4.0] - Unreleased
+## [1.4.0] - 2026-06-06
 
 ### Added
 
 - **Panel mode setting** — New `panelMode: "sidebar" | "bottom"` setting. Choose between the existing right-sidebar terminal and a VS Code-style bottom panel. ([#15](https://github.com/kriss-spy/obsidian-opencode/issues/15))
-- **Bottom panel docking** — When `panelMode === "bottom"`, the terminal leaf docks into a bottom container via `workspace.getContainerOfLeaf()` (with a horizontal-split fallback). ([#19](https://github.com/kriss-spy/obsidian-opencode/issues/19))
+- **Bottom panel docking** — When `panelMode === "bottom"`, the terminal leaf docks into a bottom panel by flipping the workspace root split to horizontal and creating a leaf as the last child of the root split. ([#19](https://github.com/kriss-spy/obsidian-opencode/issues/19))
 - **Clean panel chrome** — Bottom-panel terminal leaves hide their tab header; a right-click context menu adds "Close terminal" / "Restart terminal" to compensate. ([#16](https://github.com/kriss-spy/obsidian-opencode/issues/16))
 - **Open-in-mode commands** — `Open terminal in sidebar` and `Open terminal in bottom panel` destroy the other mode's leaf (if any) and re-spawn the active session via `SessionState.lastSession`. ([#17](https://github.com/kriss-spy/obsidian-opencode/issues/17))
 - **Toggle terminal command** — Single `Toggle terminal` command cycles shown-focused → shown-unfocused → hidden for the active mode. ([#18](https://github.com/kriss-spy/obsidian-opencode/issues/18))
