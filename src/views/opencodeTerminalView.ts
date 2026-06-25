@@ -2,7 +2,6 @@ import { ItemView, WorkspaceLeaf } from "obsidian";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
 import OpencodePlugin from "../main";
 import { handleTerminalDrop } from "../terminalDrop";
 import { EditorServer } from "../editorServer";
@@ -50,27 +49,29 @@ export class OpencodeTerminalView extends ItemView {
 		});
 
 		// Get computed styles from Obsidian for theme integration
-		const computedStyle = getComputedStyle(activeDocument.body);
-		const isDark = activeDocument.body.classList.contains("theme-dark");
+		const isDark = activeDocument.body.classList.contains("theme-dark") || 
+		               (this.app as any).vault.getConfig?.("theme") === "obsidian";
+		const fallbackBg = isDark ? "#1e1e1e" : "#ffffff";
+		const fallbackFg = isDark ? "#d4d4d4" : "#333333";
 
 		const terminal = new Terminal({
 			fontSize: this.plugin.settings.terminalFontSize,
 			fontFamily: this.plugin.settings.terminalFontFamily,
-			lineHeight: 1.2,
+			lineHeight: 1.0,
 			theme: {
-				background: computedStyle.getPropertyValue("--background-primary").trim() || (isDark ? "#1e1e1e" : "#ffffff"),
-				foreground: computedStyle.getPropertyValue("--text-normal").trim() || (isDark ? "#d4d4d4" : "#333333"),
-				cursor: computedStyle.getPropertyValue("--text-normal").trim() || (isDark ? "#d4d4d4" : "#333333"),
-				cursorAccent: computedStyle.getPropertyValue("--background-primary").trim() || (isDark ? "#1e1e1e" : "#ffffff"),
-				selectionBackground: computedStyle.getPropertyValue("--text-selection").trim() || (isDark ? "#264f78" : "#add6ff"),
-				black: computedStyle.getPropertyValue("--text-faint").trim() || (isDark ? "#666666" : "#666666"),
-				red: computedStyle.getPropertyValue("--text-error").trim() || (isDark ? "#f44747" : "#cd3131"),
-				green: computedStyle.getPropertyValue("--text-success").trim() || (isDark ? "#6a9955" : "#0bc765"),
-				yellow: computedStyle.getPropertyValue("--text-warning").trim() || (isDark ? "#dcdcaa" : "#e5e510"),
-				blue: computedStyle.getPropertyValue("--text-accent").trim() || (isDark ? "#569cd6" : "#2470fe"),
-				magenta: computedStyle.getPropertyValue("--text-accent-hover").trim() || (isDark ? "#c586c0" : "#bc3fbc"),
+				background: fallbackBg,
+				foreground: fallbackFg,
+				cursor: fallbackFg,
+				cursorAccent: fallbackBg,
+				selectionBackground: isDark ? "#264f78" : "#add6ff",
+				black: "#666666",
+				red: isDark ? "#f44747" : "#cd3131",
+				green: isDark ? "#6a9955" : "#0bc765",
+				yellow: isDark ? "#dcdcaa" : "#e5e510",
+				blue: isDark ? "#569cd6" : "#2470fe",
+				magenta: isDark ? "#c586c0" : "#bc3fbc",
 				cyan: "#4ec9b0",
-				white: computedStyle.getPropertyValue("--text-normal").trim() || (isDark ? "#d4d4d4" : "#333333"),
+				white: fallbackFg,
 			},
 			cursorBlink: true,
 			scrollback: 10000,
@@ -83,13 +84,41 @@ export class OpencodeTerminalView extends ItemView {
 		terminal.loadAddon(new WebLinksAddon());
 
 		terminal.open(termContainer);
-		try {
-			terminal.loadAddon(new WebglAddon());
-		} catch (e) {
-			console.warn("WebGL addon failed to load, falling back to canvas", e);
-		}
 		this.terminal = terminal;
 		this.fitAddon = fitAddon;
+
+		let themeInitialized = false;
+		// Dynamic theme update to match Obsidian colors precisely once DOM is mounted
+		const updateTheme = () => {
+			if (!terminal || themeInitialized) return;
+			const docBody = this.containerEl.ownerDocument.body;
+			const computedStyle = getComputedStyle(docBody);
+			const currentIsDark = docBody.classList.contains("theme-dark") || 
+			                     (this.app as any).vault.getConfig?.("theme") === "obsidian";
+
+			const bg = computedStyle.getPropertyValue("--background-primary").trim();
+			const fg = computedStyle.getPropertyValue("--text-normal").trim();
+			
+			// Only update if we get valid computed values
+			if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)") {
+				terminal.options.theme = {
+					background: bg,
+					foreground: fg || (currentIsDark ? "#d4d4d4" : "#333333"),
+					cursor: fg || (currentIsDark ? "#d4d4d4" : "#333333"),
+					cursorAccent: bg,
+					selectionBackground: computedStyle.getPropertyValue("--text-selection").trim() || (currentIsDark ? "#264f78" : "#add6ff"),
+					black: computedStyle.getPropertyValue("--text-faint").trim() || "#666666",
+					red: computedStyle.getPropertyValue("--text-error").trim() || (currentIsDark ? "#f44747" : "#cd3131"),
+					green: computedStyle.getPropertyValue("--text-success").trim() || (currentIsDark ? "#6a9955" : "#0bc765"),
+					yellow: computedStyle.getPropertyValue("--text-warning").trim() || (currentIsDark ? "#dcdcaa" : "#e5e510"),
+					blue: computedStyle.getPropertyValue("--text-accent").trim() || (currentIsDark ? "#569cd6" : "#2470fe"),
+					magenta: computedStyle.getPropertyValue("--text-accent-hover").trim() || (currentIsDark ? "#c586c0" : "#bc3fbc"),
+					cyan: "#4ec9b0",
+					white: fg || (currentIsDark ? "#d4d4d4" : "#333333"),
+				};
+				themeInitialized = true;
+			}
+		};
 
 		// Debounced fit function to avoid excessive calls
 		let fitTimeout: number | null = null;
@@ -98,6 +127,7 @@ export class OpencodeTerminalView extends ItemView {
 			fitTimeout = window.setTimeout(() => {
 				if (termContainer.clientWidth > 0 && termContainer.clientHeight > 0) {
 					try {
+						updateTheme();
 						fitAddon.fit();
 						// Send resize after fit completes
 						window.setTimeout(() => this.ptySession.sendResize(terminal), 50);
@@ -143,7 +173,22 @@ export class OpencodeTerminalView extends ItemView {
 			this.ptySession.writeStdin(data);
 		});
 
-		this.spawnPty(terminal);
+		// Wait until the container has been fully mounted and has a non-zero size,
+		// then fit the terminal and spawn the PTY with the exact correct initial size.
+		// This is extremely important for Flatpak/sandboxed PTY compatibility!
+		const spawnWithCorrectSize = () => {
+			if (termContainer.clientWidth > 0 && termContainer.clientHeight > 0) {
+				try {
+					fitAddon.fit();
+				} catch (e) {
+					console.warn("Initial fit failed:", e);
+				}
+				this.spawnPty(terminal);
+			} else {
+				window.setTimeout(spawnWithCorrectSize, 50);
+			}
+		};
+		spawnWithCorrectSize();
 
 		// Start the WebSocket editor server so OpenCode can auto-discover this vault
 		this.editorServer = new EditorServer();

@@ -18,6 +18,7 @@ vi.mock('fs', () => ({
 	statSync: vi.fn(),
 	readFileSync: vi.fn(),
 	unlinkSync: vi.fn(),
+	existsSync: vi.fn().mockReturnValue(false),
 }));
 
 describe('OpencodeClient export with large sessions', () => {

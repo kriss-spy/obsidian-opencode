@@ -1,5 +1,6 @@
 import { Terminal } from "@xterm/xterm";
 import { spawn, ChildProcess } from "child_process";
+import { Notice } from "obsidian";
 
 const UNIX_PSEUDOTERMINAL_PY = `
 import sys
@@ -86,18 +87,35 @@ export class PtySession {
 			return;
 		}
 
-		this.ptyProcess = spawn(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, options.opencodePath, ...options.args], {
+		let executable = options.opencodePath;
+		let args = [...options.args];
+
+		const isFlatpak = require("fs").existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+		if (isFlatpak) {
+			args = ["--host", "--env=TERM=xterm-256color", executable, ...args];
+			executable = "flatpak-spawn";
+		}
+
+		this.ptyProcess = spawn(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
 			cwd: options.cwd,
 			env: process.env,
 			stdio: ["pipe", "pipe", "pipe", "pipe"],
 		});
 
 		this.ptyProcess.stdout?.on("data", (chunk: Buffer) => {
+			const str = chunk.toString();
+			if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
+				new Notice("OpenCode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15000);
+			}
 			terminal.write(chunk);
 		});
 
 		this.ptyProcess.stderr?.on("data", (chunk: Buffer) => {
-			console.error("PTY stderr:", chunk.toString());
+			const str = chunk.toString();
+			console.error("PTY stderr:", str);
+			if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
+				new Notice("OpenCode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15000);
+			}
 		});
 
 		this.ptyProcess.on("exit", (code, signal) => {
@@ -109,10 +127,14 @@ export class PtySession {
 			terminal.writeln(`\r\nError: ${err.message}\r\n`);
 		});
 
-		// Initial resize after spawn
+		// Initial resize immediately and after short delays to ensure correct size before CLI starts rendering
+		this.sendResize(terminal);
 		window.setTimeout(() => {
 			this.sendResize(terminal);
-		}, 300);
+		}, 50);
+		window.setTimeout(() => {
+			this.sendResize(terminal);
+		}, 200);
 	}
 
 	kill(): void {

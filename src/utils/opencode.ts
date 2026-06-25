@@ -91,11 +91,23 @@ export class OpencodeClient {
 
 	async listSessions(): Promise<OpencodeSession[]> {
 		try {
-			const { stdout } = await execFileAsync(this.resolvePath(), ["session", "list", "--format", "json"], { cwd: this.cwd });
+			const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+			let executable = this.resolvePath();
+			let args = ["session", "list", "--format", "json"];
+			if (isFlatpak) {
+				args = ["--host", executable, ...args];
+				executable = "flatpak-spawn";
+			}
+			const { stdout } = await execFileAsync(executable, args, { cwd: this.cwd });
 			return JSON.parse(stdout) as OpencodeSession[];
 		} catch (error) {
 			console.error("Failed to list sessions:", error);
-			new Notice("Failed to list OpenCode sessions. Check your OpenCode path in settings."); // eslint-disable-line obsidianmd/ui/sentence-case
+			const errStr = String(error);
+			if (errStr.includes("org.freedesktop.DBus.Error.ServiceUnknown") || errStr.includes("flatpak-spawn")) {
+				new Notice("OpenCode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian' on your host system.", 15000);
+			} else {
+				new Notice("Failed to list OpenCode sessions. Check your OpenCode path in settings."); // eslint-disable-line obsidianmd/ui/sentence-case
+			}
 			return [];
 		}
 	}
@@ -118,8 +130,14 @@ export class OpencodeClient {
 		return new Promise((resolve, reject) => {
 			const tmpFile = path.join(os.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
 
+			const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+			let command = `${this.resolvePath()} export ${sessionId} > "${tmpFile}" 2>/dev/null`;
+			if (isFlatpak) {
+				command = `flatpak-spawn --host ${command}`;
+			}
+
 			const child = spawn(
-				`${this.resolvePath()} export ${sessionId} > "${tmpFile}" 2>/dev/null`,
+				command,
 				[],
 				{
 					cwd: this.cwd,
@@ -160,7 +178,14 @@ export class OpencodeClient {
 
 	async deleteSession(sessionId: string): Promise<boolean> {
 		try {
-			await execFileAsync(this.resolvePath(), ["session", "delete", sessionId], { cwd: this.cwd });
+			const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+			let executable = this.resolvePath();
+			let args = ["session", "delete", sessionId];
+			if (isFlatpak) {
+				args = ["--host", executable, ...args];
+				executable = "flatpak-spawn";
+			}
+			await execFileAsync(executable, args, { cwd: this.cwd });
 			return true;
 		} catch (error) {
 			console.error("Failed to delete session:", error);
@@ -170,8 +195,14 @@ export class OpencodeClient {
 	}
 
 	spawnTerminal(cwd: string, extraArgs: string[] = []): ReturnType<typeof spawn> {
-		const args = extraArgs.length > 0 ? extraArgs : [];
-		return spawn(this.resolvePath(), args, {
+		const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+		let executable = this.resolvePath();
+		let args = extraArgs.length > 0 ? extraArgs : [];
+		if (isFlatpak) {
+			args = ["--host", executable, ...args];
+			executable = "flatpak-spawn";
+		}
+		return spawn(executable, args, {
 			cwd,
 			env: process.env,
 		});
