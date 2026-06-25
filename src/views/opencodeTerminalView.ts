@@ -2,6 +2,7 @@ import { ItemView, WorkspaceLeaf } from "obsidian";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { CanvasAddon } from "@xterm/addon-canvas";
 import OpencodePlugin from "../main";
 import { handleTerminalDrop } from "../terminalDrop";
 import { EditorServer } from "../editorServer";
@@ -97,6 +98,11 @@ export class OpencodeTerminalView extends ItemView {
 		terminal.loadAddon(new WebLinksAddon());
 
 		terminal.open(termContainer);
+		try {
+			terminal.loadAddon(new CanvasAddon());
+		} catch (e) {
+			console.warn("Canvas renderer failed to load, falling back to DOM renderer", e);
+		}
 		this.terminal = terminal;
 		this.fitAddon = fitAddon;
 
@@ -309,7 +315,7 @@ export class OpencodeTerminalView extends ItemView {
 			try {
 				this.terminal.dispose();
 			} catch {
-				// xterm WebGL addon has a known dispose bug
+				// xterm canvas addon may throw on dispose
 			}
 			this.terminal = null;
 		}
