@@ -11380,10 +11380,11 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
     const isDark = activeDocument.body.classList.contains("theme-dark") || ((_b = (_a = this.app.vault).getConfig) == null ? void 0 : _b.call(_a, "theme")) === "obsidian";
     const fallbackBg = isDark ? "#1e1e1e" : "#ffffff";
     const fallbackFg = isDark ? "#d4d4d4" : "#333333";
+    termContainer.style.backgroundColor = fallbackBg;
     const terminal = new import_xterm.Terminal({
       fontSize: this.plugin.settings.terminalFontSize,
       fontFamily: this.plugin.settings.terminalFontFamily,
-      lineHeight: 1,
+      lineHeight: 1.15,
       theme: {
         background: fallbackBg,
         foreground: fallbackFg,
@@ -11421,6 +11422,11 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
       const bg = computedStyle.getPropertyValue("--background-primary").trim();
       const fg = computedStyle.getPropertyValue("--text-normal").trim();
       if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)") {
+        termContainer.style.backgroundColor = bg;
+        const viewport = termContainer.querySelector(".xterm-viewport");
+        if (viewport) {
+          viewport.style.backgroundColor = bg;
+        }
         terminal.options.theme = {
           background: bg,
           foreground: fg || (currentIsDark ? "#d4d4d4" : "#333333"),

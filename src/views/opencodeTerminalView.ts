@@ -57,10 +57,12 @@ export class OpencodeTerminalView extends ItemView {
 		const fallbackBg = isDark ? "#1e1e1e" : "#ffffff";
 		const fallbackFg = isDark ? "#d4d4d4" : "#333333";
 
+		termContainer.style.backgroundColor = fallbackBg;
+
 		const terminal = new Terminal({
 			fontSize: this.plugin.settings.terminalFontSize,
 			fontFamily: this.plugin.settings.terminalFontFamily,
-			lineHeight: 1.0,
+			lineHeight: 1.15,
 			theme: {
 				background: fallbackBg,
 				foreground: fallbackFg,
@@ -104,6 +106,12 @@ export class OpencodeTerminalView extends ItemView {
 			
 			// Only update if we get valid computed values
 			if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)") {
+				termContainer.style.backgroundColor = bg;
+				const viewport = termContainer.querySelector<HTMLElement>(".xterm-viewport");
+				if (viewport) {
+					viewport.style.backgroundColor = bg;
+				}
+
 				terminal.options.theme = {
 					background: bg,
 					foreground: fg || (currentIsDark ? "#d4d4d4" : "#333333"),
