@@ -11380,16 +11380,21 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
     const isDark = activeDocument.body.classList.contains("theme-dark") || ((_b = (_a = this.app.vault).getConfig) == null ? void 0 : _b.call(_a, "theme")) === "obsidian";
     const fallbackBg = isDark ? "#1e1e1e" : "#ffffff";
     const fallbackFg = isDark ? "#d4d4d4" : "#333333";
-    termContainer.style.backgroundColor = fallbackBg;
+    const computedStyle = getComputedStyle(activeDocument.body);
+    const initialBg = computedStyle.getPropertyValue("--background-primary").trim();
+    const initialFg = computedStyle.getPropertyValue("--text-normal").trim();
+    const terminalBg = initialBg && initialBg !== "transparent" && initialBg !== "rgba(0, 0, 0, 0)" ? initialBg : fallbackBg;
+    const terminalFg = initialFg || fallbackFg;
+    termContainer.style.backgroundColor = terminalBg;
     const terminal = new import_xterm.Terminal({
       fontSize: this.plugin.settings.terminalFontSize,
       fontFamily: this.plugin.settings.terminalFontFamily,
-      lineHeight: 1.15,
+      lineHeight: 1,
       theme: {
-        background: fallbackBg,
-        foreground: fallbackFg,
-        cursor: fallbackFg,
-        cursorAccent: fallbackBg,
+        background: terminalBg,
+        foreground: terminalFg,
+        cursor: terminalFg,
+        cursorAccent: terminalBg,
         selectionBackground: isDark ? "#264f78" : "#add6ff",
         black: "#666666",
         red: isDark ? "#f44747" : "#cd3131",
@@ -11398,7 +11403,7 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
         blue: isDark ? "#569cd6" : "#2470fe",
         magenta: isDark ? "#c586c0" : "#bc3fbc",
         cyan: "#4ec9b0",
-        white: fallbackFg
+        white: terminalFg
       },
       cursorBlink: true,
       scrollback: 1e4,
@@ -11417,28 +11422,24 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
       if (!terminal || themeInitialized)
         return;
       const docBody = this.containerEl.ownerDocument.body;
-      const computedStyle = getComputedStyle(docBody);
+      const computedStyle2 = getComputedStyle(docBody);
       const currentIsDark = docBody.classList.contains("theme-dark") || ((_b2 = (_a2 = this.app.vault).getConfig) == null ? void 0 : _b2.call(_a2, "theme")) === "obsidian";
-      const bg = computedStyle.getPropertyValue("--background-primary").trim();
-      const fg = computedStyle.getPropertyValue("--text-normal").trim();
+      const bg = computedStyle2.getPropertyValue("--background-primary").trim();
+      const fg = computedStyle2.getPropertyValue("--text-normal").trim();
       if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)") {
         termContainer.style.backgroundColor = bg;
-        const viewport = termContainer.querySelector(".xterm-viewport");
-        if (viewport) {
-          viewport.style.backgroundColor = bg;
-        }
         terminal.options.theme = {
           background: bg,
           foreground: fg || (currentIsDark ? "#d4d4d4" : "#333333"),
           cursor: fg || (currentIsDark ? "#d4d4d4" : "#333333"),
           cursorAccent: bg,
-          selectionBackground: computedStyle.getPropertyValue("--text-selection").trim() || (currentIsDark ? "#264f78" : "#add6ff"),
-          black: computedStyle.getPropertyValue("--text-faint").trim() || "#666666",
-          red: computedStyle.getPropertyValue("--text-error").trim() || (currentIsDark ? "#f44747" : "#cd3131"),
-          green: computedStyle.getPropertyValue("--text-success").trim() || (currentIsDark ? "#6a9955" : "#0bc765"),
-          yellow: computedStyle.getPropertyValue("--text-warning").trim() || (currentIsDark ? "#dcdcaa" : "#e5e510"),
-          blue: computedStyle.getPropertyValue("--text-accent").trim() || (currentIsDark ? "#569cd6" : "#2470fe"),
-          magenta: computedStyle.getPropertyValue("--text-accent-hover").trim() || (currentIsDark ? "#c586c0" : "#bc3fbc"),
+          selectionBackground: computedStyle2.getPropertyValue("--text-selection").trim() || (currentIsDark ? "#264f78" : "#add6ff"),
+          black: computedStyle2.getPropertyValue("--text-faint").trim() || "#666666",
+          red: computedStyle2.getPropertyValue("--text-error").trim() || (currentIsDark ? "#f44747" : "#cd3131"),
+          green: computedStyle2.getPropertyValue("--text-success").trim() || (currentIsDark ? "#6a9955" : "#0bc765"),
+          yellow: computedStyle2.getPropertyValue("--text-warning").trim() || (currentIsDark ? "#dcdcaa" : "#e5e510"),
+          blue: computedStyle2.getPropertyValue("--text-accent").trim() || (currentIsDark ? "#569cd6" : "#2470fe"),
+          magenta: computedStyle2.getPropertyValue("--text-accent-hover").trim() || (currentIsDark ? "#c586c0" : "#bc3fbc"),
           cyan: "#4ec9b0",
           white: fg || (currentIsDark ? "#d4d4d4" : "#333333")
         };
