@@ -52,22 +52,30 @@ export class OpencodeTerminalView extends ItemView {
 		});
 
 		// Get computed styles from Obsidian for theme integration
-		const isDark = activeDocument.body.classList.contains("theme-dark") || 
+		const isDark = activeDocument.body.classList.contains("theme-dark") ||
 		               ((this.app.vault as unknown as VaultWithConfig).getConfig?.("theme") === "obsidian");
 		const fallbackBg = isDark ? "#1e1e1e" : "#ffffff";
 		const fallbackFg = isDark ? "#d4d4d4" : "#333333";
 
-		termContainer.style.backgroundColor = fallbackBg;
+		const computedStyle = getComputedStyle(activeDocument.body);
+		const initialBg = computedStyle.getPropertyValue("--background-primary").trim();
+		const initialFg = computedStyle.getPropertyValue("--text-normal").trim();
+		const terminalBg = initialBg && initialBg !== "transparent" && initialBg !== "rgba(0, 0, 0, 0)"
+			? initialBg
+			: fallbackBg;
+		const terminalFg = initialFg || fallbackFg;
+
+		termContainer.style.backgroundColor = terminalBg;
 
 		const terminal = new Terminal({
 			fontSize: this.plugin.settings.terminalFontSize,
 			fontFamily: this.plugin.settings.terminalFontFamily,
-			lineHeight: 1.15,
+			lineHeight: 1.0,
 			theme: {
-				background: fallbackBg,
-				foreground: fallbackFg,
-				cursor: fallbackFg,
-				cursorAccent: fallbackBg,
+				background: terminalBg,
+				foreground: terminalFg,
+				cursor: terminalFg,
+				cursorAccent: terminalBg,
 				selectionBackground: isDark ? "#264f78" : "#add6ff",
 				black: "#666666",
 				red: isDark ? "#f44747" : "#cd3131",
@@ -76,7 +84,7 @@ export class OpencodeTerminalView extends ItemView {
 				blue: isDark ? "#569cd6" : "#2470fe",
 				magenta: isDark ? "#c586c0" : "#bc3fbc",
 				cyan: "#4ec9b0",
-				white: fallbackFg,
+				white: terminalFg,
 			},
 			cursorBlink: true,
 			scrollback: 10000,
@@ -98,19 +106,15 @@ export class OpencodeTerminalView extends ItemView {
 			if (!terminal || themeInitialized) return;
 			const docBody = this.containerEl.ownerDocument.body;
 			const computedStyle = getComputedStyle(docBody);
-			const currentIsDark = docBody.classList.contains("theme-dark") || 
+			const currentIsDark = docBody.classList.contains("theme-dark") ||
 			                     ((this.app.vault as unknown as VaultWithConfig).getConfig?.("theme") === "obsidian");
 
 			const bg = computedStyle.getPropertyValue("--background-primary").trim();
 			const fg = computedStyle.getPropertyValue("--text-normal").trim();
-			
+
 			// Only update if we get valid computed values
 			if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)") {
 				termContainer.style.backgroundColor = bg;
-				const viewport = termContainer.querySelector<HTMLElement>(".xterm-viewport");
-				if (viewport) {
-					viewport.style.backgroundColor = bg;
-				}
 
 				terminal.options.theme = {
 					background: bg,

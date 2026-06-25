@@ -265,6 +265,11 @@
 .opencode-terminal .xterm .xterm-viewport {
 	overflow-y: auto;
 	overflow-x: hidden;
+	background-color: transparent;
+}
+
+.opencode-terminal .xterm .xterm-screen canvas {
+	display: block;
 }
 
 .mod-right-split .workspace-leaf-content[data-type="opencode-terminal"] {
