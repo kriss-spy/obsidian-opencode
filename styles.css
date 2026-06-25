@@ -169,27 +169,27 @@
     overflow: hidden;
 }
 
-.xterm-dim {
+.xterm .xterm-screen .xterm-dim {
     /* Dim should not apply to background, so the opacity of the foreground color is applied
      * explicitly in the generated class and reset to 1 here */
-    opacity: 1 !important;
+    opacity: 1;
 }
 
 .xterm-underline-1 { text-decoration: underline; }
-.xterm-underline-2 { text-decoration: double underline; }
-.xterm-underline-3 { text-decoration: wavy underline; }
-.xterm-underline-4 { text-decoration: dotted underline; }
-.xterm-underline-5 { text-decoration: dashed underline; }
+.xterm-underline-2 { text-decoration: underline; text-decoration-style: double; }
+.xterm-underline-3 { text-decoration: underline; text-decoration-style: wavy; }
+.xterm-underline-4 { text-decoration: underline; text-decoration-style: dotted; }
+.xterm-underline-5 { text-decoration: underline; text-decoration-style: dashed; }
 
 .xterm-overline {
     text-decoration: overline;
 }
 
-.xterm-overline.xterm-underline-1 { text-decoration: overline underline; }
-.xterm-overline.xterm-underline-2 { text-decoration: overline double underline; }
-.xterm-overline.xterm-underline-3 { text-decoration: overline wavy underline; }
-.xterm-overline.xterm-underline-4 { text-decoration: overline dotted underline; }
-.xterm-overline.xterm-underline-5 { text-decoration: overline dashed underline; }
+.xterm-overline.xterm-underline-1 { text-decoration: underline overline; }
+.xterm-overline.xterm-underline-2 { text-decoration: underline overline; text-decoration-style: double; }
+.xterm-overline.xterm-underline-3 { text-decoration: underline overline; text-decoration-style: wavy; }
+.xterm-overline.xterm-underline-4 { text-decoration: underline overline; text-decoration-style: dotted; }
+.xterm-overline.xterm-underline-5 { text-decoration: underline overline; text-decoration-style: dashed; }
 
 .xterm-strikethrough {
     text-decoration: line-through;

@@ -26,8 +26,7 @@ export class OpencodeConversationView extends ItemView {
 	}
 
 	getDisplayText() {
-		// eslint-disable-next-line obsidianmd/ui/sentence-case
-		return "OpenCode Conversations";
+		return "Opencode conversations";
 	}
 
 	getIcon(): string {
@@ -40,8 +39,7 @@ export class OpencodeConversationView extends ItemView {
 		container.addClass("opencode-conversation-container");
 
 		const header = container.createEl("div", { cls: "opencode-conversation-header" });
-		// eslint-disable-next-line obsidianmd/ui/sentence-case
-		header.createEl("h3", { text: "OpenCode Sessions" });
+		header.createEl("h3", { text: "Opencode sessions" });
 		const refreshBtn = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Refresh sessions" } });
 		const svg = refreshBtn.createSvg("svg", { attr: { xmlns: "http://www.w3.org/2000/svg", width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" } });
 		svg.createSvg("path", { attr: { d: "M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" } });

@@ -63,13 +63,11 @@ export default class OpencodePlugin extends Plugin {
 			(leaf) => new OpencodeConversationView(leaf, this)
 		);
 
-		// eslint-disable-next-line obsidianmd/ui/sentence-case
-		this.addRibbonIcon("terminal", "OpenCode Terminal", (evt: MouseEvent) => {
+		this.addRibbonIcon("terminal", "Opencode terminal", (evt: MouseEvent) => {
 			void this.activateTerminalView();
 		});
 
-		// eslint-disable-next-line obsidianmd/ui/sentence-case
-		this.addRibbonIcon("message-circle", "OpenCode Conversations", (evt: MouseEvent) => {
+		this.addRibbonIcon("message-circle", "Opencode conversations", (evt: MouseEvent) => {
 			void this.activateConversationView();
 		});
 

@@ -10697,8 +10697,8 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("OpenCode path").setDesc("Path to the opencode executable. Leave as 'opencode' to use PATH.").addText(
-      (text) => text.setPlaceholder("opencode").setValue(this.plugin.settings.opencodePath).onChange(async (value) => {
+    new import_obsidian.Setting(containerEl).setName("Opencode path").setDesc("Path to the opencode executable. Leave as 'opencode' to use path.").addText(
+      (text) => text.setPlaceholder("Opencode").setValue(this.plugin.settings.opencodePath).onChange(async (value) => {
         this.plugin.settings.opencodePath = value || "opencode";
         await this.plugin.saveSettings();
       })
@@ -10710,7 +10710,7 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
       })
     );
     new import_obsidian.Setting(containerEl).setName("Terminal font size").setDesc("Font size for the integrated terminal.").addSlider(
-      (slider) => slider.setLimits(8, 32, 1).setValue(this.plugin.settings.terminalFontSize).setDynamicTooltip().onChange(async (value) => {
+      (slider) => slider.setLimits(8, 32, 1).setValue(this.plugin.settings.terminalFontSize).onChange(async (value) => {
         this.plugin.settings.terminalFontSize = value;
         await this.plugin.saveSettings();
       })
@@ -11033,7 +11033,7 @@ var PtySession = class {
     (_a = this.ptyProcess.stdout) == null ? void 0 : _a.on("data", (chunk) => {
       const str = chunk.toString();
       if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-        new import_obsidian2.Notice("OpenCode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15e3);
+        new import_obsidian2.Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.Obsidian.Obsidian' on your host system to allow command execution.", 15e3);
       }
       terminal.write(chunk);
     });
@@ -11041,7 +11041,7 @@ var PtySession = class {
       const str = chunk.toString();
       console.error("PTY stderr:", str);
       if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-        new import_obsidian2.Notice("OpenCode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15e3);
+        new import_obsidian2.Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.Obsidian.Obsidian' on your host system to allow command execution.", 15e3);
       }
     });
     this.ptyProcess.on("exit", (code, signal) => {
@@ -11363,7 +11363,7 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
     return OPENCODE_TERMINAL_VIEW_TYPE;
   }
   getDisplayText() {
-    return "OpenCode";
+    return "Opencode";
   }
   getIcon() {
     return "terminal";
@@ -11630,9 +11630,9 @@ var OpencodeClient = class {
       console.error("Failed to list sessions:", error);
       const errStr = String(error);
       if (errStr.includes("org.freedesktop.DBus.Error.ServiceUnknown") || errStr.includes("flatpak-spawn")) {
-        new import_obsidian4.Notice("OpenCode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian' on your host system.", 15e3);
+        new import_obsidian4.Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.Obsidian.Obsidian' on your host system.", 15e3);
       } else {
-        new import_obsidian4.Notice("Failed to list OpenCode sessions. Check your OpenCode path in settings.");
+        new import_obsidian4.Notice("Failed to list opencode sessions. Check your opencode path in settings.");
       }
       return [];
     }
@@ -11820,7 +11820,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     return OPENCODE_CONVERSATION_VIEW_TYPE;
   }
   getDisplayText() {
-    return "OpenCode Conversations";
+    return "Opencode conversations";
   }
   getIcon() {
     return "message-circle";
@@ -11830,7 +11830,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     container.empty();
     container.addClass("opencode-conversation-container");
     const header = container.createEl("div", { cls: "opencode-conversation-header" });
-    header.createEl("h3", { text: "OpenCode Sessions" });
+    header.createEl("h3", { text: "Opencode sessions" });
     const refreshBtn = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Refresh sessions" } });
     const svg = refreshBtn.createSvg("svg", { attr: { xmlns: "http://www.w3.org/2000/svg", width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" } });
     svg.createSvg("path", { attr: { d: "M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" } });
@@ -12184,10 +12184,10 @@ var OpencodePlugin = class extends import_obsidian8.Plugin {
       OPENCODE_CONVERSATION_VIEW_TYPE,
       (leaf) => new OpencodeConversationView(leaf, this)
     );
-    this.addRibbonIcon("terminal", "OpenCode Terminal", (evt) => {
+    this.addRibbonIcon("terminal", "Opencode terminal", (evt) => {
       void this.activateTerminalView();
     });
-    this.addRibbonIcon("message-circle", "OpenCode Conversations", (evt) => {
+    this.addRibbonIcon("message-circle", "Opencode conversations", (evt) => {
       void this.activateConversationView();
     });
     this.addCommand({

@@ -14,11 +14,11 @@ export class OpencodeSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName("OpenCode path") // eslint-disable-line obsidianmd/ui/sentence-case
-			.setDesc("Path to the opencode executable. Leave as 'opencode' to use PATH.") // eslint-disable-line obsidianmd/ui/sentence-case
+			.setName("Opencode path")
+			.setDesc("Path to the opencode executable. Leave as 'opencode' to use path.")
 			.addText((text) =>
 				text
-					.setPlaceholder("opencode") // eslint-disable-line obsidianmd/ui/sentence-case
+					.setPlaceholder("Opencode")
 					.setValue(this.plugin.settings.opencodePath)
 					.onChange(async (value) => {
 						this.plugin.settings.opencodePath = value || "opencode";
@@ -46,7 +46,6 @@ export class OpencodeSettingTab extends PluginSettingTab {
 				slider
 					.setLimits(8, 32, 1)
 					.setValue(this.plugin.settings.terminalFontSize)
-					.setDynamicTooltip()
 					.onChange(async (value) => {
 						this.plugin.settings.terminalFontSize = value;
 						await this.plugin.saveSettings();
