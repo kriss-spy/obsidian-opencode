@@ -4,7 +4,7 @@ A plugin that embeds the OpenCode CLI directly into Obsidian. Manage your AI cod
 
 ## ✨ Features
 
-- **Native OpenCode Execution:** Runs the OpenCode CLI directly inside Obsidian using a WebGL-accelerated terminal, ensuring smooth performance for long coding sessions.
+- **Native OpenCode Execution:** Runs the OpenCode CLI directly inside Obsidian using an integrated terminal, ensuring smooth performance for long coding sessions.
 - **Vault-Centric Workflow:** Automatically spawns the agent in your vault's root, ensuring it has immediate access to your notes and project files.
 - **Session Manager:** 
   - **History Browser:** View a list of all your past OpenCode sessions with timestamps and working directories.
@@ -40,6 +40,12 @@ To develop the plugin, you can run the development script which automatically re
 ```bash
 npm run dev
 ```
+
+## 🖥️ Platform Support
+
+- **Linux**: Experimental (stable on my daily driver, not tested on all distros).
+- **Windows**: Work in Progress (WIP).
+- **macOS**: Not planned.
 
 ## ⚠️ Known Issues
 
