@@ -105,7 +105,7 @@ export default class OpencodePlugin extends Plugin {
 
 		this.addCommand({
 			id: "restart-terminal",
-			name: "Restart terminal (Reset size)",
+			name: "Restart terminal (reset size)",
 			callback: () => this.openOrRestartTerminal(),
 		});
 

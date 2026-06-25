@@ -149,3 +149,6 @@ vite.config.ts.timestamp-*
 # OpenCode session exports
 session-*.md
 skills-lock.json
+
+# Obsidian plugin review reports
+obsidian-plugin-review-reports/

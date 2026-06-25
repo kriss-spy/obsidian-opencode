@@ -9,6 +9,10 @@ import { normalizeVaultPath } from "../utils/path";
 import { PtySession } from "../modules/ptySession";
 import { TerminalKeyRouter } from "../modules/terminalKeyRouter";
 
+interface VaultWithConfig {
+	getConfig?(key: string): string;
+}
+
 export const OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
 
 export class OpencodeTerminalView extends ItemView {
@@ -50,7 +54,7 @@ export class OpencodeTerminalView extends ItemView {
 
 		// Get computed styles from Obsidian for theme integration
 		const isDark = activeDocument.body.classList.contains("theme-dark") || 
-		               (this.app as any).vault.getConfig?.("theme") === "obsidian";
+		               ((this.app.vault as unknown as VaultWithConfig).getConfig?.("theme") === "obsidian");
 		const fallbackBg = isDark ? "#1e1e1e" : "#ffffff";
 		const fallbackFg = isDark ? "#d4d4d4" : "#333333";
 
@@ -94,7 +98,7 @@ export class OpencodeTerminalView extends ItemView {
 			const docBody = this.containerEl.ownerDocument.body;
 			const computedStyle = getComputedStyle(docBody);
 			const currentIsDark = docBody.classList.contains("theme-dark") || 
-			                     (this.app as any).vault.getConfig?.("theme") === "obsidian";
+			                     ((this.app.vault as unknown as VaultWithConfig).getConfig?.("theme") === "obsidian");
 
 			const bg = computedStyle.getPropertyValue("--background-primary").trim();
 			const fg = computedStyle.getPropertyValue("--text-normal").trim();

@@ -10939,6 +10939,7 @@ function normalizeVaultPath(filePath, vaultRoot) {
 // src/modules/ptySession.ts
 var import_child_process = require("child_process");
 var import_obsidian2 = require("obsidian");
+var fs2 = __toESM(require("fs"));
 var UNIX_PSEUDOTERMINAL_PY = `
 import sys
 from os import execvp, read, write, waitpid, waitstatus_to_exitcode
@@ -11019,7 +11020,7 @@ var PtySession = class {
     }
     let executable = options.opencodePath;
     let args = [...options.args];
-    const isFlatpak = require("fs").existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+    const isFlatpak = fs2.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
     if (isFlatpak) {
       args = ["--host", "--env=TERM=xterm-256color", executable, ...args];
       executable = "flatpak-spawn";
@@ -11092,7 +11093,7 @@ Error: ${err.message}\r
 };
 
 // src/modules/terminalKeyRouter.ts
-var fs2 = __toESM(require("fs"));
+var fs3 = __toESM(require("fs"));
 var TerminalKeyRouter = class {
   constructor() {
     this.disposers = [];
@@ -11121,8 +11122,8 @@ var TerminalKeyRouter = class {
       if ("getBasePath" in adapter && typeof adapter.getBasePath === "function") {
         const basePath = adapter.getBasePath();
         const hotkeysPath = `${basePath}/${app.vault.configDir}/hotkeys.json`;
-        if (fs2.existsSync(hotkeysPath)) {
-          const custom = JSON.parse(fs2.readFileSync(hotkeysPath, "utf8"));
+        if (fs3.existsSync(hotkeysPath)) {
+          const custom = JSON.parse(fs3.readFileSync(hotkeysPath, "utf8"));
           for (const [cmdId, hotkeys] of Object.entries(custom)) {
             if (Array.isArray(hotkeys) && hotkeys.length > 0) {
               addHotkeys(cmdId, hotkeys);
@@ -11596,7 +11597,7 @@ var import_obsidian6 = require("obsidian");
 var import_obsidian4 = require("obsidian");
 var import_child_process2 = require("child_process");
 var import_util = require("util");
-var fs3 = __toESM(require("fs"));
+var fs4 = __toESM(require("fs"));
 var os2 = __toESM(require("os"));
 var path3 = __toESM(require("path"));
 var execFileAsync = (0, import_util.promisify)(import_child_process2.execFile);
@@ -11616,7 +11617,7 @@ var OpencodeClient = class {
   }
   async listSessions() {
     try {
-      const isFlatpak = fs3.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+      const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
       let executable = this.resolvePath();
       let args = ["session", "list", "--format", "json"];
       if (isFlatpak) {
@@ -11652,7 +11653,7 @@ var OpencodeClient = class {
   exportSessionStreamed(sessionId, maxBytes = 200 * 1024 * 1024) {
     return new Promise((resolve, reject) => {
       const tmpFile = path3.join(os2.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
-      const isFlatpak = fs3.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+      const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
       let command = `${this.resolvePath()} export ${sessionId} > "${tmpFile}" 2>/dev/null`;
       if (isFlatpak) {
         command = `flatpak-spawn --host ${command}`;
@@ -11667,28 +11668,28 @@ var OpencodeClient = class {
         }
       );
       child.on("error", (err) => {
-        fs3.unlinkSync(tmpFile);
+        fs4.unlinkSync(tmpFile);
         reject(err);
       });
       child.on("close", (code) => {
         if (code !== 0) {
-          fs3.unlinkSync(tmpFile);
+          fs4.unlinkSync(tmpFile);
           reject(new Error(`Export exited with code ${code}`));
           return;
         }
         try {
-          const stats = fs3.statSync(tmpFile);
+          const stats = fs4.statSync(tmpFile);
           if (stats.size > maxBytes) {
-            fs3.unlinkSync(tmpFile);
+            fs4.unlinkSync(tmpFile);
             reject(new ExportTooLargeError(sessionId));
             return;
           }
-          const stdout = fs3.readFileSync(tmpFile, "utf-8");
-          fs3.unlinkSync(tmpFile);
+          const stdout = fs4.readFileSync(tmpFile, "utf-8");
+          fs4.unlinkSync(tmpFile);
           const data = JSON.parse(stdout);
           resolve(data);
         } catch (parseError) {
-          fs3.unlinkSync(tmpFile);
+          fs4.unlinkSync(tmpFile);
           reject(parseError instanceof Error ? parseError : new Error(String(parseError)));
         }
       });
@@ -11696,7 +11697,7 @@ var OpencodeClient = class {
   }
   async deleteSession(sessionId) {
     try {
-      const isFlatpak = fs3.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+      const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
       let executable = this.resolvePath();
       let args = ["session", "delete", sessionId];
       if (isFlatpak) {
@@ -11711,7 +11712,7 @@ var OpencodeClient = class {
     }
   }
   spawnTerminal(cwd, extraArgs = []) {
-    const isFlatpak = fs3.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+    const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
     let executable = this.resolvePath();
     let args = extraArgs.length > 0 ? extraArgs : [];
     if (isFlatpak) {
@@ -12216,7 +12217,7 @@ var OpencodePlugin = class extends import_obsidian8.Plugin {
     });
     this.addCommand({
       id: "restart-terminal",
-      name: "Restart terminal (Reset size)",
+      name: "Restart terminal (reset size)",
       callback: () => this.openOrRestartTerminal()
     });
     this.addSettingTab(new OpencodeSettingTab(this.app, this));

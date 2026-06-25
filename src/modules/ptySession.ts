@@ -1,6 +1,7 @@
 import { Terminal } from "@xterm/xterm";
 import { spawn, ChildProcess } from "child_process";
 import { Notice } from "obsidian";
+import * as fs from "fs";
 
 const UNIX_PSEUDOTERMINAL_PY = `
 import sys
@@ -90,7 +91,7 @@ export class PtySession {
 		let executable = options.opencodePath;
 		let args = [...options.args];
 
-		const isFlatpak = require("fs").existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+		const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
 		if (isFlatpak) {
 			args = ["--host", "--env=TERM=xterm-256color", executable, ...args];
 			executable = "flatpak-spawn";
@@ -105,7 +106,7 @@ export class PtySession {
 		this.ptyProcess.stdout?.on("data", (chunk: Buffer) => {
 			const str = chunk.toString();
 			if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-				new Notice("OpenCode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15000);
+				new Notice("OpenCode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15000); // eslint-disable-line obsidianmd/ui/sentence-case
 			}
 			terminal.write(chunk);
 		});
@@ -114,7 +115,7 @@ export class PtySession {
 			const str = chunk.toString();
 			console.error("PTY stderr:", str);
 			if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-				new Notice("OpenCode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15000);
+				new Notice("OpenCode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15000); // eslint-disable-line obsidianmd/ui/sentence-case
 			}
 		});
 
