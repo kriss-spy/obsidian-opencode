@@ -11349,7 +11349,7 @@ var require_websocket = __commonJS({
     var protocolVersions = [8, 13];
     var readyStates = ["CONNECTING", "OPEN", "CLOSING", "CLOSED"];
     var subprotocolRegex = /^[!#$%&'*+\-.0-9A-Z^_`|a-z~]+$/;
-    var WebSocket3 = class extends EventEmitter {
+    var WebSocket2 = class extends EventEmitter {
       /**
        * Create a new `WebSocket`.
        *
@@ -11369,7 +11369,7 @@ var require_websocket = __commonJS({
         this._extensions = {};
         this._paused = false;
         this._protocol = "";
-        this._readyState = WebSocket3.CONNECTING;
+        this._readyState = WebSocket2.CONNECTING;
         this._receiver = null;
         this._sender = null;
         this._socket = null;
@@ -11531,7 +11531,7 @@ var require_websocket = __commonJS({
         socket.on("data", socketOnData);
         socket.on("end", socketOnEnd);
         socket.on("error", socketOnError);
-        this._readyState = WebSocket3.OPEN;
+        this._readyState = WebSocket2.OPEN;
         this.emit("open");
       }
       /**
@@ -11541,7 +11541,7 @@ var require_websocket = __commonJS({
        */
       emitClose() {
         if (!this._socket) {
-          this._readyState = WebSocket3.CLOSED;
+          this._readyState = WebSocket2.CLOSED;
           this.emit("close", this._closeCode, this._closeMessage);
           return;
         }
@@ -11549,7 +11549,7 @@ var require_websocket = __commonJS({
           this._extensions[PerMessageDeflate2.extensionName].cleanup();
         }
         this._receiver.removeAllListeners();
-        this._readyState = WebSocket3.CLOSED;
+        this._readyState = WebSocket2.CLOSED;
         this.emit("close", this._closeCode, this._closeMessage);
       }
       /**
@@ -11573,20 +11573,20 @@ var require_websocket = __commonJS({
        * @public
        */
       close(code, data) {
-        if (this.readyState === WebSocket3.CLOSED)
+        if (this.readyState === WebSocket2.CLOSED)
           return;
-        if (this.readyState === WebSocket3.CONNECTING) {
+        if (this.readyState === WebSocket2.CONNECTING) {
           const msg = "WebSocket was closed before the connection was established";
           abortHandshake(this, this._req, msg);
           return;
         }
-        if (this.readyState === WebSocket3.CLOSING) {
+        if (this.readyState === WebSocket2.CLOSING) {
           if (this._closeFrameSent && (this._closeFrameReceived || this._receiver._writableState.errorEmitted)) {
             this._socket.end();
           }
           return;
         }
-        this._readyState = WebSocket3.CLOSING;
+        this._readyState = WebSocket2.CLOSING;
         this._sender.close(code, data, !this._isServer, (err) => {
           if (err)
             return;
@@ -11603,7 +11603,7 @@ var require_websocket = __commonJS({
        * @public
        */
       pause() {
-        if (this.readyState === WebSocket3.CONNECTING || this.readyState === WebSocket3.CLOSED) {
+        if (this.readyState === WebSocket2.CONNECTING || this.readyState === WebSocket2.CLOSED) {
           return;
         }
         this._paused = true;
@@ -11618,7 +11618,7 @@ var require_websocket = __commonJS({
        * @public
        */
       ping(data, mask, cb) {
-        if (this.readyState === WebSocket3.CONNECTING) {
+        if (this.readyState === WebSocket2.CONNECTING) {
           throw new Error("WebSocket is not open: readyState 0 (CONNECTING)");
         }
         if (typeof data === "function") {
@@ -11630,7 +11630,7 @@ var require_websocket = __commonJS({
         }
         if (typeof data === "number")
           data = data.toString();
-        if (this.readyState !== WebSocket3.OPEN) {
+        if (this.readyState !== WebSocket2.OPEN) {
           sendAfterClose(this, data, cb);
           return;
         }
@@ -11647,7 +11647,7 @@ var require_websocket = __commonJS({
        * @public
        */
       pong(data, mask, cb) {
-        if (this.readyState === WebSocket3.CONNECTING) {
+        if (this.readyState === WebSocket2.CONNECTING) {
           throw new Error("WebSocket is not open: readyState 0 (CONNECTING)");
         }
         if (typeof data === "function") {
@@ -11659,7 +11659,7 @@ var require_websocket = __commonJS({
         }
         if (typeof data === "number")
           data = data.toString();
-        if (this.readyState !== WebSocket3.OPEN) {
+        if (this.readyState !== WebSocket2.OPEN) {
           sendAfterClose(this, data, cb);
           return;
         }
@@ -11673,7 +11673,7 @@ var require_websocket = __commonJS({
        * @public
        */
       resume() {
-        if (this.readyState === WebSocket3.CONNECTING || this.readyState === WebSocket3.CLOSED) {
+        if (this.readyState === WebSocket2.CONNECTING || this.readyState === WebSocket2.CLOSED) {
           return;
         }
         this._paused = false;
@@ -11696,7 +11696,7 @@ var require_websocket = __commonJS({
        * @public
        */
       send(data, options, cb) {
-        if (this.readyState === WebSocket3.CONNECTING) {
+        if (this.readyState === WebSocket2.CONNECTING) {
           throw new Error("WebSocket is not open: readyState 0 (CONNECTING)");
         }
         if (typeof options === "function") {
@@ -11705,7 +11705,7 @@ var require_websocket = __commonJS({
         }
         if (typeof data === "number")
           data = data.toString();
-        if (this.readyState !== WebSocket3.OPEN) {
+        if (this.readyState !== WebSocket2.OPEN) {
           sendAfterClose(this, data, cb);
           return;
         }
@@ -11727,48 +11727,48 @@ var require_websocket = __commonJS({
        * @public
        */
       terminate() {
-        if (this.readyState === WebSocket3.CLOSED)
+        if (this.readyState === WebSocket2.CLOSED)
           return;
-        if (this.readyState === WebSocket3.CONNECTING) {
+        if (this.readyState === WebSocket2.CONNECTING) {
           const msg = "WebSocket was closed before the connection was established";
           abortHandshake(this, this._req, msg);
           return;
         }
         if (this._socket) {
-          this._readyState = WebSocket3.CLOSING;
+          this._readyState = WebSocket2.CLOSING;
           this._socket.destroy();
         }
       }
     };
-    Object.defineProperty(WebSocket3, "CONNECTING", {
+    Object.defineProperty(WebSocket2, "CONNECTING", {
       enumerable: true,
       value: readyStates.indexOf("CONNECTING")
     });
-    Object.defineProperty(WebSocket3.prototype, "CONNECTING", {
+    Object.defineProperty(WebSocket2.prototype, "CONNECTING", {
       enumerable: true,
       value: readyStates.indexOf("CONNECTING")
     });
-    Object.defineProperty(WebSocket3, "OPEN", {
+    Object.defineProperty(WebSocket2, "OPEN", {
       enumerable: true,
       value: readyStates.indexOf("OPEN")
     });
-    Object.defineProperty(WebSocket3.prototype, "OPEN", {
+    Object.defineProperty(WebSocket2.prototype, "OPEN", {
       enumerable: true,
       value: readyStates.indexOf("OPEN")
     });
-    Object.defineProperty(WebSocket3, "CLOSING", {
+    Object.defineProperty(WebSocket2, "CLOSING", {
       enumerable: true,
       value: readyStates.indexOf("CLOSING")
     });
-    Object.defineProperty(WebSocket3.prototype, "CLOSING", {
+    Object.defineProperty(WebSocket2.prototype, "CLOSING", {
       enumerable: true,
       value: readyStates.indexOf("CLOSING")
     });
-    Object.defineProperty(WebSocket3, "CLOSED", {
+    Object.defineProperty(WebSocket2, "CLOSED", {
       enumerable: true,
       value: readyStates.indexOf("CLOSED")
     });
-    Object.defineProperty(WebSocket3.prototype, "CLOSED", {
+    Object.defineProperty(WebSocket2.prototype, "CLOSED", {
       enumerable: true,
       value: readyStates.indexOf("CLOSED")
     });
@@ -11781,10 +11781,10 @@ var require_websocket = __commonJS({
       "readyState",
       "url"
     ].forEach((property) => {
-      Object.defineProperty(WebSocket3.prototype, property, { enumerable: true });
+      Object.defineProperty(WebSocket2.prototype, property, { enumerable: true });
     });
     ["open", "error", "close", "message"].forEach((method) => {
-      Object.defineProperty(WebSocket3.prototype, `on${method}`, {
+      Object.defineProperty(WebSocket2.prototype, `on${method}`, {
         enumerable: true,
         get() {
           for (const listener of this.listeners(method)) {
@@ -11808,9 +11808,9 @@ var require_websocket = __commonJS({
         }
       });
     });
-    WebSocket3.prototype.addEventListener = addEventListener;
-    WebSocket3.prototype.removeEventListener = removeEventListener;
-    module2.exports = WebSocket3;
+    WebSocket2.prototype.addEventListener = addEventListener;
+    WebSocket2.prototype.removeEventListener = removeEventListener;
+    module2.exports = WebSocket2;
     function initAsClient(websocket, address, protocols, options) {
       const opts = {
         allowSynchronousEvents: true,
@@ -12002,7 +12002,7 @@ var require_websocket = __commonJS({
       });
       req.on("upgrade", (res, socket, head) => {
         websocket.emit("upgrade", res);
-        if (websocket.readyState !== WebSocket3.CONNECTING)
+        if (websocket.readyState !== WebSocket2.CONNECTING)
           return;
         req = websocket._req = null;
         const upgrade = res.headers.upgrade;
@@ -12078,7 +12078,7 @@ var require_websocket = __commonJS({
       }
     }
     function emitErrorAndClose(websocket, err) {
-      websocket._readyState = WebSocket3.CLOSING;
+      websocket._readyState = WebSocket2.CLOSING;
       websocket._errorEmitted = true;
       websocket.emit("error", err);
       websocket.emitClose();
@@ -12095,7 +12095,7 @@ var require_websocket = __commonJS({
       return tls.connect(options);
     }
     function abortHandshake(websocket, stream, message) {
-      websocket._readyState = WebSocket3.CLOSING;
+      websocket._readyState = WebSocket2.CLOSING;
       const err = new Error(message);
       Error.captureStackTrace(err, abortHandshake);
       if (stream.setHeader) {
@@ -12177,10 +12177,10 @@ var require_websocket = __commonJS({
     }
     function senderOnError(err) {
       const websocket = this[kWebSocket];
-      if (websocket.readyState === WebSocket3.CLOSED)
+      if (websocket.readyState === WebSocket2.CLOSED)
         return;
-      if (websocket.readyState === WebSocket3.OPEN) {
-        websocket._readyState = WebSocket3.CLOSING;
+      if (websocket.readyState === WebSocket2.OPEN) {
+        websocket._readyState = WebSocket2.CLOSING;
         setCloseTimer(websocket);
       }
       this._socket.end();
@@ -12200,7 +12200,7 @@ var require_websocket = __commonJS({
       this.removeListener("close", socketOnClose);
       this.removeListener("data", socketOnData);
       this.removeListener("end", socketOnEnd);
-      websocket._readyState = WebSocket3.CLOSING;
+      websocket._readyState = WebSocket2.CLOSING;
       if (!this._readableState.endEmitted && !websocket._closeFrameReceived && !websocket._receiver._writableState.errorEmitted && this._readableState.length !== 0) {
         const chunk = this.read(this._readableState.length);
         websocket._receiver.write(chunk);
@@ -12222,7 +12222,7 @@ var require_websocket = __commonJS({
     }
     function socketOnEnd() {
       const websocket = this[kWebSocket];
-      websocket._readyState = WebSocket3.CLOSING;
+      websocket._readyState = WebSocket2.CLOSING;
       websocket._receiver.end();
       this.end();
     }
@@ -12231,7 +12231,7 @@ var require_websocket = __commonJS({
       this.removeListener("error", socketOnError);
       this.on("error", NOOP);
       if (websocket) {
-        websocket._readyState = WebSocket3.CLOSING;
+        websocket._readyState = WebSocket2.CLOSING;
         this.destroy();
       }
     }
@@ -12242,7 +12242,7 @@ var require_websocket = __commonJS({
 var require_stream = __commonJS({
   "node_modules/ws/lib/stream.js"(exports, module2) {
     "use strict";
-    var WebSocket3 = require_websocket();
+    var WebSocket2 = require_websocket();
     var { Duplex } = require("stream");
     function emitClose(stream) {
       stream.emit("close");
@@ -12403,7 +12403,7 @@ var require_websocket_server = __commonJS({
     var extension2 = require_extension();
     var PerMessageDeflate2 = require_permessage_deflate();
     var subprotocol2 = require_subprotocol();
-    var WebSocket3 = require_websocket();
+    var WebSocket2 = require_websocket();
     var { CLOSE_TIMEOUT, GUID, kWebSocket } = require_constants();
     var keyRegex = /^[+/0-9A-Za-z]{22}==$/;
     var RUNNING = 0;
@@ -12469,7 +12469,7 @@ var require_websocket_server = __commonJS({
           host: null,
           path: null,
           port: null,
-          WebSocket: WebSocket3,
+          WebSocket: WebSocket2,
           ...options
         };
         if (options.port == null && !options.server && !options.noServer || options.port != null && (options.server || options.noServer) || options.server && options.noServer) {
@@ -13005,7 +13005,7 @@ var EditorServer = class {
             protocolVersion: "2025-11-25",
             serverInfo: {
               name: "obsidian-opencode",
-              version: "1.1.1"
+              version: "1.3.10"
             }
           }
         };
@@ -13049,7 +13049,7 @@ var EditorServer = class {
     };
     const payload = JSON.stringify(msg);
     for (const client of this.clients) {
-      if (client.readyState === 1) {
+      if (client.readyState === import_websocket.default.OPEN) {
         client.send(payload);
       }
     }
@@ -13073,6 +13073,8 @@ function normalizeVaultPath(filePath, vaultRoot) {
 var import_child_process = require("child_process");
 var import_obsidian2 = require("obsidian");
 var fs2 = __toESM(require("fs"));
+var os2 = __toESM(require("os"));
+var path3 = __toESM(require("path"));
 var UNIX_PSEUDOTERMINAL_PY = `
 import sys
 from os import execvp, read, write, waitpid, waitstatus_to_exitcode
@@ -13140,6 +13142,44 @@ def handle_resize(pty_fd):
 if __name__ == "__main__":
     main()
 `;
+var COMMON_BIN_DIRS = [
+  ".opencode/bin",
+  ".local/bin",
+  "bin"
+];
+function resolveExecutablePath(executable) {
+  if (path3.isAbsolute(executable)) {
+    return executable;
+  }
+  const pathDirs = (process.env.PATH || "").split(path3.delimiter);
+  for (const dir of pathDirs) {
+    if (!dir)
+      continue;
+    const fullPath = path3.join(dir, executable);
+    try {
+      fs2.accessSync(fullPath, fs2.constants.X_OK);
+      return fullPath;
+    } catch (e) {
+      continue;
+    }
+  }
+  const homeDir = os2.homedir();
+  for (const sub of COMMON_BIN_DIRS) {
+    const fullPath = path3.join(homeDir, sub, executable);
+    try {
+      fs2.accessSync(fullPath, fs2.constants.X_OK);
+      return fullPath;
+    } catch (e) {
+      continue;
+    }
+  }
+  return executable;
+}
+function augmentPath(originalPath) {
+  const homeDir = os2.homedir();
+  const userDirs = COMMON_BIN_DIRS.map((sub) => path3.join(homeDir, sub));
+  return [...userDirs, ...(originalPath || "").split(path3.delimiter)].filter(Boolean).join(path3.delimiter);
+}
 var PtySession = class {
   constructor() {
     this.ptyProcess = null;
@@ -13151,16 +13191,18 @@ var PtySession = class {
       terminal.writeln("\r\nWindows PTY support not yet implemented.\r\n");
       return;
     }
-    let executable = options.opencodePath;
+    let executable = resolveExecutablePath(options.opencodePath);
     let args = [...options.args];
     const isFlatpak = fs2.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
     if (isFlatpak) {
       args = ["--host", "--env=TERM=xterm-256color", executable, ...args];
       executable = "flatpak-spawn";
     }
+    const env = { ...process.env };
+    env.PATH = augmentPath(env.PATH);
     this.ptyProcess = (0, import_child_process.spawn)(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
       cwd: options.cwd,
-      env: process.env,
+      env,
       stdio: ["pipe", "pipe", "pipe", "pipe"]
     });
     (_a = this.ptyProcess.stdout) == null ? void 0 : _a.on("data", (chunk) => {
@@ -13743,9 +13785,26 @@ var import_obsidian4 = require("obsidian");
 var import_child_process2 = require("child_process");
 var import_util = require("util");
 var fs4 = __toESM(require("fs"));
-var os2 = __toESM(require("os"));
-var path3 = __toESM(require("path"));
+var os3 = __toESM(require("os"));
+var path4 = __toESM(require("path"));
 var execFileAsync = (0, import_util.promisify)(import_child_process2.execFile);
+var COMMON_BIN_DIRS2 = [
+  ".opencode/bin",
+  ".local/bin",
+  "bin"
+];
+function augmentPath2(originalPath) {
+  const homeDir = os3.homedir();
+  const userDirs = COMMON_BIN_DIRS2.map((sub) => path4.join(homeDir, sub));
+  return [...userDirs, ...(originalPath || "").split(path4.delimiter)].filter(Boolean).join(path4.delimiter);
+}
+var SAFE_ID_RE = /^[a-zA-Z0-9._:-]+$/;
+function safeUnlinkSync(filePath) {
+  try {
+    fs4.unlinkSync(filePath);
+  } catch (e) {
+  }
+}
 var ExportTooLargeError = class extends Error {
   constructor(sessionId) {
     super(`Session ${sessionId} is too large to export`);
@@ -13769,7 +13828,9 @@ var OpencodeClient = class {
         args = ["--host", executable, ...args];
         executable = "flatpak-spawn";
       }
-      const { stdout } = await execFileAsync(executable, args, { cwd: this.cwd });
+      const env = { ...process.env };
+      env.PATH = augmentPath2(env.PATH);
+      const { stdout } = await execFileAsync(executable, args, { cwd: this.cwd, env });
       return JSON.parse(stdout);
     } catch (error) {
       console.error("Failed to list sessions:", error);
@@ -13797,44 +13858,57 @@ var OpencodeClient = class {
   }
   exportSessionStreamed(sessionId, maxBytes = 200 * 1024 * 1024) {
     return new Promise((resolve, reject) => {
-      const tmpFile = path3.join(os2.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
+      if (!SAFE_ID_RE.test(sessionId)) {
+        reject(new Error(`Invalid session ID: ${sessionId}`));
+        return;
+      }
+      const tmpFile = path4.join(os3.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
+      let cleanedUp = false;
+      const cleanup = () => {
+        if (cleanedUp)
+          return;
+        cleanedUp = true;
+        safeUnlinkSync(tmpFile);
+      };
       const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
       let command = `${this.resolvePath()} export ${sessionId} > "${tmpFile}" 2>/dev/null`;
       if (isFlatpak) {
         command = `flatpak-spawn --host ${command}`;
       }
+      const exportEnv = { ...process.env };
+      exportEnv.PATH = augmentPath2(exportEnv.PATH);
       const child = (0, import_child_process2.spawn)(
         command,
         [],
         {
           cwd: this.cwd,
-          env: process.env,
+          env: exportEnv,
           shell: true
         }
       );
       child.on("error", (err) => {
-        fs4.unlinkSync(tmpFile);
+        cleanup();
         reject(err);
       });
       child.on("close", (code) => {
         if (code !== 0) {
-          fs4.unlinkSync(tmpFile);
+          cleanup();
           reject(new Error(`Export exited with code ${code}`));
           return;
         }
         try {
           const stats = fs4.statSync(tmpFile);
           if (stats.size > maxBytes) {
-            fs4.unlinkSync(tmpFile);
+            cleanup();
             reject(new ExportTooLargeError(sessionId));
             return;
           }
           const stdout = fs4.readFileSync(tmpFile, "utf-8");
-          fs4.unlinkSync(tmpFile);
+          cleanup();
           const data = JSON.parse(stdout);
           resolve(data);
         } catch (parseError) {
-          fs4.unlinkSync(tmpFile);
+          cleanup();
           reject(parseError instanceof Error ? parseError : new Error(String(parseError)));
         }
       });
@@ -13849,25 +13923,14 @@ var OpencodeClient = class {
         args = ["--host", executable, ...args];
         executable = "flatpak-spawn";
       }
-      await execFileAsync(executable, args, { cwd: this.cwd });
+      const env = { ...process.env };
+      env.PATH = augmentPath2(env.PATH);
+      await execFileAsync(executable, args, { cwd: this.cwd, env });
       return true;
     } catch (error) {
       console.error("Failed to delete session:", error);
       return false;
     }
-  }
-  spawnTerminal(cwd, extraArgs = []) {
-    const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
-    let executable = this.resolvePath();
-    let args = extraArgs.length > 0 ? extraArgs : [];
-    if (isFlatpak) {
-      args = ["--host", executable, ...args];
-      executable = "flatpak-spawn";
-    }
-    return (0, import_child_process2.spawn)(executable, args, {
-      cwd,
-      env: process.env
-    });
   }
 };
 
@@ -14088,12 +14151,20 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     }
   }
   async exportSessionToNote(session) {
-    const data = await this.client.exportSession(session.id);
-    if (!data) {
-      new import_obsidian6.Notice("Failed to export session");
-      return;
+    try {
+      const data = await this.client.exportSession(session.id);
+      if (!data) {
+        new import_obsidian6.Notice("Failed to export session");
+        return;
+      }
+      await this.exporter.exportToNote(session, data);
+    } catch (error) {
+      if (error instanceof ExportTooLargeError) {
+        new import_obsidian6.Notice("Session too large to export to note.");
+      } else {
+        new import_obsidian6.Notice("Failed to export session.");
+      }
     }
-    await this.exporter.exportToNote(session, data);
   }
   async onClose() {
   }
@@ -14198,17 +14269,6 @@ var SessionState = class {
   }
   setPendingPrompt(prompt) {
     this.pendingPrompt = prompt;
-  }
-  consumeArgs() {
-    const result = {
-      args: this.sessionArgs,
-      cwd: this.sessionCwd,
-      prompt: this.pendingPrompt
-    };
-    this.sessionArgs = null;
-    this.sessionCwd = null;
-    this.pendingPrompt = null;
-    return result;
   }
 };
 
@@ -14338,32 +14398,44 @@ var OpencodePlugin = class extends import_obsidian8.Plugin {
     this.addCommand({
       id: "open-terminal",
       name: "Open terminal",
-      callback: () => this.activateTerminalView()
+      callback: () => {
+        void this.activateTerminalView();
+      }
     });
     this.addCommand({
       id: "toggle-terminal-sidebar",
       name: "Toggle terminal in sidebar",
-      callback: () => this.toggleTerminalSidebar()
+      callback: () => {
+        void this.toggleTerminalSidebar();
+      }
     });
     this.addCommand({
       id: "open-conversations",
       name: "Open conversations",
-      callback: () => this.activateConversationView()
+      callback: () => {
+        void this.activateConversationView();
+      }
     });
     this.addCommand({
       id: "new-session",
       name: "New session",
-      callback: () => this.newSession()
+      callback: () => {
+        void this.newSession();
+      }
     });
     this.addCommand({
       id: "continue-last-session",
       name: "Continue last session",
-      callback: () => this.continueLastSession()
+      callback: () => {
+        void this.continueLastSession();
+      }
     });
     this.addCommand({
       id: "restart-terminal",
       name: "Restart terminal (reset size)",
-      callback: () => this.openOrRestartTerminal()
+      callback: () => {
+        void this.openOrRestartTerminal();
+      }
     });
     this.addSettingTab(new OpencodeSettingTab(this.app, this));
     this.registerEditorSuggest(new OpencodeEditorSuggest(this));

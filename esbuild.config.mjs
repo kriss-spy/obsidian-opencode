@@ -22,7 +22,6 @@ const context = await esbuild.context({
 		'electron',
 		'@codemirror/*',
 		'@lezer/*',
-		'node-pty',
 		...builtinModules],
 	platform: 'node',
 	format: 'cjs',

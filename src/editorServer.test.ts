@@ -68,7 +68,7 @@ describe('EditorServer', () => {
         expect(response.result.protocolVersion).toBe('2025-11-25');
         expect(response.result.serverInfo).toEqual({
             name: 'obsidian-opencode',
-            version: '1.1.1'
+            version: '1.3.10'
         });
 
         client.close();

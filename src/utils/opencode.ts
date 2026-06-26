@@ -7,6 +7,18 @@ import * as path from "path";
 
 const execFileAsync = promisify(execFile);
 
+const COMMON_BIN_DIRS = [
+	".opencode/bin",
+	".local/bin",
+	"bin",
+] as const;
+
+function augmentPath(originalPath?: string): string {
+	const homeDir = os.homedir();
+	const userDirs = COMMON_BIN_DIRS.map((sub) => path.join(homeDir, sub));
+	return [...userDirs, ...(originalPath || "").split(path.delimiter)].filter(Boolean).join(path.delimiter);
+}
+
 export interface OpencodeSession {
 	id: string;
 	title: string;
@@ -75,6 +87,16 @@ export interface OpencodeExport {
 	messages: OpencodeMessage[];
 }
 
+const SAFE_ID_RE = /^[a-zA-Z0-9._:-]+$/;
+
+function safeUnlinkSync(filePath: string): void {
+	try {
+		fs.unlinkSync(filePath);
+	} catch {
+		// File may already be deleted; ignore
+	}
+}
+
 export class ExportTooLargeError extends Error {
 	constructor(sessionId: string) {
 		super(`Session ${sessionId} is too large to export`);
@@ -98,7 +120,9 @@ export class OpencodeClient {
 				args = ["--host", executable, ...args];
 				executable = "flatpak-spawn";
 			}
-			const { stdout } = await execFileAsync(executable, args, { cwd: this.cwd });
+			const env = { ...process.env };
+			env.PATH = augmentPath(env.PATH);
+			const { stdout } = await execFileAsync(executable, args, { cwd: this.cwd, env });
 			return JSON.parse(stdout) as OpencodeSession[];
 		} catch (error) {
 			console.error("Failed to list sessions:", error);
@@ -128,7 +152,19 @@ export class OpencodeClient {
 
 	private exportSessionStreamed(sessionId: string, maxBytes = 200 * 1024 * 1024): Promise<OpencodeExport> {
 		return new Promise((resolve, reject) => {
+			if (!SAFE_ID_RE.test(sessionId)) {
+				reject(new Error(`Invalid session ID: ${sessionId}`));
+				return;
+			}
+
 			const tmpFile = path.join(os.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
+			let cleanedUp = false;
+
+			const cleanup = () => {
+				if (cleanedUp) return;
+				cleanedUp = true;
+				safeUnlinkSync(tmpFile);
+			};
 
 			const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
 			let command = `${this.resolvePath()} export ${sessionId} > "${tmpFile}" 2>/dev/null`;
@@ -136,40 +172,42 @@ export class OpencodeClient {
 				command = `flatpak-spawn --host ${command}`;
 			}
 
+			const exportEnv = { ...process.env };
+			exportEnv.PATH = augmentPath(exportEnv.PATH);
 			const child = spawn(
 				command,
 				[],
 				{
 					cwd: this.cwd,
-					env: process.env,
+					env: exportEnv,
 					shell: true,
 				}
 			);
 
 			child.on("error", (err) => {
-				fs.unlinkSync(tmpFile);
+				cleanup();
 				reject(err);
 			});
 
 			child.on("close", (code) => {
 				if (code !== 0) {
-					fs.unlinkSync(tmpFile);
+					cleanup();
 					reject(new Error(`Export exited with code ${code}`));
 					return;
 				}
 				try {
 					const stats = fs.statSync(tmpFile);
 					if (stats.size > maxBytes) {
-						fs.unlinkSync(tmpFile);
+						cleanup();
 						reject(new ExportTooLargeError(sessionId));
 						return;
 					}
 					const stdout = fs.readFileSync(tmpFile, "utf-8");
-					fs.unlinkSync(tmpFile);
+					cleanup();
 					const data = JSON.parse(stdout) as OpencodeExport;
 					resolve(data);
 				} catch (parseError) {
-					fs.unlinkSync(tmpFile);
+					cleanup();
 					reject(parseError instanceof Error ? parseError : new Error(String(parseError)));
 				}
 			});
@@ -185,7 +223,9 @@ export class OpencodeClient {
 				args = ["--host", executable, ...args];
 				executable = "flatpak-spawn";
 			}
-			await execFileAsync(executable, args, { cwd: this.cwd });
+			const env = { ...process.env };
+			env.PATH = augmentPath(env.PATH);
+			await execFileAsync(executable, args, { cwd: this.cwd, env });
 			return true;
 		} catch (error) {
 			console.error("Failed to delete session:", error);
@@ -194,17 +234,4 @@ export class OpencodeClient {
 
 	}
 
-	spawnTerminal(cwd: string, extraArgs: string[] = []): ReturnType<typeof spawn> {
-		const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
-		let executable = this.resolvePath();
-		let args = extraArgs.length > 0 ? extraArgs : [];
-		if (isFlatpak) {
-			args = ["--host", executable, ...args];
-			executable = "flatpak-spawn";
-		}
-		return spawn(executable, args, {
-			cwd,
-			env: process.env,
-		});
-	}
 }

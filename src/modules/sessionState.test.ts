@@ -36,19 +36,16 @@ describe('SessionState', () => {
 		expect(state.pendingPrompt).toBe('Hello world');
 	});
 
-	it('should consume and clear all state', () => {
+	it('should allow overriding state with new values', () => {
 		const state = new SessionState();
-		state.setOpenSession('session-123', '/path/to/dir');
-		state.setPendingPrompt('Hello world');
+		state.setNewSession();
+		expect(state.sessionArgs).toEqual([]);
 
-		const result = state.consumeArgs();
+		state.setContinueLastSession();
+		expect(state.sessionArgs).toEqual(['-c']);
 
-		expect(result.args).toEqual(['-s', 'session-123']);
-		expect(result.cwd).toBe('/path/to/dir');
-		expect(result.prompt).toBe('Hello world');
-
-		expect(state.sessionArgs).toBeNull();
-		expect(state.sessionCwd).toBeNull();
-		expect(state.pendingPrompt).toBeNull();
+		state.setOpenSession('session-456', '/other/path');
+		expect(state.sessionArgs).toEqual(['-s', 'session-456']);
+		expect(state.sessionCwd).toBe('/other/path');
 	});
 });

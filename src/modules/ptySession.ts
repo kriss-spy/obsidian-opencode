@@ -2,6 +2,8 @@ import { Terminal } from "@xterm/xterm";
 import { spawn, ChildProcess } from "child_process";
 import { Notice } from "obsidian";
 import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 
 const UNIX_PSEUDOTERMINAL_PY = `
 import sys
@@ -71,6 +73,46 @@ if __name__ == "__main__":
     main()
 `;
 
+const COMMON_BIN_DIRS = [
+	".opencode/bin",
+	".local/bin",
+	"bin",
+] as const;
+
+function resolveExecutablePath(executable: string): string {
+	if (path.isAbsolute(executable)) {
+		return executable;
+	}
+	const pathDirs = (process.env.PATH || "").split(path.delimiter);
+	for (const dir of pathDirs) {
+		if (!dir) continue;
+		const fullPath = path.join(dir, executable);
+		try {
+			fs.accessSync(fullPath, fs.constants.X_OK);
+			return fullPath;
+		} catch {
+			continue;
+		}
+	}
+	const homeDir = os.homedir();
+	for (const sub of COMMON_BIN_DIRS) {
+		const fullPath = path.join(homeDir, sub, executable);
+		try {
+			fs.accessSync(fullPath, fs.constants.X_OK);
+			return fullPath;
+		} catch {
+			continue;
+		}
+	}
+	return executable;
+}
+
+function augmentPath(originalPath?: string): string {
+	const homeDir = os.homedir();
+	const userDirs = COMMON_BIN_DIRS.map((sub) => path.join(homeDir, sub));
+	return [...userDirs, ...(originalPath || "").split(path.delimiter)].filter(Boolean).join(path.delimiter);
+}
+
 export interface PtySessionOptions {
 	opencodePath: string;
 	cwd: string;
@@ -88,7 +130,10 @@ export class PtySession {
 			return;
 		}
 
-		let executable = options.opencodePath;
+		// Resolve executable path, searching common user-local bin directories
+		// that may not be in process.env.PATH (desktop-launched Electron apps
+		// don't read shell init files like .bashrc / .zshrc).
+		let executable = resolveExecutablePath(options.opencodePath);
 		let args = [...options.args];
 
 		const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
@@ -97,9 +142,13 @@ export class PtySession {
 			executable = "flatpak-spawn";
 		}
 
+		// Augment PATH so the Python PTY proxy's execvp can find the binary
+		const env = { ...process.env };
+		env.PATH = augmentPath(env.PATH);
+
 		this.ptyProcess = spawn(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
 			cwd: options.cwd,
-			env: process.env,
+			env,
 			stdio: ["pipe", "pipe", "pipe", "pipe"],
 		});
 

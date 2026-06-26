@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.10] - 2026-06-26
+
+### Added
+
+- **PATH fallback for desktop-launched Electron** — Added PATH augmentation with common user-local binary directories (`~/.opencode/bin`, `~/.local/bin`, `~/bin`) so the Python PTY proxy can find the `opencode` CLI even when Obsidian is launched from the desktop/GNOME (where shell init files like `.bashrc`/`.zshrc` aren't read). Also resolves the executable absolute path when found. ([#24](https://github.com/kriss-spy/obsidian-opencode/issues/24))
+
+### Fixed
+
+- **Terminal not opening on Linux** — Fixed `FileNotFoundError` from `os.execvp` in the PTY proxy by ensuring the Python child process inherits an augmented `PATH` that includes common user-local binary directories. ([#24](https://github.com/kriss-spy/obsidian-opencode/issues/24))
+- **Shell injection in session export** — Validated `sessionId` format before shell interpolation in `exportSessionStreamed` to prevent shell injection via crafted session IDs.
+- **Unhandled promise rejections** — Added `void` prefix to all async command callbacks in `main.ts` (6 instances).
+- **Race condition in temp file cleanup** — Replaced direct `fs.unlinkSync` with guarded `safeUnlinkSync` in `exportSessionStreamed` to prevent crashes when `error` and `close` events fire in quick succession.
+- **Unhandled `ExportTooLargeError`** — Wrapped `exportSessionToNote` in a try-catch to prevent unhandled rejections when a session exceeds the export size limit.
+- **Stale editor server version** — Synced the `serverInfo.version` reported during WebSocket handshake from `"1.1.1"` to `"1.3.10"`.
+
+### Removed
+
+- **Dead code: `spawnTerminal`** from `opencode.ts` — Unused; PTY spawning is handled by `ptySession.ts`.
+- **Dead code: `consumeArgs`** from `sessionState.ts` — Replaced by direct field access in `opencodeTerminalView.ts`.
+- **Dead external: `node-pty`** from `esbuild.config.mjs` — Never imported; vestigial from an earlier approach.
+
+### Technical
+
+- 33 tests passing.
+- Production build verified in Electron Node.js context.
+
 ## [1.3.0] - 2026-06-05
 
 ### Added

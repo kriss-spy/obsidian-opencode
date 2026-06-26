@@ -21,16 +21,4 @@ export class SessionState {
 	setPendingPrompt(prompt: string): void {
 		this.pendingPrompt = prompt;
 	}
-
-	consumeArgs(): { args: string[] | null; cwd: string | null; prompt: string | null } {
-		const result = {
-			args: this.sessionArgs,
-			cwd: this.sessionCwd,
-			prompt: this.pendingPrompt,
-		};
-		this.sessionArgs = null;
-		this.sessionCwd = null;
-		this.pendingPrompt = null;
-		return result;
-	}
 }

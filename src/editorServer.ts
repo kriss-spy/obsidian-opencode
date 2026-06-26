@@ -52,17 +52,17 @@ export class EditorServer {
 				ws.on("close", () => {
 					this.clients.delete(ws);
 				});
-			ws.on("message", (rawData) => {
-				let text: string;
-				if (Array.isArray(rawData)) {
-					text = Buffer.concat(rawData).toString("utf8");
-				} else if (rawData instanceof ArrayBuffer) {
-					text = new TextDecoder().decode(rawData);
-				} else {
-					text = rawData.toString("utf8");
-				}
-				this.handleMessage(ws, text);
-			});
+				ws.on("message", (rawData) => {
+					let text: string;
+					if (Array.isArray(rawData)) {
+						text = Buffer.concat(rawData).toString("utf8");
+					} else if (rawData instanceof ArrayBuffer) {
+						text = new TextDecoder().decode(rawData);
+					} else {
+						text = rawData.toString("utf8");
+					}
+					this.handleMessage(ws, text);
+				});
 			});
 		});
 	}
@@ -78,7 +78,7 @@ export class EditorServer {
 						protocolVersion: "2025-11-25",
 						serverInfo: {
 							name: "obsidian-opencode",
-							version: "1.1.1",
+							version: "1.3.10",
 						},
 					},
 				};
@@ -128,7 +128,7 @@ export class EditorServer {
 		};
 		const payload = JSON.stringify(msg);
 		for (const client of this.clients) {
-			if (client.readyState === 1) { // OPEN
+			if (client.readyState === WebSocket.OPEN) {
 				client.send(payload);
 			}
 		}

@@ -74,37 +74,37 @@ export default class OpencodePlugin extends Plugin {
 		this.addCommand({
 			id: "open-terminal",
 			name: "Open terminal",
-			callback: () => this.activateTerminalView(),
+			callback: () => { void this.activateTerminalView(); },
 		});
 
 		this.addCommand({
 			id: "toggle-terminal-sidebar",
 			name: "Toggle terminal in sidebar",
-			callback: () => this.toggleTerminalSidebar(),
+			callback: () => { void this.toggleTerminalSidebar(); },
 		});
 
 		this.addCommand({
 			id: "open-conversations",
 			name: "Open conversations",
-			callback: () => this.activateConversationView(),
+			callback: () => { void this.activateConversationView(); },
 		});
 
 		this.addCommand({
 			id: "new-session",
 			name: "New session",
-			callback: () => this.newSession(),
+			callback: () => { void this.newSession(); },
 		});
 
 		this.addCommand({
 			id: "continue-last-session",
 			name: "Continue last session",
-			callback: () => this.continueLastSession(),
+			callback: () => { void this.continueLastSession(); },
 		});
 
 		this.addCommand({
 			id: "restart-terminal",
 			name: "Restart terminal (reset size)",
-			callback: () => this.openOrRestartTerminal(),
+			callback: () => { void this.openOrRestartTerminal(); },
 		});
 
 		this.addSettingTab(new OpencodeSettingTab(this.app, this));

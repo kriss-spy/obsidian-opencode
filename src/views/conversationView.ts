@@ -169,13 +169,20 @@ export class OpencodeConversationView extends ItemView {
 	}
 
 	async exportSessionToNote(session: OpencodeSession) {
-		const data = await this.client.exportSession(session.id);
-		if (!data) {
-			new Notice("Failed to export session");
-			return;
+		try {
+			const data = await this.client.exportSession(session.id);
+			if (!data) {
+				new Notice("Failed to export session");
+				return;
+			}
+			await this.exporter.exportToNote(session, data);
+		} catch (error) {
+			if (error instanceof ExportTooLargeError) {
+				new Notice("Session too large to export to note.");
+			} else {
+				new Notice("Failed to export session.");
+			}
 		}
-
-		await this.exporter.exportToNote(session, data);
 	}
 
 	async onClose() {
