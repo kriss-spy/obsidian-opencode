@@ -128,7 +128,7 @@ export class OpencodeClient {
 			console.error("Failed to list sessions:", error);
 			const errStr = String(error);
 			if (errStr.includes("org.freedesktop.DBus.Error.ServiceUnknown") || errStr.includes("flatpak-spawn")) {
-				new Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.Obsidian.Obsidian' on your host system.", 15000);
+				new Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian' on your host system.", 15000);
 			} else {
 				new Notice("Failed to list opencode sessions. Check your opencode path in settings.");
 			}

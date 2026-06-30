@@ -155,7 +155,7 @@ export class PtySession {
 		this.ptyProcess.stdout?.on("data", (chunk: Buffer) => {
 			const str = chunk.toString();
 			if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-				new Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.Obsidian.Obsidian' on your host system to allow command execution.", 15000);
+				new Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15000);
 			}
 			terminal.write(chunk);
 		});
@@ -164,7 +164,7 @@ export class PtySession {
 			const str = chunk.toString();
 			console.error("PTY stderr:", str);
 			if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-				new Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.Obsidian.Obsidian' on your host system to allow command execution.", 15000);
+				new Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15000);
 			}
 		});
 

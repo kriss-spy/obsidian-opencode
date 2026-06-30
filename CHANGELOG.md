@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.11] - 2026-06-30
+
+### Fixed
+
+- **Flatpak Obsidian app ID typo** — Corrected the Flatpak override command shown in the permission error notice from `md.Obsidian.Obsidian` to `md.obsidian.Obsidian`. ([#25](https://github.com/kriss-spy/obsidian-opencode/issues/25))
+
 ## [1.3.10] - 2026-06-26
 
 ### Added

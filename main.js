@@ -13208,7 +13208,7 @@ var PtySession = class {
     (_a = this.ptyProcess.stdout) == null ? void 0 : _a.on("data", (chunk) => {
       const str = chunk.toString();
       if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-        new import_obsidian2.Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.Obsidian.Obsidian' on your host system to allow command execution.", 15e3);
+        new import_obsidian2.Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15e3);
       }
       terminal.write(chunk);
     });
@@ -13216,7 +13216,7 @@ var PtySession = class {
       const str = chunk.toString();
       console.error("PTY stderr:", str);
       if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-        new import_obsidian2.Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.Obsidian.Obsidian' on your host system to allow command execution.", 15e3);
+        new import_obsidian2.Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15e3);
       }
     });
     this.ptyProcess.on("exit", (code, signal) => {
@@ -13836,7 +13836,7 @@ var OpencodeClient = class {
       console.error("Failed to list sessions:", error);
       const errStr = String(error);
       if (errStr.includes("org.freedesktop.DBus.Error.ServiceUnknown") || errStr.includes("flatpak-spawn")) {
-        new import_obsidian4.Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.Obsidian.Obsidian' on your host system.", 15e3);
+        new import_obsidian4.Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian' on your host system.", 15e3);
       } else {
         new import_obsidian4.Notice("Failed to list opencode sessions. Check your opencode path in settings.");
       }
