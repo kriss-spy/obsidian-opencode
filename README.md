@@ -15,9 +15,9 @@ A plugin that embeds the OpenCode CLI directly into Obsidian. Manage your AI cod
 
 ## 🖥️ Platform Support
 
-- **Linux**: Experimental (stable on my daily driver, not tested on all distros).
-- **Windows**: Work in Progress (WIP).
-- **macOS**: Not planned.
+- **Linux**: stable on my daily driver, not tested on all distros.
+- **Windows**: Work in Progress.
+- **macOS**: Experimental.
 
 ## 🚀 Installation
 
