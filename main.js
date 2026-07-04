@@ -13805,6 +13805,25 @@ function safeUnlinkSync(filePath) {
   } catch (e) {
   }
 }
+function quoteShell(token) {
+  return `'${String(token).replace(/'/g, `'\\''`)}'`;
+}
+function looksLikeJson(text) {
+  const ch = text.trimStart().charCodeAt(0);
+  return ch === 91 || ch === 123;
+}
+function runExecFile(executable, args, opts) {
+  return new Promise((resolve, reject) => {
+    (0, import_child_process2.execFile)(executable, args, opts, (err, stdout, stderr) => {
+      if (err) {
+        const message = err instanceof Error ? err.message : typeof err === "string" ? err : "exec failed";
+        reject(new Error(message));
+      } else {
+        resolve({ stdout: stdout != null ? stdout : "", stderr: stderr != null ? stderr : "" });
+      }
+    });
+  });
+}
 var ExportTooLargeError = class extends Error {
   constructor(sessionId) {
     super(`Session ${sessionId} is too large to export`);
@@ -13820,23 +13839,47 @@ var OpencodeClient = class {
     return this.opencodePath || "opencode";
   }
   async listSessions() {
+    const isFlatpak = fs4.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
+    const executable = this.resolvePath();
+    const env = { ...process.env };
+    env.PATH = augmentPath2(env.PATH);
+    let raw = "";
+    let stderrText = "";
     try {
-      const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
-      let executable = this.resolvePath();
-      let args = ["session", "list", "--format", "json"];
       if (isFlatpak) {
-        args = ["--host", executable, ...args];
-        executable = "flatpak-spawn";
+        const tmpFile = path4.join(os3.tmpdir(), `opencode-sessions-${Date.now()}.json`);
+        const shellCmd = `${quoteShell(executable)} session list --format json > ${quoteShell(tmpFile)} 2>/dev/null`;
+        await runExecFile("flatpak-spawn", ["--host", "sh", "-c", shellCmd], { cwd: this.cwd, env });
+        try {
+          raw = fs4.readFileSync(tmpFile, "utf-8");
+        } finally {
+          safeUnlinkSync(tmpFile);
+        }
+      } else {
+        const result = await runExecFile(executable, ["session", "list", "--format", "json"], { cwd: this.cwd, env });
+        raw = result.stdout || "";
+        stderrText = result.stderr || "";
+        if (!raw.trim() && looksLikeJson(stderrText)) {
+          raw = stderrText;
+          stderrText = "";
+        }
       }
-      const env = { ...process.env };
-      env.PATH = augmentPath2(env.PATH);
-      const { stdout } = await execFileAsync(executable, args, { cwd: this.cwd, env });
-      return JSON.parse(stdout);
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        if (stderrText.trim())
+          console.warn("opencode session list stderr:", stderrText.trim());
+        return [];
+      }
+      return JSON.parse(trimmed);
     } catch (error) {
       console.error("Failed to list sessions:", error);
+      if (stderrText.trim())
+        console.warn("opencode session list stderr:", stderrText.trim());
       const errStr = String(error);
       if (errStr.includes("org.freedesktop.DBus.Error.ServiceUnknown") || errStr.includes("flatpak-spawn")) {
         new import_obsidian4.Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian' on your host system.", 15e3);
+      } else if (errStr.includes("Unexpected end of JSON input") || errStr.includes("JSON")) {
+        new import_obsidian4.Notice("Opencode: session list returned no JSON. Check the dev console for details and ensure opencode is up to date.", 15e3);
       } else {
         new import_obsidian4.Notice("Failed to list opencode sessions. Check your opencode path in settings.");
       }

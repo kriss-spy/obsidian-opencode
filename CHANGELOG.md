@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.12] - 2026-07-04
+
+### Fixed
+
+- **Session list empty on Flatpak Obsidian** — `listSessions` captured `opencode session list --format json` directly off stdout, which flatpak-spawn can drop/truncate, yielding an empty string and a `JSON.parse("")` crash (sessions silently appeared empty, refresh showed an error). Now routes Flatpak output through a host-side temp file (matching the export path), falls back to stderr when stdout is empty but stderr carries JSON, and treats truly-empty output as "no sessions" instead of crashing, surfacing any stderr for diagnosis. ([#25](https://github.com/kriss-spy/obsidian-opencode/issues/25))
+
 ## [1.3.11] - 2026-06-30
 
 ### Fixed

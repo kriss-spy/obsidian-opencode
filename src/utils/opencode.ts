@@ -97,6 +97,33 @@ function safeUnlinkSync(filePath: string): void {
 	}
 }
 
+function quoteShell(token: string): string {
+	return `'${String(token).replace(/'/g, `'\\''`)}'`;
+}
+
+function looksLikeJson(text: string): boolean {
+	const ch = text.trimStart().charCodeAt(0);
+	return ch === 0x5b /* [ */ || ch === 0x7b /* { */;
+}
+
+interface ExecResult {
+	stdout: string;
+	stderr: string;
+}
+
+function runExecFile(executable: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv }): Promise<ExecResult> {
+	return new Promise((resolve, reject) => {
+		execFile(executable, args, opts, (err, stdout, stderr) => {
+			if (err) {
+				const message = err instanceof Error ? err.message : typeof err === "string" ? err : "exec failed";
+				reject(new Error(message));
+			} else {
+				resolve({ stdout: stdout ?? "", stderr: stderr ?? "" });
+			}
+		});
+	});
+}
+
 export class ExportTooLargeError extends Error {
 	constructor(sessionId: string) {
 		super(`Session ${sessionId} is too large to export`);
@@ -112,23 +139,54 @@ export class OpencodeClient {
 	}
 
 	async listSessions(): Promise<OpencodeSession[]> {
+		const isFlatpak = fs.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
+		const executable = this.resolvePath();
+		const env = { ...process.env };
+		env.PATH = augmentPath(env.PATH);
+
+		let raw = "";
+		let stderrText = "";
 		try {
-			const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
-			let executable = this.resolvePath();
-			let args = ["session", "list", "--format", "json"];
 			if (isFlatpak) {
-				args = ["--host", executable, ...args];
-				executable = "flatpak-spawn";
+				// flatpak-spawn's stdout forwarding can drop/truncate the captured
+				// output (see issue #25: empty stdout -> JSON.parse("") crash).
+				// Route through a host-side temp file, matching the export path.
+				const tmpFile = path.join(os.tmpdir(), `opencode-sessions-${Date.now()}.json`);
+				const shellCmd = `${quoteShell(executable)} session list --format json > ${quoteShell(tmpFile)} 2>/dev/null`;
+				await runExecFile("flatpak-spawn", ["--host", "sh", "-c", shellCmd], { cwd: this.cwd, env });
+				try {
+					raw = fs.readFileSync(tmpFile, "utf-8");
+				} finally {
+					safeUnlinkSync(tmpFile);
+				}
+			} else {
+				const result = await runExecFile(executable, ["session", "list", "--format", "json"], { cwd: this.cwd, env });
+				raw = result.stdout || "";
+				stderrText = result.stderr || "";
+				// Some setups route the JSON payload to stderr; fall back to it
+				// only when it actually looks like JSON to avoid parsing log noise.
+				if (!raw.trim() && looksLikeJson(stderrText)) {
+					raw = stderrText;
+					stderrText = "";
+				}
 			}
-			const env = { ...process.env };
-			env.PATH = augmentPath(env.PATH);
-			const { stdout } = await execFileAsync(executable, args, { cwd: this.cwd, env });
-			return JSON.parse(stdout) as OpencodeSession[];
+
+			const trimmed = raw.trim();
+			if (!trimmed) {
+				// No sessions or the CLI emitted nothing on stdout/stderr. Surface
+				// any stderr so the user can diagnose (e.g. unsupported --format).
+				if (stderrText.trim()) console.warn("opencode session list stderr:", stderrText.trim());
+				return [];
+			}
+			return JSON.parse(trimmed) as OpencodeSession[];
 		} catch (error) {
 			console.error("Failed to list sessions:", error);
+			if (stderrText.trim()) console.warn("opencode session list stderr:", stderrText.trim());
 			const errStr = String(error);
 			if (errStr.includes("org.freedesktop.DBus.Error.ServiceUnknown") || errStr.includes("flatpak-spawn")) {
 				new Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian' on your host system.", 15000);
+			} else if (errStr.includes("Unexpected end of JSON input") || errStr.includes("JSON")) {
+				new Notice("Opencode: session list returned no JSON. Check the dev console for details and ensure opencode is up to date.", 15000);
 			} else {
 				new Notice("Failed to list opencode sessions. Check your opencode path in settings.");
 			}

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OpencodeClient, ExportTooLargeError } from './opencode';
-import { spawn } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import * as fs from 'fs';
 
 vi.mock('obsidian', () => ({
@@ -120,6 +120,56 @@ describe('OpencodeClient export with large sessions', () => {
 
 		const result = await promise;
 		expect(result).toBeNull();
+		expect(fs.unlinkSync).toHaveBeenCalled();
+	});
+});
+
+describe('OpencodeClient listSessions', () => {
+	const mockExecFile = execFile as unknown as ReturnType<typeof vi.fn>;
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(fs.existsSync).mockReturnValue(false);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('parses sessions from stdout', async () => {
+		const sessions = [{ id: 'ses_1', title: 't', updated: 1, created: 1, projectId: 'p', directory: '/tmp' }];
+		mockExecFile.mockImplementation((_cmd, _args, _opts, cb) => cb(null, JSON.stringify(sessions), ''));
+		const client = new OpencodeClient('opencode', '/tmp');
+		await expect(client.listSessions()).resolves.toEqual(sessions);
+	});
+
+	it('falls back to stderr when stdout is empty (issue #25 repro)', async () => {
+		const sessions = [{ id: 'ses_1', title: 't', updated: 1, created: 1, projectId: 'p', directory: '/tmp' }];
+		mockExecFile.mockImplementation((_cmd, _args, _opts, cb) => cb(null, '', JSON.stringify(sessions)));
+		const client = new OpencodeClient('opencode', '/tmp');
+		await expect(client.listSessions()).resolves.toEqual(sessions);
+	});
+
+	it('returns [] when stdout and stderr are both empty instead of crashing JSON.parse', async () => {
+		mockExecFile.mockImplementation((_cmd, _args, _opts, cb) => cb(null, '', ''));
+		const client = new OpencodeClient('opencode', '/tmp');
+		await expect(client.listSessions()).resolves.toEqual([]);
+	});
+
+	it('returns [] when stderr is non-JSON noise and stdout is empty', async () => {
+		mockExecFile.mockImplementation((_cmd, _args, _opts, cb) => cb(null, '', 'Error: unknown option --format\n'));
+		const client = new OpencodeClient('opencode', '/tmp');
+		await expect(client.listSessions()).resolves.toEqual([]);
+	});
+
+	it('reads from a temp file under flatpak (handles flatpak-spawn swallowing stdout)', async () => {
+		vi.mocked(fs.existsSync).mockReturnValue(true);
+		const sessions = [{ id: 'ses_2', title: 't2', updated: 2, created: 2, projectId: 'p2', directory: '/tmp' }];
+		// flatpak-spawn invocation succeeds; JSON is read from the temp file.
+		mockExecFile.mockImplementation((_cmd, _args, _opts, cb) => cb(null, '', ''));
+		vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(sessions));
+		const client = new OpencodeClient('opencode', '/tmp');
+		await expect(client.listSessions()).resolves.toEqual(sessions);
 		expect(fs.unlinkSync).toHaveBeenCalled();
 	});
 });
