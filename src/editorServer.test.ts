@@ -35,6 +35,14 @@ describe('EditorServer', () => {
         expect(lockContent.workspaceFolders).toEqual(['/path/to/vault']);
     });
 
+    it('should not publish a lock file when discovery is disabled', async () => {
+        server = new EditorServer({ lockDir: tempLockDir, publishLock: false });
+        const port = await server.start('/path/to/vault');
+
+        expect(port).toBeGreaterThan(0);
+        expect(fs.readdirSync(tempLockDir)).toEqual([]);
+    });
+
     it('should respond to initialize JSON-RPC request', async () => {
         server = new EditorServer({ lockDir: tempLockDir });
         const port = await server.start('/path/to/vault');

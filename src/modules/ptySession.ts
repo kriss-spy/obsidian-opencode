@@ -117,6 +117,7 @@ export interface PtySessionOptions {
 	opencodePath: string;
 	cwd: string;
 	args: string[];
+	editorPort?: number;
 }
 
 export class PtySession {
@@ -138,13 +139,17 @@ export class PtySession {
 
 		const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
 		if (isFlatpak) {
-			args = ["--host", "--env=TERM=xterm-256color", executable, ...args];
+			const editorEnv = options.editorPort ? [`--env=OPENCODE_EDITOR_SSE_PORT=${options.editorPort}`] : [];
+			args = ["--host", "--env=TERM=xterm-256color", ...editorEnv, executable, ...args];
 			executable = "flatpak-spawn";
 		}
 
 		// Augment PATH so the Python PTY proxy's execvp can find the binary
 		const env = { ...process.env };
 		env.PATH = augmentPath(env.PATH);
+		if (options.editorPort) {
+			env.OPENCODE_EDITOR_SSE_PORT = String(options.editorPort);
+		}
 
 		const ptyProcess = spawn(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
 			cwd: options.cwd,

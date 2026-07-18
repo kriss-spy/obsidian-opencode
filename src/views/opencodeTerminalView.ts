@@ -21,6 +21,7 @@ export class OpencodeTerminalView extends ItemView {
 	fitAddon: FitAddon | null = null;
 	container: HTMLElement | null = null;
 	editorServer: EditorServer | null = null;
+	private editorPort: number | undefined;
 	private ptySession: PtySession;
 	private keyRouter: TerminalKeyRouter;
 
@@ -194,6 +195,17 @@ export class OpencodeTerminalView extends ItemView {
 			this.ptySession.writeStdin(data);
 		});
 
+		// Keep this server private to the embedded OpenCode process. Publishing a
+		// lock file would also connect unrelated OpenCode processes in this vault.
+		this.editorServer = new EditorServer({ publishLock: false });
+		try {
+			this.editorPort = await this.editorServer.start(this.plugin.vaultRoot);
+		} catch (err) {
+			console.warn("OpenCode editor server failed to start:", err);
+			this.editorServer = null;
+			this.editorPort = undefined;
+		}
+
 		// Wait until the container has been fully mounted and has a non-zero size,
 		// then fit the terminal and spawn the PTY with the exact correct initial size.
 		// This is extremely important for Flatpak/sandboxed PTY compatibility!
@@ -210,12 +222,6 @@ export class OpencodeTerminalView extends ItemView {
 			}
 		};
 		spawnWithCorrectSize();
-
-		// Start the WebSocket editor server so OpenCode can auto-discover this vault
-		this.editorServer = new EditorServer();
-		this.editorServer.start(this.plugin.vaultRoot).catch((err) => {
-			console.warn("OpenCode editor server failed to start:", err);
-		});
 
 		// Register key interception and drag/drop
 		this.keyRouter.register({
@@ -302,6 +308,7 @@ export class OpencodeTerminalView extends ItemView {
 			opencodePath,
 			cwd,
 			args,
+			editorPort: this.editorPort,
 		});
 	}
 
@@ -309,6 +316,7 @@ export class OpencodeTerminalView extends ItemView {
 		if (this.editorServer) {
 			await this.editorServer.stop();
 			this.editorServer = null;
+			this.editorPort = undefined;
 		}
 		this.ptySession.kill();
 		if (this.terminal) {

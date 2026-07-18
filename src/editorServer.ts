@@ -5,6 +5,7 @@ import * as os from "os";
 
 export interface EditorServerOptions {
 	lockDir?: string;
+	publishLock?: boolean;
 }
 
 export class EditorServer {
@@ -13,9 +14,11 @@ export class EditorServer {
 	private port: number = 0;
 	private lockFilePath: string = "";
 	private readonly lockDir: string;
+	private readonly publishLock: boolean;
 
 	constructor(options: EditorServerOptions = {}) {
 		this.lockDir = options.lockDir || path.join(os.homedir(), ".claude", "ide");
+		this.publishLock = options.publishLock ?? true;
 	}
 
 	async start(vaultRoot: string): Promise<number> {
@@ -28,17 +31,18 @@ export class EditorServer {
 					this.port = 0;
 				}
 
-				// Ensure lock directory exists
-				if (!fs.existsSync(this.lockDir)) {
-					fs.mkdirSync(this.lockDir, { recursive: true });
-				}
+				if (this.publishLock) {
+					if (!fs.existsSync(this.lockDir)) {
+						fs.mkdirSync(this.lockDir, { recursive: true });
+					}
 
-				this.lockFilePath = path.join(this.lockDir, `${this.port}.lock`);
-				const lockContent = {
-					transport: "ws",
-					workspaceFolders: [vaultRoot],
-				};
-				fs.writeFileSync(this.lockFilePath, JSON.stringify(lockContent, null, 2));
+					this.lockFilePath = path.join(this.lockDir, `${this.port}.lock`);
+					const lockContent = {
+						transport: "ws",
+						workspaceFolders: [vaultRoot],
+					};
+					fs.writeFileSync(this.lockFilePath, JSON.stringify(lockContent, null, 2));
+				}
 
 				resolve(this.port);
 			});

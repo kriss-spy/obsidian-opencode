@@ -26,7 +26,7 @@ The suite builds and installs the plugin, configures a deterministic local fake 
 - Restoring a session launches the terminal with the exact `-s <session>` arguments.
 - New Session and Continue Last Session restart an existing PTY and remain responsive to keyboard input.
 - The terminal is a singleton with usable dimensions, rows, and columns, and its sidebar collapses and reveals.
-- The editor server writes a vault-scoped lock file, completes the JSON-RPC handshake, sends single and multiple `at_mentioned` messages, closes clients, and removes its lock file.
+- The private editor server completes the JSON-RPC handshake, sends single and multiple `at_mentioned` messages, closes clients, and stays out of global lock-file discovery.
 
 Screenshots of the conversations and terminal views are written to `test-results/obsidian/`.
 
@@ -60,7 +60,7 @@ It cannot non-interactively create or register an arbitrary fresh vault. `vault:
 | #1, #2, #3, #4 | Real terminal-view drop events produce normalized single/multiple WebSocket mentions; handshake and cleanup are verified. |
 | #24 | The Linux terminal must have non-trivial pixel dimensions and xterm rows/columns. |
 | #27 | Failing requirement: New Session and Continue Last Session must replace an existing PTY and then accept keyboard input. The current stale-child exit race disconnects the replacement process. |
-| #28 | Failing requirement: an unrelated WebSocket client must not receive a dropped-file mention. The current server broadcasts to every connected client. |
+| #28 | The editor server is passed directly to the embedded OpenCode process and is not published for unrelated OpenCode clients to discover. |
 | #26 | Failing composition requirement: pinyin keydowns emitted while `isComposing` must not reach the PTY; only the committed Chinese text may be sent. Run with `npm run test:obsidian:macos-ime`. |
 | #10 | Unit tests cover large-export limits; E2E covers normal preview and export-to-note behavior. |
 

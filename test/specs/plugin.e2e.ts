@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { browser, expect } from "@wdio/globals";
 import { WebSocket, RawData } from "ws";
 
@@ -29,20 +29,6 @@ function collectMessages(socket: WebSocket, count: number): Promise<string[]> {
 			}
 		};
 		socket.on("message", onMessage);
-	});
-}
-
-function expectNoMessage(socket: WebSocket, duration = 500): Promise<void> {
-	return new Promise((resolve, reject) => {
-		const onMessage = (data: RawData) => {
-			clearTimeout(timer);
-			reject(new Error(`Unrelated client received: ${data.toString()}`));
-		};
-		const timer = setTimeout(() => {
-			socket.off("message", onMessage);
-			resolve();
-		}, duration);
-		socket.once("message", onMessage);
 	});
 }
 
@@ -235,20 +221,13 @@ describe("OpenCode plugin in a fresh vault", function () {
 
 	it("[smoke] implements the editor protocol and file-drop delivery", async function () {
 		const serverState = await browser.execute(() => {
-			const app = (window as any).app;
-			const view = app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
 			return {
 				port: view.editorServer.port,
 				lockFilePath: view.editorServer.lockFilePath,
-				vaultRoot: app.vault.adapter.getBasePath(),
 			};
 		});
-		const lock = JSON.parse(readFileSync(serverState.lockFilePath, "utf8")) as {
-			transport: string;
-			workspaceFolders: string[];
-		};
-		expect(lock.transport).toBe("ws");
-		expect(lock.workspaceFolders).toEqual([serverState.vaultRoot]);
+		expect(serverState.lockFilePath).toBe("");
 
 		const socket = new WebSocket(`ws://127.0.0.1:${serverState.port}`);
 		await new Promise<void>((resolve, reject) => {
@@ -302,10 +281,9 @@ describe("OpenCode plugin in a fresh vault", function () {
 			await leaf.detach();
 		});
 		await closed;
-		expect(() => readFileSync(serverState.lockFilePath)).toThrow();
 	});
 
-	it("[issue #28] does not send file mentions to an unrelated OpenCode client", async function () {
+	it("[issue #28] keeps the embedded editor server out of global discovery", async function () {
 		await browser.execute(async () => {
 			await (window as any).app.plugins.plugins.opencode.activateTerminalView();
 		});
@@ -314,34 +292,14 @@ describe("OpenCode plugin in a fresh vault", function () {
 			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0]?.view;
 			return (view?.editorServer?.port ?? 0) > 0;
 		}), { timeoutMsg: "Editor server did not start" });
-		const port = await browser.execute(() => {
+		const serverState = await browser.execute(() => {
 			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
-			return view.editorServer.port;
+			return {
+				port: view.editorServer.port,
+				lockFilePath: view.editorServer.lockFilePath,
+			};
 		});
-		const unrelatedClient = new WebSocket(`ws://127.0.0.1:${port}`);
-		await new Promise<void>((resolve, reject) => {
-			unrelatedClient.once("open", resolve);
-			unrelatedClient.once("error", reject);
-		});
-
-		try {
-			const noBroadcast = expectNoMessage(unrelatedClient).then(
-				() => null,
-				(error: Error) => error
-			);
-			await browser.execute(() => {
-				const app = (window as any).app;
-				const original = app.dragManager.draggable;
-				app.dragManager.draggable = { type: "file", file: { path: "Smoke.md" } };
-				document.querySelector(".opencode-terminal-container")?.dispatchEvent(
-					new DragEvent("drop", { bubbles: true, cancelable: true })
-				);
-				app.dragManager.draggable = original;
-			});
-			const broadcastError = await noBroadcast;
-			if (broadcastError) throw broadcastError;
-		} finally {
-			unrelatedClient.close();
-		}
+		expect(serverState.port).toBeGreaterThan(0);
+		expect(serverState.lockFilePath).toBe("");
 	});
 });

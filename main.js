@@ -12950,7 +12950,9 @@ var EditorServer = class {
     this.clients = /* @__PURE__ */ new Set();
     this.port = 0;
     this.lockFilePath = "";
+    var _a;
     this.lockDir = options.lockDir || path.join(os.homedir(), ".claude", "ide");
+    this.publishLock = (_a = options.publishLock) != null ? _a : true;
   }
   async start(vaultRoot) {
     return new Promise((resolve, reject) => {
@@ -12961,15 +12963,17 @@ var EditorServer = class {
         } else {
           this.port = 0;
         }
-        if (!fs.existsSync(this.lockDir)) {
-          fs.mkdirSync(this.lockDir, { recursive: true });
+        if (this.publishLock) {
+          if (!fs.existsSync(this.lockDir)) {
+            fs.mkdirSync(this.lockDir, { recursive: true });
+          }
+          this.lockFilePath = path.join(this.lockDir, `${this.port}.lock`);
+          const lockContent = {
+            transport: "ws",
+            workspaceFolders: [vaultRoot]
+          };
+          fs.writeFileSync(this.lockFilePath, JSON.stringify(lockContent, null, 2));
         }
-        this.lockFilePath = path.join(this.lockDir, `${this.port}.lock`);
-        const lockContent = {
-          transport: "ws",
-          workspaceFolders: [vaultRoot]
-        };
-        fs.writeFileSync(this.lockFilePath, JSON.stringify(lockContent, null, 2));
         resolve(this.port);
       });
       this.wss.on("error", (err) => {
@@ -13195,11 +13199,15 @@ var PtySession = class {
     let args = [...options.args];
     const isFlatpak = fs2.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
     if (isFlatpak) {
-      args = ["--host", "--env=TERM=xterm-256color", executable, ...args];
+      const editorEnv = options.editorPort ? [`--env=OPENCODE_EDITOR_SSE_PORT=${options.editorPort}`] : [];
+      args = ["--host", "--env=TERM=xterm-256color", ...editorEnv, executable, ...args];
       executable = "flatpak-spawn";
     }
     const env = { ...process.env };
     env.PATH = augmentPath(env.PATH);
+    if (options.editorPort) {
+      env.OPENCODE_EDITOR_SSE_PORT = String(options.editorPort);
+    }
     const ptyProcess = (0, import_child_process.spawn)(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
       cwd: options.cwd,
       env,
@@ -13670,6 +13678,14 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
     terminal.onData((data) => {
       this.ptySession.writeStdin(data);
     });
+    this.editorServer = new EditorServer({ publishLock: false });
+    try {
+      this.editorPort = await this.editorServer.start(this.plugin.vaultRoot);
+    } catch (err) {
+      console.warn("OpenCode editor server failed to start:", err);
+      this.editorServer = null;
+      this.editorPort = void 0;
+    }
     const spawnWithCorrectSize = () => {
       if (termContainer.clientWidth > 0 && termContainer.clientHeight > 0) {
         try {
@@ -13683,10 +13699,6 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
       }
     };
     spawnWithCorrectSize();
-    this.editorServer = new EditorServer();
-    this.editorServer.start(this.plugin.vaultRoot).catch((err) => {
-      console.warn("OpenCode editor server failed to start:", err);
-    });
     this.keyRouter.register({
       app: this.app,
       terminal,
@@ -13755,13 +13767,15 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
     this.ptySession.spawn(terminal, {
       opencodePath,
       cwd,
-      args
+      args,
+      editorPort: this.editorPort
     });
   }
   async onClose() {
     if (this.editorServer) {
       await this.editorServer.stop();
       this.editorServer = null;
+      this.editorPort = void 0;
     }
     this.ptySession.kill();
     if (this.terminal) {

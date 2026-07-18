@@ -57,4 +57,28 @@ describe("PtySession", () => {
 
 		expect(replacementProcess.stdin.write).toHaveBeenCalledWith("hello");
 	});
+
+	it("passes the private editor server port to OpenCode", () => {
+		const child = createProcess();
+		vi.mocked(spawn).mockReturnValue(child as any);
+
+		const session = new PtySession();
+		const terminal = {
+			rows: 24,
+			cols: 80,
+			write: vi.fn(),
+			writeln: vi.fn(),
+		};
+
+		session.spawn(terminal as any, {
+			opencodePath: "opencode",
+			cwd: "/tmp",
+			args: [],
+			editorPort: 43210,
+		});
+
+		expect(vi.mocked(spawn).mock.calls[0][2]?.env).toMatchObject({
+			OPENCODE_EDITOR_SSE_PORT: "43210",
+		});
+	});
 });
