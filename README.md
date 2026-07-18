@@ -48,6 +48,16 @@ To develop the plugin, you can run the development script which automatically re
 npm run dev
 ```
 
+Unit tests run with `npm test`. To create a fresh isolated vault and test the built plugin inside a sandboxed Obsidian instance, run:
+
+```bash
+npm run test:obsidian
+```
+
+This requirements suite includes open bug assertions and stays red until they are fixed. Use `npm run test:obsidian:smoke` for the currently passing baseline only.
+
+See [Testing in Obsidian](docs/testing-obsidian.md) for setup, coverage, evidence, and limitations.
+
 ## ⚠️ Known Issues
 
 - **Session Previews / Loading:** While the buffer size for exporting sessions has been increased (up to 100MB), exceptionally large or deeply complex OpenCode sessions with massive token counts may still occasionally fail to preview or load properly.

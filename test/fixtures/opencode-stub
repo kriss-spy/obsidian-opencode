@@ -1,0 +1,33 @@
+#!/usr/bin/env node
+
+const args = process.argv.slice(2);
+
+if (args.slice(0, 2).join(" ") === "session list") {
+	console.log(JSON.stringify([{
+		id: "fixture-session",
+		title: "Fixture session",
+		directory: process.cwd(),
+		updated: 1_700_000_000_000,
+	}]));
+} else if (args[0] === "export" && args[1] === "fixture-session") {
+	console.log(JSON.stringify({
+		info: {
+			model: { id: "fixture-model" },
+			agent: "fixture-agent",
+			cost: 0.125,
+			time: { created: 1_700_000_000_000, updated: 1_700_000_001_000 },
+			tokens: { input: 12, output: 34 },
+		},
+		messages: [{
+			info: { role: "user", time: { created: 1_700_000_000_000 } },
+			parts: [{ type: "text", text: "Fixture conversation message" }],
+		}],
+	}));
+} else if (args.slice(0, 2).join(" ") === "session delete") {
+	process.exit(0);
+} else {
+	console.log(`OpenCode isolated test stub ARGS:${JSON.stringify(args)}`);
+	process.stdin.setEncoding("utf8");
+	process.stdin.on("data", (data) => process.stdout.write(`INPUT:${JSON.stringify(data)}\n`));
+	process.stdin.resume();
+}

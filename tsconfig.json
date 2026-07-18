@@ -12,6 +12,12 @@
     "isolatedModules": true,
     "strictNullChecks": true,
     "skipLibCheck": true,
+    "types": [
+      "node",
+      "@wdio/globals/types",
+      "@wdio/mocha-framework",
+      "wdio-obsidian-service"
+    ],
     "lib": [
       "DOM",
       "ES6"

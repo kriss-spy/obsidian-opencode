@@ -152,3 +152,7 @@ skills-lock.json
 
 # Obsidian plugin review reports
 obsidian-plugin-review-reports/
+
+# Real-Obsidian test evidence
+test-results/
+.obsidian-cache/

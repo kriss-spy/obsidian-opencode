@@ -1,0 +1,54 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DISPLAY: :99
+      OBSIDIAN_VERSION: 1.12.7
+      OBSIDIAN_INSTALLER_VERSION: 1.12.7
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+
+      - name: Cache Obsidian downloads
+        uses: actions/cache@v4
+        with:
+          path: .obsidian-cache
+          key: obsidian-linux-1.12.7-${{ hashFiles('package-lock.json') }}
+
+      - name: Start virtual display
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -q herbstluftwm
+          Xvfb "$DISPLAY" -screen 0 1280x1024x24 +extension GLX -noreset &
+          sleep 1
+          herbstluftwm &
+          sleep 1
+
+      - run: npm run test:obsidian
+
+      - name: Upload Obsidian screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: obsidian-e2e-screenshots
+          path: test-results/obsidian/
+          if-no-files-found: ignore
