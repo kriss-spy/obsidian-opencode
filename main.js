@@ -13200,32 +13200,35 @@ var PtySession = class {
     }
     const env = { ...process.env };
     env.PATH = augmentPath(env.PATH);
-    this.ptyProcess = (0, import_child_process.spawn)(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
+    const ptyProcess = (0, import_child_process.spawn)(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
       cwd: options.cwd,
       env,
       stdio: ["pipe", "pipe", "pipe", "pipe"]
     });
-    (_a = this.ptyProcess.stdout) == null ? void 0 : _a.on("data", (chunk) => {
+    this.ptyProcess = ptyProcess;
+    (_a = ptyProcess.stdout) == null ? void 0 : _a.on("data", (chunk) => {
       const str = chunk.toString();
       if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
         new import_obsidian2.Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15e3);
       }
       terminal.write(chunk);
     });
-    (_b = this.ptyProcess.stderr) == null ? void 0 : _b.on("data", (chunk) => {
+    (_b = ptyProcess.stderr) == null ? void 0 : _b.on("data", (chunk) => {
       const str = chunk.toString();
       console.error("PTY stderr:", str);
       if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
         new import_obsidian2.Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15e3);
       }
     });
-    this.ptyProcess.on("exit", (code, signal) => {
+    ptyProcess.on("exit", (code, signal) => {
       terminal.writeln(`\r
 [Process exited with code ${code != null ? code : signal}]\r
 `);
-      this.ptyProcess = null;
+      if (this.ptyProcess === ptyProcess) {
+        this.ptyProcess = null;
+      }
     });
-    this.ptyProcess.on("error", (err) => {
+    ptyProcess.on("error", (err) => {
       terminal.writeln(`\r
 Error: ${err.message}\r
 `);

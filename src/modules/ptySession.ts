@@ -146,13 +146,14 @@ export class PtySession {
 		const env = { ...process.env };
 		env.PATH = augmentPath(env.PATH);
 
-		this.ptyProcess = spawn(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
+		const ptyProcess = spawn(pythonPath, ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
 			cwd: options.cwd,
 			env,
 			stdio: ["pipe", "pipe", "pipe", "pipe"],
 		});
+		this.ptyProcess = ptyProcess;
 
-		this.ptyProcess.stdout?.on("data", (chunk: Buffer) => {
+		ptyProcess.stdout?.on("data", (chunk: Buffer) => {
 			const str = chunk.toString();
 			if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
 				new Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian' on your host system to allow command execution.", 15000);
@@ -160,7 +161,7 @@ export class PtySession {
 			terminal.write(chunk);
 		});
 
-		this.ptyProcess.stderr?.on("data", (chunk: Buffer) => {
+		ptyProcess.stderr?.on("data", (chunk: Buffer) => {
 			const str = chunk.toString();
 			console.error("PTY stderr:", str);
 			if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
@@ -168,12 +169,14 @@ export class PtySession {
 			}
 		});
 
-		this.ptyProcess.on("exit", (code, signal) => {
+		ptyProcess.on("exit", (code, signal) => {
 			terminal.writeln(`\r\n[Process exited with code ${code ?? signal}]\r\n`);
-			this.ptyProcess = null;
+			if (this.ptyProcess === ptyProcess) {
+				this.ptyProcess = null;
+			}
 		});
 
-		this.ptyProcess.on("error", (err) => {
+		ptyProcess.on("error", (err) => {
 			terminal.writeln(`\r\nError: ${err.message}\r\n`);
 		});
 
