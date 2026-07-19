@@ -13009,7 +13009,7 @@ var EditorServer = class {
             protocolVersion: "2025-11-25",
             serverInfo: {
               name: "obsidian-opencode",
-              version: "1.3.10"
+              version: "1.3.13"
             }
           }
         };
@@ -13331,7 +13331,8 @@ var TerminalKeyRouter = class {
       var _a2;
       if (!terminal)
         return;
-      if (e.isComposing || e.keyCode === 229)
+      const legacyKeyCode = Reflect.get(e, "keyCode");
+      if (e.isComposing || legacyKeyCode === 229)
         return;
       const target = e.target;
       const inContainer = container.contains(target);

@@ -2,12 +2,15 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { handleTerminalDrop } from './terminalDrop';
 
 describe('TerminalDropHandler', () => {
-    const originalWindow = globalThis.window;
     beforeAll(() => {
-        (globalThis as unknown as { window: typeof globalThis }).window = globalThis;
+        vi.stubGlobal('window', {
+            get setTimeout() {
+                return setTimeout;
+            }
+        });
     });
     afterAll(() => {
-        (globalThis as unknown as { window?: typeof globalThis }).window = originalWindow;
+        vi.unstubAllGlobals();
     });
     it('should inject @filePath and stop (leaving menu open) for a single file', async () => {
         vi.useFakeTimers();

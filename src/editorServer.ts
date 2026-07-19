@@ -82,7 +82,7 @@ export class EditorServer {
 						protocolVersion: "2025-11-25",
 						serverInfo: {
 							name: "obsidian-opencode",
-							version: "1.3.10",
+							version: "1.3.13",
 						},
 					},
 				};

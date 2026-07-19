@@ -1,16 +1,35 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { Workspace } from 'obsidian';
 import { ViewCoordinator } from './viewCoordinator';
 
-const createMockLeaf = (id: string) => ({
+interface MockLeaf {
+	id: string;
+	type?: string;
+	view: object;
+	setViewState: ReturnType<typeof vi.fn>;
+}
+
+interface MockWorkspace {
+	getLeavesOfType: ReturnType<typeof vi.fn>;
+	getRightLeaf: ReturnType<typeof vi.fn>;
+	revealLeaf: ReturnType<typeof vi.fn>;
+	rightSplit: {
+		collapsed: boolean;
+		toggle: ReturnType<typeof vi.fn>;
+	};
+	_leaves: MockLeaf[];
+}
+
+const createMockLeaf = (id: string): MockLeaf => ({
 	id,
 	view: {},
 	setViewState: vi.fn().mockResolvedValue(undefined),
 });
 
-const createMockWorkspace = () => {
-	const leaves: any[] = [];
+const createMockWorkspace = (): MockWorkspace => {
+	const leaves: MockLeaf[] = [];
 	return {
-		getLeavesOfType: vi.fn((type: string) => leaves.filter(l => l.type === type)),
+		getLeavesOfType: vi.fn((type: string): MockLeaf[] => leaves.filter(leaf => leaf.type === type)),
 		getRightLeaf: vi.fn(() => createMockLeaf('right-leaf')),
 		revealLeaf: vi.fn(),
 		rightSplit: {
@@ -24,7 +43,7 @@ const createMockWorkspace = () => {
 describe('ViewCoordinator', () => {
 	it('should activate terminal view by creating a new leaf if none exists', async () => {
 		const workspace = createMockWorkspace();
-		const coordinator = new ViewCoordinator(workspace as any, {
+		const coordinator = new ViewCoordinator(workspace as unknown as Workspace, {
 			terminalViewType: 'opencode-terminal',
 			conversationViewType: 'opencode-conversations',
 		});
@@ -40,7 +59,7 @@ describe('ViewCoordinator', () => {
 		const workspace = createMockWorkspace();
 		workspace._leaves.push(existingLeaf);
 
-		const coordinator = new ViewCoordinator(workspace as any, {
+		const coordinator = new ViewCoordinator(workspace as unknown as Workspace, {
 			terminalViewType: 'opencode-terminal',
 			conversationViewType: 'opencode-conversations',
 		});
@@ -53,7 +72,7 @@ describe('ViewCoordinator', () => {
 
 	it('should activate conversation view', async () => {
 		const workspace = createMockWorkspace();
-		const coordinator = new ViewCoordinator(workspace as any, {
+		const coordinator = new ViewCoordinator(workspace as unknown as Workspace, {
 			terminalViewType: 'opencode-terminal',
 			conversationViewType: 'opencode-conversations',
 		});
@@ -67,7 +86,7 @@ describe('ViewCoordinator', () => {
 	it('should toggle sidebar when not collapsed', async () => {
 		const workspace = createMockWorkspace();
 		workspace.rightSplit.collapsed = false;
-		const coordinator = new ViewCoordinator(workspace as any, {
+		const coordinator = new ViewCoordinator(workspace as unknown as Workspace, {
 			terminalViewType: 'opencode-terminal',
 			conversationViewType: 'opencode-conversations',
 		});
@@ -80,7 +99,7 @@ describe('ViewCoordinator', () => {
 	it('should open terminal when sidebar is collapsed', async () => {
 		const workspace = createMockWorkspace();
 		workspace.rightSplit.collapsed = true;
-		const coordinator = new ViewCoordinator(workspace as any, {
+		const coordinator = new ViewCoordinator(workspace as unknown as Workspace, {
 			terminalViewType: 'opencode-terminal',
 			conversationViewType: 'opencode-conversations',
 		});
@@ -96,7 +115,7 @@ describe('ViewCoordinator', () => {
 		const workspace = createMockWorkspace();
 		workspace._leaves.push(existingLeaf);
 
-		const coordinator = new ViewCoordinator(workspace as any, {
+		const coordinator = new ViewCoordinator(workspace as unknown as Workspace, {
 			terminalViewType: 'opencode-terminal',
 			conversationViewType: 'opencode-conversations',
 		});

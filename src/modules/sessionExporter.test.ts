@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { App } from 'obsidian';
 
 vi.mock('obsidian', () => ({
 	App: class {},
@@ -11,10 +12,10 @@ vi.mock('obsidian', () => ({
 		}
 	},
 	Notice: class {
-		constructor(message: string) {}
+		constructor(_message: string) {}
 	},
-	moment: (timestamp: number) => ({
-		format: (fmt: string) => '2024-01-01 12:00:00',
+	moment: (_timestamp: number) => ({
+		format: (_fmt: string) => '2024-01-01 12:00:00',
 	}),
 }));
 
@@ -22,14 +23,29 @@ import { SessionExporter } from './sessionExporter';
 import { OpencodeSession, OpencodeExport } from '../utils/opencode';
 import { TFile } from 'obsidian';
 
-const createMockApp = () => {
-	const files: Record<string, any> = {};
+interface MockFile {
+	name: string;
+	path: string;
+	content: string;
+}
+
+interface MockApp {
+	vault: {
+		createFolder: ReturnType<typeof vi.fn>;
+		getAbstractFileByPath: ReturnType<typeof vi.fn>;
+		create: ReturnType<typeof vi.fn>;
+		modify: ReturnType<typeof vi.fn>;
+	};
+}
+
+const createMockApp = (): MockApp => {
+	const files: Record<string, MockFile> = {};
 	return {
 		vault: {
 			createFolder: vi.fn().mockResolvedValue(undefined),
-			getAbstractFileByPath: vi.fn((path: string) => files[path] || null),
+			getAbstractFileByPath: vi.fn((path: string): MockFile | null => files[path] || null),
 			create: vi.fn().mockImplementation((path: string, content: string) => {
-				files[path] = { name: path.split('/').pop(), path, content };
+				files[path] = { name: path.split('/').pop() ?? path, path, content };
 				return Promise.resolve(files[path]);
 			}),
 			modify: vi.fn().mockResolvedValue(undefined),
@@ -39,8 +55,8 @@ const createMockApp = () => {
 
 describe('SessionExporter', () => {
 	it('should create a new note for a session', async () => {
-		const app = createMockApp() as any;
-		const exporter = new SessionExporter(app);
+		const app = createMockApp();
+		const exporter = new SessionExporter(app as unknown as App);
 
 		const session: OpencodeSession = {
 			id: 'session-123',
@@ -82,10 +98,10 @@ describe('SessionExporter', () => {
 	});
 
 	it('should modify existing note if it already exists', async () => {
-		const app = createMockApp() as any;
-		const exporter = new SessionExporter(app);
+		const app = createMockApp();
+		const exporter = new SessionExporter(app as unknown as App);
 
-		const existingFile = new (TFile as any)();
+		const existingFile = new TFile();
 		existingFile.path = 'OpenCode/Test_Session.md';
 		existingFile.name = 'Test_Session.md';
 		app.vault.getAbstractFileByPath.mockReturnValue(existingFile);

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.13] - 2026-07-19
+
+### Fixed
+
+- **Terminal restart race** - Kept a replacement PTY active when the previous process exits after a restart. ([#27](https://github.com/kriss-spy/obsidian-opencode/issues/27))
+- **File mentions leaking to external OpenCode sessions** - Limited editor lock-file discovery to the embedded OpenCode terminal so file mentions are not routed to unrelated CLI sessions. ([#28](https://github.com/kriss-spy/obsidian-opencode/issues/28))
+- **macOS IME composition interrupted in the terminal** - Allowed composition events to reach xterm.js instead of treating them as regular key input. ([#26](https://github.com/kriss-spy/obsidian-opencode/issues/26))
+
 ## [1.3.12] - 2026-07-04
 
 ### Fixed
@@ -140,7 +148,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session manager with history browser, conversation preview, one-click restore, and Markdown export.
 - Settings for `opencode` binary path, default CLI arguments, and terminal styling.
 
-[Unreleased]: https://github.com/kriss-spy/obsidian-opencode/compare/1.2.1...HEAD
+[Unreleased]: https://github.com/kriss-spy/obsidian-opencode/compare/1.3.13...HEAD
+[1.3.13]: https://github.com/kriss-spy/obsidian-opencode/compare/1.3.12...1.3.13
 [1.2.1]: https://github.com/kriss-spy/obsidian-opencode/compare/1.2.0...1.2.1
 [1.2.0]: https://github.com/kriss-spy/obsidian-opencode/compare/1.1.1...1.2.0
 [1.1.1]: https://github.com/kriss-spy/obsidian-opencode/compare/1.1.0...1.1.1

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { spawn } from "child_process";
+import { spawn, ChildProcess } from "child_process";
 import { EventEmitter } from "events";
+import type { Terminal } from "@xterm/xterm";
 import { PtySession } from "./ptySession";
 
 vi.mock("obsidian", () => ({
@@ -17,8 +18,16 @@ vi.mock("fs", () => ({
 	constants: { X_OK: 1 },
 }));
 
-function createProcess() {
-	const process = new EventEmitter() as EventEmitter & Record<string, any>;
+interface MockProcess extends EventEmitter {
+	stdin: { write: ReturnType<typeof vi.fn> };
+	stdout: EventEmitter;
+	stderr: EventEmitter;
+	stdio: Array<EventEmitter | { write: ReturnType<typeof vi.fn> }>;
+	kill: ReturnType<typeof vi.fn>;
+}
+
+function createProcess(): MockProcess {
+	const process = new EventEmitter() as MockProcess;
 	process.stdin = { write: vi.fn() };
 	process.stdout = new EventEmitter();
 	process.stderr = new EventEmitter();
@@ -37,8 +46,8 @@ describe("PtySession", () => {
 		const oldProcess = createProcess();
 		const replacementProcess = createProcess();
 		vi.mocked(spawn)
-			.mockReturnValueOnce(oldProcess as any)
-			.mockReturnValueOnce(replacementProcess as any);
+			.mockReturnValueOnce(oldProcess as unknown as ChildProcess)
+			.mockReturnValueOnce(replacementProcess as unknown as ChildProcess);
 
 		const session = new PtySession();
 		const terminal = {
@@ -49,9 +58,9 @@ describe("PtySession", () => {
 		};
 		const options = { opencodePath: "opencode", cwd: "/tmp", args: [] };
 
-		session.spawn(terminal as any, options);
+		session.spawn(terminal as unknown as Terminal, options);
 		session.kill();
-		session.spawn(terminal as any, options);
+		session.spawn(terminal as unknown as Terminal, options);
 		oldProcess.emit("exit", 0, null);
 		session.writeStdin("hello");
 
@@ -60,7 +69,7 @@ describe("PtySession", () => {
 
 	it("passes the private editor server port to OpenCode", () => {
 		const child = createProcess();
-		vi.mocked(spawn).mockReturnValue(child as any);
+		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
 
 		const session = new PtySession();
 		const terminal = {
@@ -70,7 +79,7 @@ describe("PtySession", () => {
 			writeln: vi.fn(),
 		};
 
-		session.spawn(terminal as any, {
+		session.spawn(terminal as unknown as Terminal, {
 			opencodePath: "opencode",
 			cwd: "/tmp",
 			args: [],

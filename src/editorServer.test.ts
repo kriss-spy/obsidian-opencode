@@ -2,8 +2,43 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import * as WebSocket from 'ws';
+import { setTimeout as delay } from 'timers/promises';
+import { WebSocket, RawData } from 'ws';
 import { EditorServer } from './editorServer';
+
+interface LockContent {
+    transport: string;
+    workspaceFolders: string[];
+}
+
+interface JsonRpcMessage {
+    jsonrpc: string;
+    id?: number;
+    method?: string;
+    result?: {
+        protocolVersion: string;
+        serverInfo: {
+            name: string;
+            version: string;
+        };
+    };
+    params?: {
+        filePath: string;
+        lineStart: number;
+        lineEnd: number;
+    };
+}
+
+function parseJson<T>(text: string): T {
+    const parsed: unknown = JSON.parse(text);
+    return parsed as T;
+}
+
+function rawDataToString(data: RawData): string {
+    if (Array.isArray(data)) return Buffer.concat(data).toString();
+    if (data instanceof ArrayBuffer) return Buffer.from(data).toString();
+    return data.toString();
+}
 
 describe('EditorServer', () => {
     let tempLockDir: string;
@@ -30,7 +65,7 @@ describe('EditorServer', () => {
         const lockFilePath = path.join(tempLockDir, `${port}.lock`);
         expect(fs.existsSync(lockFilePath)).toBe(true);
 
-        const lockContent = JSON.parse(fs.readFileSync(lockFilePath, 'utf-8'));
+        const lockContent = parseJson<LockContent>(fs.readFileSync(lockFilePath, 'utf-8'));
         expect(lockContent.transport).toBe('ws');
         expect(lockContent.workspaceFolders).toEqual(['/path/to/vault']);
     });
@@ -47,15 +82,15 @@ describe('EditorServer', () => {
         server = new EditorServer({ lockDir: tempLockDir });
         const port = await server.start('/path/to/vault');
 
-        const client = new (WebSocket as any).default(`ws://127.0.0.1:${port}`);
+        const client = new WebSocket(`ws://127.0.0.1:${port}`);
         await new Promise<void>((resolve, reject) => {
             client.once('open', resolve);
             client.once('error', reject);
         });
 
-        const response = await new Promise<any>((resolve) => {
-            client.once('message', (data: WebSocket.RawData) => {
-                resolve(JSON.parse(data.toString()));
+        const response = await new Promise<JsonRpcMessage>((resolve) => {
+            client.once('message', (data: RawData) => {
+                resolve(parseJson<JsonRpcMessage>(rawDataToString(data)));
             });
 
             client.send(JSON.stringify({
@@ -73,10 +108,10 @@ describe('EditorServer', () => {
         expect(response.jsonrpc).toBe('2.0');
         expect(response.id).toBe(1);
         expect(response.result).toBeDefined();
-        expect(response.result.protocolVersion).toBe('2025-11-25');
-        expect(response.result.serverInfo).toEqual({
+        expect(response.result?.protocolVersion).toBe('2025-11-25');
+        expect(response.result?.serverInfo).toEqual({
             name: 'obsidian-opencode',
-            version: '1.3.10'
+            version: '1.3.13'
         });
 
         client.close();
@@ -86,16 +121,16 @@ describe('EditorServer', () => {
         server = new EditorServer({ lockDir: tempLockDir });
         const port = await server.start('/path/to/vault');
 
-        const client = new (WebSocket as any).default(`ws://127.0.0.1:${port}`);
+        const client = new WebSocket(`ws://127.0.0.1:${port}`);
         await new Promise<void>((resolve, reject) => {
             client.once('open', resolve);
             client.once('error', reject);
         });
 
         // Send initialize first to get a valid session
-        const initResponse = await new Promise<any>((resolve) => {
-            client.once('message', (data: WebSocket.RawData) => {
-                resolve(JSON.parse(data.toString()));
+        const initResponse = await new Promise<JsonRpcMessage>((resolve) => {
+            client.once('message', (data: RawData) => {
+                resolve(parseJson<JsonRpcMessage>(rawDataToString(data)));
             });
             client.send(JSON.stringify({
                 jsonrpc: '2.0',
@@ -118,7 +153,7 @@ describe('EditorServer', () => {
         }));
 
         // Wait a tick to ensure no response was sent
-        await new Promise(r => setTimeout(r, 50));
+        await delay(50);
         expect(receivedMessage).toBe(false);
 
         client.off('message', messageHandler);
@@ -129,15 +164,15 @@ describe('EditorServer', () => {
         server = new EditorServer({ lockDir: tempLockDir });
         const port = await server.start('/path/to/vault');
 
-        const client = new (WebSocket as any).default(`ws://127.0.0.1:${port}`);
+        const client = new WebSocket(`ws://127.0.0.1:${port}`);
         await new Promise<void>((resolve, reject) => {
             client.once('open', resolve);
             client.once('error', reject);
         });
 
-        const received = new Promise<any>((resolve) => {
-            client.once('message', (data: WebSocket.RawData) => {
-                resolve(JSON.parse(data.toString()));
+        const received = new Promise<JsonRpcMessage>((resolve) => {
+            client.once('message', (data: RawData) => {
+                resolve(parseJson<JsonRpcMessage>(rawDataToString(data)));
             });
         });
 
