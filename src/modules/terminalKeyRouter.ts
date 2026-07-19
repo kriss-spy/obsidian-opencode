@@ -66,6 +66,7 @@ export class TerminalKeyRouter {
 
 		const handler = (e: KeyboardEvent) => {
 			if (!terminal) return;
+			if (e.isComposing || e.keyCode === 229) return;
 
 			const target = e.target as Node;
 			const inContainer = container.contains(target);

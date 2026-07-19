@@ -13331,6 +13331,8 @@ var TerminalKeyRouter = class {
       var _a2;
       if (!terminal)
         return;
+      if (e.isComposing || e.keyCode === 229)
+        return;
       const target = e.target;
       const inContainer = container.contains(target);
       if (!inContainer)
