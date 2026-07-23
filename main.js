@@ -12829,7 +12829,7 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("Opencode path").setDesc("Path to the opencode executable. Leave as 'opencode' to use path.").addText(
+    new import_obsidian.Setting(containerEl).setName("Opencode path").setDesc("Full absolute path to the opencode executable. Obsidian may not inherit your shell path.").addText(
       (text) => text.setPlaceholder("Opencode").setValue(this.plugin.settings.opencodePath).onChange(async (value) => {
         this.plugin.settings.opencodePath = value || "opencode";
         await this.plugin.saveSettings();

@@ -15,7 +15,7 @@ export class OpencodeSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Opencode path")
-			.setDesc("Path to the opencode executable. Leave as 'opencode' to use path.")
+			.setDesc("Full absolute path to the opencode executable. Obsidian may not inherit your shell path.")
 			.addText((text) =>
 				text
 					.setPlaceholder("Opencode")
