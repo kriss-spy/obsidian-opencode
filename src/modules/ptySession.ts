@@ -6,6 +6,7 @@ import * as os from "os";
 import * as path from "path";
 import { WINDOWS_PTY_NATIVE_X64_BASE64 } from "../pty/windowsPtyNativeX64";
 import { WINDOWS_PTY_NATIVE_ARM64_BASE64 } from "../pty/windowsPtyNativeArm64";
+import { WINDOWS_PTY_JOB_HOST_BASE64 } from "../pty/windowsPtyJobHost";
 
 const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian";
 
@@ -29,19 +30,19 @@ def main():
     pid, pty_fd = fork()
     if pid == 0:
         execvp(sys.argv[1], sys.argv[1:])
-    
+
     with DefaultSelector() as selector:
         selector.register(pty_fd, EVENT_READ, lambda: forward_pty(pty_fd))
         selector.register(0, EVENT_READ, lambda: forward_stdin(pty_fd))
         selector.register(_CMDIO, EVENT_READ, lambda: handle_resize(pty_fd))
-        
+
         while True:
             events = selector.select()
             for key, _ in events:
                 key.data()
             if not any(key.data for key in selector.get_map().values() if key.data):
                 break
-    
+
     waitstatus_to_exitcode(waitpid(pid, 0)[1])
 
 def forward_pty(pty_fd):
@@ -92,19 +93,21 @@ let handle;
 let ready = false;
 let pendingResize;
 let pendingWrites = [];
-const result = native.spawn(file, args, env, process.cwd(), Number(colsText), Number(rowsText),
-  (data) => {
-    if (!ready) {
-      ready = true;
-      if (pendingResize) native.resize(handle, pendingResize.cols, pendingResize.rows);
-      pendingResize = undefined;
-      for (const pendingWrite of pendingWrites) native.write(handle, pendingWrite);
-      pendingWrites = [];
-    }
-    process.stdout.write(data);
-  },
-  (info) => process.exit(info.exitCode || 0));
-handle = result.handle;
+function start() {
+  const result = native.spawn(file, args, env, process.cwd(), Number(colsText), Number(rowsText),
+    (data) => {
+      if (!ready) {
+        ready = true;
+        if (pendingResize) native.resize(handle, pendingResize.cols, pendingResize.rows);
+        pendingResize = undefined;
+        for (const pendingWrite of pendingWrites) native.write(handle, pendingWrite);
+        pendingWrites = [];
+      }
+      process.stdout.write(data);
+    },
+    (info) => process.exit(info.exitCode || 0));
+  handle = result.handle;
+}
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (data) => {
   if (ready) native.write(handle, data);
@@ -123,7 +126,11 @@ fs.createReadStream(null, { fd: 3 }).setEncoding("utf8").on("data", (data) => {
     }
   }
 });
-process.on("SIGTERM", () => native.kill(handle));
+fs.createReadStream(null, { fd: 4 }).once("data", start);
+process.on("SIGTERM", () => {
+  if (handle) native.kill(handle);
+  else process.exit(0);
+});
 `;
 
 function executableNames(executable: string): string[] {
@@ -191,6 +198,7 @@ function createChildEnv(): NodeJS.ProcessEnv {
 }
 
 const materializedWindowsPty = new Map<string, string>();
+let materializedWindowsPtyJobHost: string | null = null;
 
 function materializeWindowsPtyNative(architecture: "x64" | "arm64"): string {
 	const existing = materializedWindowsPty.get(architecture);
@@ -201,6 +209,15 @@ function materializeWindowsPtyNative(architecture: "x64" | "arm64"): string {
 	fs.writeFileSync(nativeModule, Buffer.from(base64, "base64"), { flag: "wx", mode: 0o600 });
 	materializedWindowsPty.set(architecture, nativeModule);
 	return nativeModule;
+}
+
+function materializeWindowsPtyJobHost(): string {
+	if (materializedWindowsPtyJobHost) return materializedWindowsPtyJobHost;
+	const directory = fs.mkdtempSync(path.join(os.tmpdir(), "obsidian-opencode-job-"));
+	const executable = path.join(directory, "windows-pty-job-host.exe");
+	fs.writeFileSync(executable, Buffer.from(WINDOWS_PTY_JOB_HOST_BASE64, "base64"), { flag: "wx", mode: 0o700 });
+	materializedWindowsPtyJobHost = executable;
+	return executable;
 }
 
 export interface PtySessionOptions {
@@ -215,9 +232,35 @@ enum PtyBackend {
 	WindowsConPty,
 }
 
+function childExit(child: ChildProcess | null): Promise<void> {
+	if (!child || !child.pid || child.exitCode != null || child.signalCode != null) return Promise.resolve();
+	return new Promise((resolve) => {
+		const finish = () => {
+			child.removeListener("exit", finish);
+			resolve();
+		};
+		child.once("exit", finish);
+	});
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+	return new Promise((resolve) => {
+		const timeoutWindow = window;
+		const timeout = timeoutWindow.setTimeout(() => resolve(null), timeoutMs);
+		promise.then((value) => {
+			timeoutWindow.clearTimeout(timeout);
+			resolve(value);
+		}, () => {
+			timeoutWindow.clearTimeout(timeout);
+			resolve(null);
+		});
+	});
+}
+
 export class PtySession {
 	ptyProcess: ChildProcess | null = null;
 	private backend: PtyBackend | null = null;
+	private windowsJobProcess: ChildProcess | null = null;
 
 	spawn(terminal: Terminal, options: PtySessionOptions): void {
 		if (process.platform === "win32") {
@@ -251,6 +294,7 @@ export class PtySession {
 		let ptyProcess: ChildProcess;
 		if (process.platform === "win32") {
 			this.backend = PtyBackend.WindowsConPty;
+			let windowsPtyProcess: ChildProcess | null = null;
 			const nodeExecutable = resolveExecutablePath("node.exe");
 			let nodeArchitecture: string;
 			try {
@@ -267,7 +311,7 @@ export class PtySession {
 				return;
 			}
 			try {
-				ptyProcess = spawn(nodeExecutable, [
+				ptyProcess = windowsPtyProcess = spawn(nodeExecutable, [
 					"-e",
 					WINDOWS_PTY_HOST_JS,
 					materializeWindowsPtyNative(nodeArchitecture),
@@ -278,10 +322,39 @@ export class PtySession {
 				], {
 					cwd: options.cwd,
 					env,
-					stdio: ["pipe", "pipe", "pipe", "pipe"],
+					stdio: ["pipe", "pipe", "pipe", "pipe", "pipe"],
 					windowsHide: true,
 				});
+				if (!ptyProcess.pid) throw new Error("Windows PTY host did not return a process ID");
+				const jobProcess = spawn(materializeWindowsPtyJobHost(), [String(process.pid), String(ptyProcess.pid)], {
+					stdio: ["ignore", "pipe", "pipe"],
+					windowsHide: true,
+				});
+				this.windowsJobProcess = jobProcess;
+				let jobReady = false;
+				jobProcess.stdout?.once("data", () => {
+					jobReady = true;
+					const startPipe = ptyProcess.stdio?.[4] as import("stream").Writable | undefined;
+					startPipe?.write("start\n");
+				});
+				jobProcess.stderr?.on("data", (chunk: Buffer) => {
+					terminal.write(chunk);
+				});
+				jobProcess.once("error", (error) => {
+					terminal.writeln(`\r\nUnable to secure the OpenCode process tree: ${error.message}\r\n`);
+					ptyProcess.kill();
+				});
+				jobProcess.once("exit", (code) => {
+					if (this.windowsJobProcess === jobProcess) this.windowsJobProcess = null;
+					if (!jobReady && code !== 0) {
+						terminal.writeln(`\r\nUnable to secure the OpenCode process tree (job host exited with code ${code}).\r\n`);
+						ptyProcess.kill();
+					}
+				});
 			} catch (error) {
+				windowsPtyProcess?.kill();
+				this.windowsJobProcess?.kill();
+				this.windowsJobProcess = null;
 				this.backend = null;
 				const message = error instanceof Error ? error.message : String(error);
 				terminal.writeln(`\r\nUnable to start the OpenCode Windows PTY: ${message}\r\n`);
@@ -329,24 +402,54 @@ export class PtySession {
 
 	}
 
-	kill(): void {
+	async kill(): Promise<void> {
+		const windowsJobProcess = this.windowsJobProcess;
+		this.windowsJobProcess = null;
 		if (this.ptyProcess) {
 			const ptyProcess = this.ptyProcess;
 			this.ptyProcess = null;
 			if (this.backend === PtyBackend.WindowsConPty && ptyProcess.pid) {
-				const taskkill = spawn("taskkill.exe", ["/pid", String(ptyProcess.pid), "/T", "/F"], {
-					stdio: "ignore",
-					windowsHide: true,
+				const ptyExited = childExit(ptyProcess);
+				const jobExited = childExit(windowsJobProcess);
+				const taskkillSucceeded = await new Promise<boolean>((resolve) => {
+					const timeoutWindow = window;
+					let settled = false;
+					let taskkill: ChildProcess | null = null;
+					const finish = (succeeded: boolean) => {
+						if (settled) return;
+						settled = true;
+						timeoutWindow.clearTimeout(timeout);
+						if (!succeeded) taskkill?.kill();
+						resolve(succeeded);
+					};
+					const timeout = timeoutWindow.setTimeout(() => finish(false), 5000);
+					try {
+						taskkill = spawn("taskkill.exe", ["/pid", String(ptyProcess.pid), "/T", "/F"], {
+							stdio: "ignore",
+							windowsHide: true,
+						});
+						taskkill.once("error", () => finish(false));
+						taskkill.once("exit", (code) => finish(code === 0));
+					} catch {
+						finish(false);
+					}
 				});
-				const fallback = () => ptyProcess.kill();
-				taskkill.on("error", fallback);
-				taskkill.on("exit", (code) => {
-					if (code !== 0) fallback();
-				});
+
+				if (!taskkillSucceeded) ptyProcess.kill();
+				windowsJobProcess?.kill();
+				const confirmed = await withTimeout(Promise.all([ptyExited, jobExited]), 5000);
+				if (!confirmed) {
+					ptyProcess.kill();
+					windowsJobProcess?.kill();
+					throw new Error(`Windows PTY process tree ${ptyProcess.pid} did not exit after forced shutdown`);
+				}
+				return;
 			} else {
 				ptyProcess.kill();
+				windowsJobProcess?.kill();
 			}
 		}
+		windowsJobProcess?.kill();
 	}
 
 	getStdin(): import("stream").Writable | null {

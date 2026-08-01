@@ -60,10 +60,10 @@ export class ViewCoordinator {
 		}
 	}
 
-	async openOrRestartTerminal(restartFn: () => void): Promise<WorkspaceLeaf | null> {
+	async openOrRestartTerminal(restartFn: () => void | Promise<void>): Promise<WorkspaceLeaf | null> {
 		let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
 		if (leaf) {
-			restartFn();
+			await restartFn();
 			await this.workspace.revealLeaf(leaf);
 			return leaf;
 		} else {

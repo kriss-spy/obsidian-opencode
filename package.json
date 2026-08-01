@@ -1,6 +1,6 @@
 {
   "name": "obsidian-opencode",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "OpenCode CLI wrapper for Obsidian",
   "main": "main.js",
   "scripts": {
@@ -12,7 +12,8 @@
     "test:obsidian:smoke": "npm run build && cross-env OBSIDIAN_TEST_GREP='\\[smoke\\]' wdio run ./wdio.conf.mts",
     "test:obsidian:macos-ime": "npm run build && cross-env OBSIDIAN_TEST_GREP='#26' wdio run ./wdio.conf.mts",
     "test:obsidian:windows-ui": "npm run build && cross-env OPENCODE_REAL_E2E=1 OBSIDIAN_TEST_GREP=\"real OpenCode\" wdio run ./wdio.conf.mts",
-    "embed:windows-pty": "node embed-windows-pty-binary.mjs && node embed-windows-pty-binary.mjs node_modules/zigpty/prebuilds/zigpty.win32-arm64.node src/pty/windowsPtyNativeArm64.ts WINDOWS_PTY_NATIVE_ARM64_BASE64"
+    "embed:windows-pty": "node embed-windows-pty-binary.mjs && node embed-windows-pty-binary.mjs node_modules/zigpty/prebuilds/zigpty.win32-arm64.node src/pty/windowsPtyNativeArm64.ts WINDOWS_PTY_NATIVE_ARM64_BASE64",
+    "embed:windows-job-host": "node embed-windows-job-host-binary.mjs"
   },
   "keywords": [
     "obsidian",

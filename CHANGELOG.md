@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-08-01
+
+### Fixed
+
+- **Orphaned OpenCode processes on Windows** — Terminal close, plugin unload, and normal Obsidian shutdown now await the complete PTY process tree, including launcher shims and descendants.
+- **Overlapping terminal restart and shutdown** — Serialized lifecycle operations so a late restart cannot create a replacement session while the terminal view is closing.
+
+### Changed
+
+- **Fail-safe Windows process ownership** — Windows PTY trees now run inside a Job Object configured to terminate all descendants when its owner closes.
+- **Windows shutdown coverage** — Added integration coverage that launches a real `zigpty` descendant process tree and verifies bounded cleanup.
+
 ## [1.4.0] - 2026-08-01
 
 ### Added

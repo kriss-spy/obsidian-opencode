@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { spawn, ChildProcess, execFileSync } from "child_process";
 import { writeFileSync } from "fs";
 import { EventEmitter } from "events";
@@ -36,7 +36,7 @@ function createProcess(): MockProcess {
 	process.stdin = { write: vi.fn() };
 	process.stdout = new EventEmitter();
 	process.stderr = new EventEmitter();
-	process.stdio = [process.stdin, process.stdout, process.stderr, { write: vi.fn() }];
+	process.stdio = [process.stdin, process.stdout, process.stderr, { write: vi.fn() }, { write: vi.fn() }];
 	process.kill = vi.fn();
 	return process;
 }
@@ -44,10 +44,16 @@ function createProcess(): MockProcess {
 describe("PtySession", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.stubGlobal("window", { setTimeout: vi.fn(), clearTimeout: vi.fn() });
+		vi.stubGlobal("window", {
+			setTimeout: (...args: Parameters<typeof setTimeout>) => setTimeout(...args),
+			clearTimeout: (...args: Parameters<typeof clearTimeout>) => clearTimeout(...args),
+		});
 	});
 
+	afterEach(() => vi.unstubAllGlobals());
+
 	it("keeps the replacement PTY active when the killed PTY exits", () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
 		const oldProcess = createProcess();
 		const replacementProcess = createProcess();
 		vi.mocked(spawn)
@@ -63,17 +69,22 @@ describe("PtySession", () => {
 		};
 		const options = { opencodePath: "opencode", cwd: "/tmp", args: [] };
 
-		session.spawn(terminal as unknown as Terminal, options);
-		session.kill();
-		session.spawn(terminal as unknown as Terminal, options);
-		oldProcess.emit("exit", 0, null);
-		session.writeStdin("hello");
+		try {
+			session.spawn(terminal as unknown as Terminal, options);
+			void session.kill();
+			session.spawn(terminal as unknown as Terminal, options);
+			oldProcess.emit("exit", 0, null);
+			session.writeStdin("hello");
 
-		expect(replacementProcess.stdin.write).toHaveBeenCalledWith("hello");
-		expect(terminal.writeln).not.toHaveBeenCalled();
+			expect(replacementProcess.stdin.write).toHaveBeenCalledWith("hello");
+			expect(terminal.writeln).not.toHaveBeenCalled();
+		} finally {
+			platform.mockRestore();
+		}
 	});
 
 	it("passes the private editor server port to OpenCode", () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
 		const child = createProcess();
 		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
 
@@ -85,16 +96,20 @@ describe("PtySession", () => {
 			writeln: vi.fn(),
 		};
 
-		session.spawn(terminal as unknown as Terminal, {
-			opencodePath: "opencode",
-			cwd: "/tmp",
-			args: [],
-			editorPort: 43210,
-		});
+		try {
+			session.spawn(terminal as unknown as Terminal, {
+				opencodePath: "opencode",
+				cwd: "/tmp",
+				args: [],
+				editorPort: 43210,
+			});
 
-		expect(vi.mocked(spawn).mock.calls[0][2]?.env).toMatchObject({
-			OPENCODE_EDITOR_SSE_PORT: "43210",
-		});
+			expect(vi.mocked(spawn).mock.calls[0][2]?.env).toMatchObject({
+				OPENCODE_EDITOR_SSE_PORT: "43210",
+			});
+		} finally {
+			platform.mockRestore();
+		}
 	});
 
 	it("reports Windows native PTY setup failures in the terminal", () => {
@@ -124,12 +139,68 @@ describe("PtySession", () => {
 		}
 	});
 
-	it("runs OpenCode in the Windows headless ConPTY host", () => {
+	it("launches the Windows ConPTY host inside a kill-on-close job owner", () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+		const child = createProcess();
+		child.pid = 1234;
+		const job = createProcess();
+		job.pid = 5678;
+		vi.mocked(spawn)
+			.mockReturnValueOnce(child as unknown as ChildProcess)
+			.mockReturnValueOnce(job as unknown as ChildProcess);
+		const terminal = {
+			rows: 30,
+			cols: 100,
+			write: vi.fn(),
+			writeln: vi.fn(),
+		};
+
+		try {
+			new PtySession().spawn(terminal as unknown as Terminal, {
+				opencodePath: "opencode",
+				cwd: "C:\\vault",
+				args: [],
+			});
+
+			expect(spawn).toHaveBeenNthCalledWith(1, expect.stringMatching(/node\.exe$/i), [
+				"-e",
+				expect.any(String),
+				expect.stringMatching(/[\\/]zigpty-x64\.node$/i),
+				"100",
+				"30",
+				expect.stringMatching(/opencode(?:\.[A-Z]+)?$/i),
+			], expect.objectContaining({
+				cwd: "C:\\vault",
+				stdio: ["pipe", "pipe", "pipe", "pipe", "pipe"],
+				windowsHide: true,
+			}));
+			expect(spawn).toHaveBeenNthCalledWith(2, expect.stringMatching(/[\\/]windows-pty-job-host\.exe$/i), [
+				String(process.pid),
+				"1234",
+			], expect.objectContaining({
+				stdio: ["ignore", "pipe", "pipe"],
+				windowsHide: true,
+			}));
+			job.stdout.emit("data", Buffer.from("ready\n"));
+			expect((child.stdio[4] as { write: ReturnType<typeof vi.fn> }).write).toHaveBeenCalledWith("start\n");
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it("waits for the Windows process tree to stop", async () => {
 		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
 		const inheritedTerm = process.env.TERM;
 		process.env.TERM = "dumb";
 		const child = createProcess();
-		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+		child.pid = 1234;
+		const job = createProcess();
+		job.pid = 5678;
+		const taskkill = createProcess();
+		vi.mocked(spawn)
+			.mockReturnValueOnce(child as unknown as ChildProcess)
+			.mockReturnValueOnce(job as unknown as ChildProcess)
+			.mockReturnValueOnce(taskkill as unknown as ChildProcess);
 		const terminal = {
 			rows: 30,
 			cols: 100,
@@ -156,7 +227,7 @@ describe("PtySession", () => {
 				"--help",
 			], expect.objectContaining({
 				cwd: "C:\\vault",
-				stdio: ["pipe", "pipe", "pipe", "pipe"],
+				stdio: ["pipe", "pipe", "pipe", "pipe", "pipe"],
 				windowsHide: true,
 			}));
 			expect(vi.mocked(spawn).mock.calls[0][2]?.env).toMatchObject({
@@ -169,15 +240,63 @@ describe("PtySession", () => {
 			session.writeStdin("hello");
 			expect(child.stdin.write).toHaveBeenCalledWith("hello");
 
-			child.pid = 1234;
-			session.kill();
+			let stopped = false;
+			const stopping = session.kill().then(() => { stopped = true; });
 			expect(spawn).toHaveBeenLastCalledWith("taskkill.exe", ["/pid", "1234", "/T", "/F"], {
 				stdio: "ignore",
 				windowsHide: true,
 			});
+			await Promise.resolve();
+			expect(stopped).toBe(false);
+			taskkill.emit("exit", 0, null);
+			await Promise.resolve();
+			expect(stopped).toBe(false);
+			child.emit("exit", 0, null);
+			job.emit("exit", 0, null);
+			await stopping;
+			expect(stopped).toBe(true);
 		} finally {
 			if (inheritedTerm === undefined) delete process.env.TERM;
 			else process.env.TERM = inheritedTerm;
+			platform.mockRestore();
+		}
+	});
+
+	it("force-kills a Windows PTY host when taskkill does not finish", async () => {
+		vi.useFakeTimers();
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+		const child = createProcess();
+		child.pid = 1234;
+		const job = createProcess();
+		job.pid = 5678;
+		const taskkill = createProcess();
+		vi.mocked(spawn)
+			.mockReturnValueOnce(child as unknown as ChildProcess)
+			.mockReturnValueOnce(job as unknown as ChildProcess)
+			.mockReturnValueOnce(taskkill as unknown as ChildProcess);
+		const terminal = { rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() };
+
+		try {
+			const session = new PtySession();
+			session.spawn(terminal as unknown as Terminal, {
+				opencodePath: "opencode",
+				cwd: "C:\\vault",
+				args: [],
+			});
+			const stopping = session.kill();
+			let stopped = false;
+			void stopping.then(() => { stopped = true; });
+
+			await vi.advanceTimersByTimeAsync(5000);
+			expect(stopped).toBe(false);
+			expect(child.kill).toHaveBeenCalled();
+			expect(job.kill).toHaveBeenCalled();
+			child.emit("exit", null, "SIGTERM");
+			job.emit("exit", null, "SIGTERM");
+			await stopping;
+			expect(stopped).toBe(true);
+		} finally {
+			vi.useRealTimers();
 			platform.mockRestore();
 		}
 	});

@@ -12,6 +12,7 @@ import { normalizeVaultPath } from "../utils/path";
 import { PtySession } from "../modules/ptySession";
 import { TerminalKeyRouter } from "../modules/terminalKeyRouter";
 import { CLEAR_PICKER_QUERY, isOpenCodePicker, pickerTargetAtRow } from "../modules/windowsTerminalMouse";
+import { LifecycleQueue } from "../modules/lifecycleQueue";
 
 interface VaultWithConfig {
 	getConfig?(key: string): string;
@@ -27,10 +28,12 @@ export class OpencodeTerminalView extends ItemView {
 	private editorPort: number | undefined;
 	private ptySession: PtySession;
 	private keyRouter: TerminalKeyRouter;
+	private readonly lifecycle = new LifecycleQueue();
+	private closing = false;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
-		this.ptySession = new PtySession();
+		this.ptySession = this.plugin.createPtySession();
 		this.keyRouter = new TerminalKeyRouter();
 	}
 
@@ -335,12 +338,15 @@ export class OpencodeTerminalView extends ItemView {
 		}, 600);
 	}
 
-	restartPty() {
-		this.ptySession.kill();
-		if (this.terminal) {
-			this.terminal.clear();
-			this.spawnPty(this.terminal);
-		}
+	async restartPty(): Promise<void> {
+		await this.lifecycle.enqueue(async () => {
+			if (this.closing) return;
+			await this.ptySession.kill();
+			if (this.terminal && !this.closing) {
+				this.terminal.clear();
+				this.spawnPty(this.terminal);
+			}
+		});
 	}
 
 	private spawnPty(terminal: Terminal) {
@@ -376,21 +382,24 @@ export class OpencodeTerminalView extends ItemView {
 	}
 
 	async onClose() {
-		if (this.editorServer) {
-			await this.editorServer.stop();
-			this.editorServer = null;
-			this.editorPort = undefined;
-		}
-		this.ptySession.kill();
-		if (this.terminal) {
-			try {
-				this.terminal.dispose();
-			} catch {
-				// xterm canvas addon may throw on dispose
+		this.closing = true;
+		await this.lifecycle.enqueue(async () => {
+			if (this.editorServer) {
+				await this.editorServer.stop();
+				this.editorServer = null;
+				this.editorPort = undefined;
 			}
-			this.terminal = null;
-		}
-		this.keyRouter.dispose();
+			await this.plugin.closePtySession(this.ptySession);
+			if (this.terminal) {
+				try {
+					this.terminal.dispose();
+				} catch {
+					// xterm canvas addon may throw on dispose
+				}
+				this.terminal = null;
+			}
+			this.keyRouter.dispose();
+		});
 	}
 
 	focusTerminal() {
