@@ -16,7 +16,7 @@ A plugin that embeds the OpenCode CLI directly into Obsidian. Manage your AI cod
 ## 🖥️ Platform Support
 
 - **Linux**: stable on my daily driver, not tested on all distros.
-- **Windows**: Work in Progress.
+- **Windows**: Beta support on Windows 10 version 1809 and later through ConPTY. Node.js must be available on `PATH` for the isolated PTY helper.
 - **macOS**: Experimental.
 
 ## 🚀 Installation
@@ -54,7 +54,7 @@ Unit tests run with `npm test`. To create a fresh isolated vault and test the bu
 npm run test:obsidian
 ```
 
-This requirements suite includes open bug assertions and stays red until they are fixed. Use `npm run test:obsidian:smoke` for the currently passing baseline only.
+Use `npm run test:obsidian:smoke` for the smaller baseline suite. Windows contributors can also run `npm run test:obsidian:windows-ui` to exercise the installed OpenCode CLI and native terminal interactions.
 
 See [Testing in Obsidian](docs/testing-obsidian.md) for setup, coverage, evidence, and limitations.
 

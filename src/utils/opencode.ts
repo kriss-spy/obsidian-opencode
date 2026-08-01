@@ -1,11 +1,8 @@
 import { Notice } from "obsidian";
 import { execFile, spawn } from "child_process";
-import { promisify } from "util";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-
-const execFileAsync = promisify(execFile);
 
 const COMMON_BIN_DIRS = [
 	".opencode/bin",
@@ -13,10 +10,21 @@ const COMMON_BIN_DIRS = [
 	"bin",
 ] as const;
 
+const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian";
+
 function augmentPath(originalPath?: string): string {
 	const homeDir = os.homedir();
 	const userDirs = COMMON_BIN_DIRS.map((sub) => path.join(homeDir, sub));
 	return [...userDirs, ...(originalPath || "").split(path.delimiter)].filter(Boolean).join(path.delimiter);
+}
+
+function createChildEnv(): NodeJS.ProcessEnv {
+	const env = { ...process.env };
+	for (const key of Object.keys(env)) {
+		if (key.toLowerCase() === "path") delete env[key];
+	}
+	env.PATH = augmentPath(process.env.PATH);
+	return env;
 }
 
 export interface OpencodeSession {
@@ -111,14 +119,79 @@ interface ExecResult {
 	stderr: string;
 }
 
+const WINDOWS_EXEC_HOST_JS = String.raw`
+const { spawn } = require("child_process");
+let [cwd, file, ...args] = process.argv.slice(1);
+let options = { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true };
+if (/\.(cmd|bat)$/i.test(file)) {
+  const env = { ...process.env };
+  const tokens = [file, ...args];
+  const references = tokens.map((token, index) => {
+    const name = "OPENCODE_PLUGIN_CMD_" + index;
+    env[name] = token;
+    return '"%' + name + '%"';
+  });
+  file = process.env.ComSpec || "cmd.exe";
+  args = ["/d", "/s", "/c", '"' + references.join(" ") + '"'];
+  options = { ...options, env, windowsVerbatimArguments: true };
+}
+const child = spawn(file, args, options);
+child.stdout.pipe(process.stdout);
+child.stderr.pipe(process.stderr);
+child.on("error", (error) => {
+  console.error(error && error.message ? error.message : String(error));
+  process.exitCode = 1;
+});
+child.on("close", (code) => { process.exitCode = code == null ? 1 : code; });
+`;
+
+function windowsCommandReferences(tokens: string[], env: NodeJS.ProcessEnv): { env: NodeJS.ProcessEnv; references: string[] } {
+	const commandEnv = { ...env };
+	const references = tokens.map((token, index) => {
+		const name = `OPENCODE_PLUGIN_CMD_${index}`;
+		commandEnv[name] = token;
+		return `"%${name}%"`;
+	});
+	return { env: commandEnv, references };
+}
+
+function resolveWindowsExecutable(executable: string, env: NodeJS.ProcessEnv): string {
+	if (path.isAbsolute(executable)) return executable;
+	const extensions = (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
+	const names = path.extname(executable) ? [executable] : extensions.map((extension) => `${executable}${extension}`);
+	for (const directory of (env.PATH || "").split(path.delimiter)) {
+		if (!directory) continue;
+		for (const name of names) {
+			const candidate = path.join(directory, name);
+			try {
+				fs.accessSync(candidate, fs.constants.X_OK);
+				return candidate;
+			} catch {
+				continue;
+			}
+		}
+	}
+	return executable;
+}
+
 function runExecFile(executable: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv }): Promise<ExecResult> {
 	return new Promise((resolve, reject) => {
-		execFile(executable, args, opts, (err, stdout, stderr) => {
+		let file = process.platform === "win32" ? resolveWindowsExecutable(executable, opts.env) : executable;
+		let fileArgs = args;
+		let execOptions: Parameters<typeof execFile>[2] = opts;
+		if (process.platform === "win32") {
+			const target = file;
+			file = resolveWindowsExecutable("node.exe", opts.env);
+			fileArgs = ["-e", WINDOWS_EXEC_HOST_JS, opts.cwd, target, ...args];
+			execOptions = { ...opts, windowsHide: true };
+		}
+
+		execFile(file, fileArgs, execOptions, (err, stdout, stderr) => {
 			if (err) {
 				const message = err instanceof Error ? err.message : typeof err === "string" ? err : "exec failed";
 				reject(new Error(message));
 			} else {
-				resolve({ stdout: stdout ?? "", stderr: stderr ?? "" });
+				resolve({ stdout: stdout?.toString() ?? "", stderr: stderr?.toString() ?? "" });
 			}
 		});
 	});
@@ -141,8 +214,7 @@ export class OpencodeClient {
 	async listSessions(): Promise<OpencodeSession[]> {
 		const isFlatpak = fs.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
 		const executable = this.resolvePath();
-		const env = { ...process.env };
-		env.PATH = augmentPath(env.PATH);
+		const env = createChildEnv();
 
 		let raw = "";
 		let stderrText = "";
@@ -184,7 +256,7 @@ export class OpencodeClient {
 			if (stderrText.trim()) console.warn("opencode session list stderr:", stderrText.trim());
 			const errStr = String(error);
 			if (errStr.includes("org.freedesktop.DBus.Error.ServiceUnknown") || errStr.includes("flatpak-spawn")) {
-				new Notice("Opencode: Flatpak sandbox permissions missing. Please run 'flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian' on your host system.", 15000);
+				new Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND}' on your host system.`, 15000);
 			} else if (errStr.includes("Unexpected end of JSON input") || errStr.includes("JSON")) {
 				new Notice("Opencode: session list returned no JSON. Check the dev console for details and ensure opencode is up to date.", 15000);
 			} else {
@@ -225,22 +297,30 @@ export class OpencodeClient {
 			};
 
 			const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
-			let command = `${this.resolvePath()} export ${sessionId} > "${tmpFile}" 2>/dev/null`;
+			let command = `${quoteShell(this.resolvePath())} export ${quoteShell(sessionId)} > ${quoteShell(tmpFile)} 2>/dev/null`;
 			if (isFlatpak) {
 				command = `flatpak-spawn --host ${command}`;
 			}
 
-			const exportEnv = { ...process.env };
-			exportEnv.PATH = augmentPath(exportEnv.PATH);
-			const child = spawn(
-				command,
-				[],
-				{
+			const exportEnv = createChildEnv();
+			let child: import("child_process").ChildProcess;
+			if (process.platform === "win32") {
+				const windowsCommand = windowsCommandReferences([this.resolvePath(), sessionId, tmpFile], exportEnv);
+				const [executableRef, sessionRef, tmpFileRef] = windowsCommand.references;
+				const commandLine = `${executableRef} export ${sessionRef} > ${tmpFileRef} 2>NUL`;
+				child = spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", `"${commandLine}"`], {
+					cwd: this.cwd,
+					env: windowsCommand.env,
+					windowsHide: true,
+					windowsVerbatimArguments: true,
+				});
+			} else {
+				child = spawn(command, [], {
 					cwd: this.cwd,
 					env: exportEnv,
 					shell: true,
-				}
-			);
+				});
+			}
 
 			child.on("error", (err) => {
 				cleanup();
@@ -273,6 +353,10 @@ export class OpencodeClient {
 	}
 
 	async deleteSession(sessionId: string): Promise<boolean> {
+		if (!SAFE_ID_RE.test(sessionId)) {
+			console.error("Refusing to delete invalid session ID:", sessionId);
+			return false;
+		}
 		try {
 			const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
 			let executable = this.resolvePath();
@@ -281,9 +365,8 @@ export class OpencodeClient {
 				args = ["--host", executable, ...args];
 				executable = "flatpak-spawn";
 			}
-			const env = { ...process.env };
-			env.PATH = augmentPath(env.PATH);
-			await execFileAsync(executable, args, { cwd: this.cwd, env });
+			const env = createChildEnv();
+			await runExecFile(executable, args, { cwd: this.cwd, env });
 			return true;
 		} catch (error) {
 			console.error("Failed to delete session:", error);

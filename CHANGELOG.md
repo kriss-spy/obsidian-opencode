@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-01
+
+### Added
+
+- **Windows terminal support** — Beta support on Windows 10 version 1809 and later through ConPTY. Spawns the OpenCode CLI inside an isolated Node.js helper with embedded x64 and ARM64 `zigpty` native binaries, so the terminal works without requiring a separately installed native build environment. Node.js must be available on `PATH`. ([#22](https://github.com/kriss-spy/obsidian-opencode/issues/22))
+- **Windows terminal rendering** — Uses the WebGL xterm.js addon with a DOM fallback, fixes box-drawing segmentation, and keeps normal text selection available when the terminal is not showing a picker.
+- **Mouse click forwarding on Windows** — Forwards mouse clicks into the OpenCode TUI for model/session pickers and prompt cursor positioning.
+- **Windows UI regression suite** — Added `npm run test:obsidian:windows-ui` for running real OpenCode CLI interactions inside Obsidian on Windows.
+- **Windows CI job** — GitHub Actions now runs the unit and isolated Obsidian tests on `windows-latest`.
+
+### Changed
+
+- **Beta platform labeling** — Windows support is now labeled as beta in the README.
+
 ## [1.3.13] - 2026-07-19
 
 ### Fixed
@@ -148,7 +162,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session manager with history browser, conversation preview, one-click restore, and Markdown export.
 - Settings for `opencode` binary path, default CLI arguments, and terminal styling.
 
-[Unreleased]: https://github.com/kriss-spy/obsidian-opencode/compare/1.3.13...HEAD
+[Unreleased]: https://github.com/kriss-spy/obsidian-opencode/compare/1.4.0...HEAD
+[1.4.0]: https://github.com/kriss-spy/obsidian-opencode/compare/1.3.13...1.4.0
 [1.3.13]: https://github.com/kriss-spy/obsidian-opencode/compare/1.3.12...1.3.13
 [1.2.1]: https://github.com/kriss-spy/obsidian-opencode/compare/1.2.0...1.2.1
 [1.2.0]: https://github.com/kriss-spy/obsidian-opencode/compare/1.1.1...1.2.0

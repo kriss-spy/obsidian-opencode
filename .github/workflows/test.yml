@@ -52,3 +52,29 @@ jobs:
           name: obsidian-e2e-screenshots
           path: test-results/obsidian/
           if-no-files-found: ignore
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      OBSIDIAN_VERSION: 1.12.7
+      OBSIDIAN_INSTALLER_VERSION: 1.12.7
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:obsidian
+
+      - name: Upload Windows Obsidian screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: obsidian-e2e-screenshots-windows
+          path: test-results/obsidian/
+          if-no-files-found: ignore

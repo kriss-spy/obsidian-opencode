@@ -15,6 +15,8 @@ vi.mock('child_process', () => ({
 }));
 
 vi.mock('fs', () => ({
+	accessSync: vi.fn(() => { throw new Error('not found'); }),
+	constants: { X_OK: 1 },
 	statSync: vi.fn(),
 	readFileSync: vi.fn(),
 	unlinkSync: vi.fn(),
@@ -132,6 +134,7 @@ describe('OpencodeClient listSessions', () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.mocked(fs.accessSync).mockImplementation(() => { throw new Error('not found'); });
 		vi.mocked(fs.existsSync).mockReturnValue(false);
 	});
 
@@ -165,6 +168,61 @@ describe('OpencodeClient listSessions', () => {
 		await expect(client.listSessions()).resolves.toEqual([]);
 	});
 
+	it('passes Windows command tokens through the isolated Node host', async () => {
+		const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+		const sessions = [{ id: 'ses_1', title: 't', updated: 1, created: 1, projectId: 'p', directory: 'C:\\vault' }];
+		mockExecResult(JSON.stringify(sessions), '');
+		const executable = 'C:\\percent%PATH%\\opencode.cmd';
+
+		try {
+			const client = new OpencodeClient(executable, 'C:\\vault');
+			await expect(client.listSessions()).resolves.toEqual(sessions);
+			expect(mockExecFile).toHaveBeenCalledWith(
+				'node.exe',
+				['-e', expect.stringContaining('OPENCODE_PLUGIN_CMD_'), 'C:\\vault', executable, 'session', 'list', '--format', 'json'],
+				expect.objectContaining({
+					windowsHide: true,
+				}),
+				expect.any(Function)
+			);
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it('resolves a bare Windows executable before launching it', async () => {
+		const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+		const oldPath = process.env.PATH;
+		const oldPathExt = process.env.PATHEXT;
+		delete process.env.PATH;
+		process.env.Path = 'C:\\tools';
+		process.env.PATHEXT = '.EXE';
+		vi.mocked(fs.accessSync).mockImplementation((candidate) => {
+			if (String(candidate).toLowerCase() !== 'c:\\tools\\opencode.exe') throw new Error('not found');
+		});
+		const sessions = [{ id: 'ses_1', title: 't', updated: 1, created: 1, projectId: 'p', directory: 'C:\\vault' }];
+		mockExecResult(JSON.stringify(sessions), '');
+
+		try {
+			const client = new OpencodeClient('opencode', 'C:\\vault');
+			await expect(client.listSessions()).resolves.toEqual(sessions);
+			expect(mockExecFile).toHaveBeenCalledWith(
+				'node.exe',
+				['-e', expect.any(String), 'C:\\vault', 'C:\\tools\\opencode.EXE', 'session', 'list', '--format', 'json'],
+				expect.objectContaining({
+					windowsHide: true,
+					env: expect.objectContaining({ PATH: expect.stringContaining('C:\\tools') }),
+				}),
+				expect.any(Function)
+			);
+		} finally {
+			delete process.env.Path;
+			process.env.PATH = oldPath;
+			process.env.PATHEXT = oldPathExt;
+			platform.mockRestore();
+		}
+	});
+
 	it('reads from a temp file under flatpak (handles flatpak-spawn swallowing stdout)', async () => {
 		vi.mocked(fs.existsSync).mockReturnValue(true);
 		const sessions = [{ id: 'ses_2', title: 't2', updated: 2, created: 2, projectId: 'p2', directory: '/tmp' }];
@@ -174,5 +232,17 @@ describe('OpencodeClient listSessions', () => {
 		const client = new OpencodeClient('opencode', '/tmp');
 		await expect(client.listSessions()).resolves.toEqual(sessions);
 		expect(fs.unlinkSync).toHaveBeenCalled();
+	});
+});
+
+describe('OpencodeClient deleteSession', () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it('rejects unsafe session IDs before invoking a Windows shell', async () => {
+		const client = new OpencodeClient('opencode', 'C:\\vault');
+		await expect(client.deleteSession('safe" & echo INJECTED')).resolves.toBe(false);
+		expect(execFile).not.toHaveBeenCalled();
 	});
 });
