@@ -182,10 +182,11 @@ function augmentPath(originalPath?: string): string {
 
 function createChildEnv(): NodeJS.ProcessEnv {
 	const env = { ...process.env };
+	const inheritedPath = Object.entries(env).find(([key]) => key.toLowerCase() === "path")?.[1];
 	for (const key of Object.keys(env)) {
 		if (key.toLowerCase() === "path") delete env[key];
 	}
-	env.PATH = augmentPath(process.env.PATH);
+	env.PATH = augmentPath(inheritedPath);
 	return env;
 }
 

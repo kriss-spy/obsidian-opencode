@@ -19843,12 +19843,14 @@ function augmentPath(originalPath) {
   return [...userDirs, ...(originalPath || "").split(path3.delimiter)].filter(Boolean).join(path3.delimiter);
 }
 function createChildEnv() {
+  var _a;
   const env = { ...process.env };
+  const inheritedPath = (_a = Object.entries(env).find(([key]) => key.toLowerCase() === "path")) == null ? void 0 : _a[1];
   for (const key of Object.keys(env)) {
     if (key.toLowerCase() === "path")
       delete env[key];
   }
-  env.PATH = augmentPath(process.env.PATH);
+  env.PATH = augmentPath(inheritedPath);
   return env;
 }
 var materializedWindowsPty = /* @__PURE__ */ new Map();
@@ -20648,12 +20650,14 @@ function augmentPath2(originalPath) {
   return [...userDirs, ...(originalPath || "").split(path4.delimiter)].filter(Boolean).join(path4.delimiter);
 }
 function createChildEnv2() {
+  var _a;
   const env = { ...process.env };
+  const inheritedPath = (_a = Object.entries(env).find(([key]) => key.toLowerCase() === "path")) == null ? void 0 : _a[1];
   for (const key of Object.keys(env)) {
     if (key.toLowerCase() === "path")
       delete env[key];
   }
-  env.PATH = augmentPath2(process.env.PATH);
+  env.PATH = augmentPath2(inheritedPath);
   return env;
 }
 var SAFE_ID_RE = /^[a-zA-Z0-9._:-]+$/;
