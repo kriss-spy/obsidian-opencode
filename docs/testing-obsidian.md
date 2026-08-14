@@ -10,13 +10,21 @@ It does not open, register, modify, or read any existing vault. `wdio-obsidian-s
 npm run test:obsidian
 ```
 
-This is the requirements suite. It includes assertions for open bugs and therefore fails while those requirements are unmet. To check only the currently working harness and baseline behavior, run:
+To run only the baseline smoke coverage, use:
 
 ```bash
 npm run test:obsidian:smoke
 ```
 
 On the first run, the service downloads a compatible Obsidian installer and app bundle. Later runs reuse that cache but still receive a fresh copy of the test vault.
+
+On Windows, an additional suite exercises the installed OpenCode CLI, ConPTY rendering, and mouse interactions:
+
+```bash
+npm run test:obsidian:windows-ui
+```
+
+This suite requires `opencode` and Node.js on `PATH` and is not part of CI because it uses the developer's real OpenCode configuration.
 
 The suite builds and installs the plugin, configures a deterministic local fake `opencode` executable, and checks:
 
@@ -59,14 +67,14 @@ It cannot non-interactively create or register an arbitrary fresh vault. `vault:
 | --- | --- |
 | #1, #2, #3, #4 | Real terminal-view drop events produce normalized single/multiple WebSocket mentions; handshake and cleanup are verified. |
 | #24 | The Linux terminal must have non-trivial pixel dimensions and xterm rows/columns. |
-| #27 | Failing requirement: New Session and Continue Last Session must replace an existing PTY and then accept keyboard input. The current stale-child exit race disconnects the replacement process. |
+| #27 | New Session and Continue Last Session replace an existing PTY and remain responsive to keyboard input. |
 | #28 | The editor server is passed directly to the embedded OpenCode process and is not published for unrelated OpenCode clients to discover. |
-| #26 | Failing composition requirement: pinyin keydowns emitted while `isComposing` must not reach the PTY; only the committed Chinese text may be sent. Run with `npm run test:obsidian:macos-ime`. |
+| #26 | Pinyin keydowns emitted while `isComposing` do not reach the PTY; only committed Chinese text is sent. Run with `npm run test:obsidian:macos-ime`. |
+| #22 | Unit tests verify the isolated Windows ConPTY helper and resize channel. Windows CI covers stubbed rendering, input, live resizing, restart, and session workflows; `npm run test:obsidian:windows-ui` covers the real CLI and mouse interactions. |
 | #10 | Unit tests cover large-export limits; E2E covers normal preview and export-to-note behavior. |
 
 Not yet automatable in this Linux job:
 
-- #22 requires a real Windows PTY implementation and Windows CI runner.
 - #15-#19 describe panel-mode behavior not present on the current branch.
 - #21 concerns OpenCode rollback ownership outside the plugin's current API boundary.
 

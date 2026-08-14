@@ -19,5 +19,5 @@ export function normalizeVaultPath(filePath: string, vaultRoot: string): string 
 		return filePath;
 	}
 
-	return relative;
+	return relative.split(path.sep).join("/");
 }

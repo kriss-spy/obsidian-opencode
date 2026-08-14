@@ -6,6 +6,8 @@ import { OpencodeConversationView, OPENCODE_CONVERSATION_VIEW_TYPE } from "./vie
 import { OpencodeEditorSuggest } from "./opencodeEditorSuggest";
 import { SessionState } from "./modules/sessionState";
 import { ViewCoordinator } from "./modules/viewCoordinator";
+import { PtySession } from "./modules/ptySession";
+import { PtySessionRegistry } from "./modules/ptySessionRegistry";
 
 export default class OpencodePlugin extends Plugin {
 	settings: OpencodePluginSettings;
@@ -13,6 +15,7 @@ export default class OpencodePlugin extends Plugin {
 	vaultConfigDir: string = "";
 	private sessionState: SessionState;
 	private viewCoordinator: ViewCoordinator;
+	private readonly ptySessions = new PtySessionRegistry();
 
 	get pendingPrompt(): string | null {
 		return this.sessionState.pendingPrompt;
@@ -121,6 +124,20 @@ export default class OpencodePlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+	createPtySession(): PtySession {
+		return this.ptySessions.register(new PtySession());
+	}
+
+	async closePtySession(session: PtySession): Promise<void> {
+		await this.ptySessions.close(session);
+	}
+
+	onunload(): void {
+		void this.ptySessions.closeAll().catch((error) => {
+			console.error("Unable to stop every OpenCode PTY during plugin unload", error);
+		});
+	}
+
 	async activateTerminalView() {
 		await this.viewCoordinator.activateTerminalView();
 	}
@@ -149,12 +166,12 @@ export default class OpencodePlugin extends Plugin {
 	}
 
 	private async openOrRestartTerminal() {
-		await this.viewCoordinator.openOrRestartTerminal(() => {
+		await this.viewCoordinator.openOrRestartTerminal(async () => {
 			const leaf = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
 			if (leaf) {
 				const view = leaf.view;
 				if (view && 'restartPty' in view && typeof (view as unknown as Record<string, unknown>).restartPty === 'function') {
-					(view as unknown as Record<string, () => void>).restartPty();
+					await (view as unknown as Record<string, () => Promise<void>>).restartPty();
 				}
 			}
 		});

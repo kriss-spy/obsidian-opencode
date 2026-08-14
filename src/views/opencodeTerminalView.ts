@@ -3,12 +3,16 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { CanvasAddon } from "@xterm/addon-canvas";
+import { WebglAddon } from "@xterm/addon-webgl";
+import { release } from "node:os";
 import OpencodePlugin from "../main";
 import { handleTerminalDrop } from "../terminalDrop";
 import { EditorServer } from "../editorServer";
 import { normalizeVaultPath } from "../utils/path";
 import { PtySession } from "../modules/ptySession";
 import { TerminalKeyRouter } from "../modules/terminalKeyRouter";
+import { CLEAR_PICKER_QUERY, isOpenCodePicker, pickerTargetAtRow } from "../modules/windowsTerminalMouse";
+import { LifecycleQueue } from "../modules/lifecycleQueue";
 
 interface VaultWithConfig {
 	getConfig?(key: string): string;
@@ -24,10 +28,12 @@ export class OpencodeTerminalView extends ItemView {
 	private editorPort: number | undefined;
 	private ptySession: PtySession;
 	private keyRouter: TerminalKeyRouter;
+	private readonly lifecycle = new LifecycleQueue();
+	private closing = false;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
-		this.ptySession = new PtySession();
+		this.ptySession = this.plugin.createPtySession();
 		this.keyRouter = new TerminalKeyRouter();
 	}
 
@@ -90,7 +96,10 @@ export class OpencodeTerminalView extends ItemView {
 			},
 			cursorBlink: true,
 			scrollback: 10000,
-			convertEol: true,
+			convertEol: false,
+			windowsPty: process.platform === "win32"
+				? { backend: "conpty", buildNumber: Number.parseInt(release().split(".")[2], 10) }
+				: undefined,
 			allowProposedApi: true,
 		});
 
@@ -99,10 +108,23 @@ export class OpencodeTerminalView extends ItemView {
 		terminal.loadAddon(new WebLinksAddon());
 
 		terminal.open(termContainer);
-		try {
-			terminal.loadAddon(new CanvasAddon());
-		} catch (e) {
-			console.warn("Canvas renderer failed to load, falling back to DOM renderer", e);
+		if (process.platform === "win32") {
+			try {
+				const webglAddon = new WebglAddon();
+				webglAddon.onContextLoss(() => {
+					webglAddon.dispose();
+					terminal.refresh(0, terminal.rows - 1);
+				});
+				terminal.loadAddon(webglAddon);
+			} catch (e) {
+				console.warn("WebGL renderer failed to load, falling back to DOM renderer", e);
+			}
+		} else {
+			try {
+				terminal.loadAddon(new CanvasAddon());
+			} catch (e) {
+				console.warn("Canvas renderer failed to load, falling back to DOM renderer", e);
+			}
 		}
 		this.terminal = terminal;
 		this.fitAddon = fitAddon;
@@ -144,6 +166,7 @@ export class OpencodeTerminalView extends ItemView {
 
 		// Debounced fit function to avoid excessive calls
 		let fitTimeout: number | null = null;
+		const fitDelay = process.platform === "win32" ? 150 : 50;
 		const doFit = () => {
 			if (fitTimeout) window.clearTimeout(fitTimeout);
 			fitTimeout = window.setTimeout(() => {
@@ -151,13 +174,12 @@ export class OpencodeTerminalView extends ItemView {
 					try {
 						updateTheme();
 						fitAddon.fit();
-						// Send resize after fit completes
-						window.setTimeout(() => this.ptySession.sendResize(terminal), 50);
+						this.ptySession.sendResize(terminal);
 					} catch (err) {
 						console.warn("Fit failed:", err);
 					}
 				}
-			}, 50);
+			}, fitDelay);
 		};
 
 		// Initial fit with multiple attempts to ensure proper sizing
@@ -193,6 +215,50 @@ export class OpencodeTerminalView extends ItemView {
 
 		terminal.onData((data: string) => {
 			this.ptySession.writeStdin(data);
+		});
+
+		const isMouseClickableTui = (): boolean => {
+			return process.platform === "win32" && isOpenCodePicker(terminal.buffer.active);
+		};
+		const moveCursorOnMouseDown = (event: MouseEvent) => {
+			if (process.platform !== "win32" || event.button !== 0 || isMouseClickableTui()) return;
+			const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+			if (!screen) return;
+			const rect = screen.getBoundingClientRect();
+			const row = Math.floor((event.clientY - rect.top) / (rect.height / terminal.rows));
+			const buffer = terminal.buffer.active;
+			if (row !== buffer.cursorY) return;
+			const column = Math.max(0, Math.min(terminal.cols - 1,
+				Math.floor((event.clientX - rect.left) / (rect.width / terminal.cols))));
+			const delta = column - buffer.cursorX;
+			if (delta === 0) return;
+			window.setTimeout(() => {
+				this.ptySession.writeStdin((delta < 0 ? "\x1b[D" : "\x1b[C").repeat(Math.abs(delta)));
+			}, 0);
+		};
+		termContainer.addEventListener("mousedown", moveCursorOnMouseDown);
+		this.register(() => termContainer.removeEventListener("mousedown", moveCursorOnMouseDown));
+
+		const handlePickerMouse = (event: MouseEvent) => {
+			if (process.platform !== "win32" || event.button !== 0 || !isMouseClickableTui()) return;
+			const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+			if (!screen) return;
+			const rect = screen.getBoundingClientRect();
+			const clickedRow = Math.floor((event.clientY - rect.top) / (rect.height / terminal.rows));
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			if (event.type === "mouseup") {
+				const targetText = pickerTargetAtRow(terminal.buffer.active, clickedRow);
+				if (!targetText) return;
+				this.ptySession.writeStdin(CLEAR_PICKER_QUERY + targetText);
+				window.setTimeout(() => this.ptySession.writeStdin("\r"), 300);
+			}
+		};
+		termContainer.addEventListener("mousedown", handlePickerMouse, true);
+		termContainer.addEventListener("mouseup", handlePickerMouse, true);
+		this.register(() => {
+			termContainer.removeEventListener("mousedown", handlePickerMouse, true);
+			termContainer.removeEventListener("mouseup", handlePickerMouse, true);
 		});
 
 		// Keep this server private to the embedded OpenCode process. Publishing a
@@ -272,12 +338,15 @@ export class OpencodeTerminalView extends ItemView {
 		}, 600);
 	}
 
-	restartPty() {
-		this.ptySession.kill();
-		if (this.terminal) {
-			this.terminal.clear();
-			this.spawnPty(this.terminal);
-		}
+	async restartPty(): Promise<void> {
+		await this.lifecycle.enqueue(async () => {
+			if (this.closing) return;
+			await this.ptySession.kill();
+			if (this.terminal && !this.closing) {
+				this.terminal.clear();
+				this.spawnPty(this.terminal);
+			}
+		});
 	}
 
 	private spawnPty(terminal: Terminal) {
@@ -313,21 +382,24 @@ export class OpencodeTerminalView extends ItemView {
 	}
 
 	async onClose() {
-		if (this.editorServer) {
-			await this.editorServer.stop();
-			this.editorServer = null;
-			this.editorPort = undefined;
-		}
-		this.ptySession.kill();
-		if (this.terminal) {
-			try {
-				this.terminal.dispose();
-			} catch {
-				// xterm canvas addon may throw on dispose
+		this.closing = true;
+		await this.lifecycle.enqueue(async () => {
+			if (this.editorServer) {
+				await this.editorServer.stop();
+				this.editorServer = null;
+				this.editorPort = undefined;
 			}
-			this.terminal = null;
-		}
-		this.keyRouter.dispose();
+			await this.plugin.closePtySession(this.ptySession);
+			if (this.terminal) {
+				try {
+					this.terminal.dispose();
+				} catch {
+					// xterm canvas addon may throw on dispose
+				}
+				this.terminal = null;
+			}
+			this.keyRouter.dispose();
+		});
 	}
 
 	focusTerminal() {

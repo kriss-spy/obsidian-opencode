@@ -1,0 +1,157 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ChildProcess, spawn } from "child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { WINDOWS_PTY_JOB_HOST_BASE64 } from "./windowsPtyJobHost";
+import { PtySession } from "../modules/ptySession";
+import type { Terminal } from "@xterm/xterm";
+
+const windowsIt = process.platform === "win32" ? it : it.skip;
+const cleanupProcesses = new Set<ChildProcess>();
+const cleanupDirectories = new Set<string>();
+
+beforeEach(() => {
+	vi.stubGlobal("window", { setTimeout, clearTimeout });
+});
+
+afterEach(() => {
+	vi.unstubAllGlobals();
+	for (const child of cleanupProcesses) child.kill();
+	cleanupProcesses.clear();
+	for (const directory of cleanupDirectories) rmSync(directory, { recursive: true, force: true });
+	cleanupDirectories.clear();
+});
+
+function waitForExit(child: ChildProcess, timeoutMs: number): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (child.exitCode !== null || child.signalCode !== null) {
+			resolve();
+			return;
+		}
+		const timeout = setTimeout(() => reject(new Error(`Process ${child.pid} did not exit`)), timeoutMs);
+		child.once("exit", () => {
+			clearTimeout(timeout);
+			resolve();
+		});
+	});
+}
+
+async function waitForProcessToDisappear(pid: number, timeoutMs: number): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		try {
+			process.kill(pid, 0);
+		} catch {
+			return;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
+	throw new Error(`Process ${pid} remained alive`);
+}
+
+describe("Windows PTY Job Object host", () => {
+	windowsIt("terminates the complete descendant tree when its owner exits", async () => {
+		const directory = mkdtempSync(join(tmpdir(), "obsidian-opencode-job-test-"));
+		cleanupDirectories.add(directory);
+		const jobHostPath = join(directory, "windows-pty-job-host.exe");
+		writeFileSync(jobHostPath, Buffer.from(WINDOWS_PTY_JOB_HOST_BASE64, "base64"));
+
+		const owner = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { windowsHide: true });
+		cleanupProcesses.add(owner);
+		expect(owner.pid).toBeTypeOf("number");
+
+		const targetScript = [
+			'const { spawn } = require("child_process")',
+			'const fs = require("fs")',
+			'fs.createReadStream(null, { fd: 3 }).once("data", () => { const grandchild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore", windowsHide: true }); console.log(JSON.stringify({ child: process.pid, grandchild: grandchild.pid })) })',
+			'setInterval(() => {}, 1000)',
+		].join(";");
+		const target = spawn(process.execPath, ["-e", targetScript], {
+			stdio: ["ignore", "pipe", "pipe", "pipe"],
+			windowsHide: true,
+		});
+		cleanupProcesses.add(target);
+		expect(target.pid).toBeTypeOf("number");
+		const jobHost = spawn(jobHostPath, [String(owner.pid), String(target.pid)], {
+			stdio: ["ignore", "pipe", "pipe"],
+			windowsHide: true,
+		});
+		cleanupProcesses.add(jobHost);
+		await new Promise<void>((resolve, reject) => {
+			const timeout = setTimeout(() => reject(new Error("PTY job host did not become ready")), 5000);
+			jobHost.stdout!.once("data", () => {
+				clearTimeout(timeout);
+				resolve();
+			});
+			jobHost.stderr!.once("data", (data: Buffer) => {
+				clearTimeout(timeout);
+				reject(new Error(data.toString()));
+			});
+		});
+		(target.stdio[3] as NodeJS.WritableStream).write("start\n");
+
+		const processTree = await new Promise<{ child: number; grandchild: number }>((resolve, reject) => {
+			const timeout = setTimeout(() => reject(new Error("PTY child did not become ready")), 5000);
+			target.stdout!.once("data", (data: Buffer) => {
+				clearTimeout(timeout);
+				resolve(JSON.parse(data.toString()));
+			});
+			jobHost.once("exit", (code) => {
+				clearTimeout(timeout);
+				reject(new Error(`PTY job host exited with code ${code}`));
+			});
+		});
+
+		owner.kill();
+		await waitForExit(owner, 5000);
+		await waitForExit(jobHost, 5000);
+		await Promise.all([
+			waitForProcessToDisappear(processTree.child, 5000),
+			waitForProcessToDisappear(processTree.grandchild, 5000),
+		]);
+	}, 20000);
+
+	windowsIt("stops a real zigpty descendant tree through PtySession", async () => {
+		const output: string[] = [];
+		const terminal = {
+			rows: 24,
+			cols: 80,
+			write: (data: string | Uint8Array) => output.push(data.toString()),
+			writeln: (data: string) => output.push(data),
+		};
+		const childScript = [
+			'const { spawn } = require("child_process")',
+			'const grandchild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore", windowsHide: true })',
+			'console.log("TREE:" + JSON.stringify({ child: process.pid, grandchild: grandchild.pid }))',
+			'setInterval(() => {}, 1000)',
+		].join(";");
+		const session = new PtySession();
+		session.spawn(terminal as unknown as Terminal, {
+			opencodePath: process.execPath,
+			cwd: process.cwd(),
+			args: ["-e", childScript],
+		});
+
+		const processTree = await new Promise<{ child: number; grandchild: number }>((resolve, reject) => {
+			const deadline = Date.now() + 5000;
+			const inspect = () => {
+				const match = output.join("").match(/TREE:(\{[^\r\n]+\})/);
+				if (match) {
+					resolve(JSON.parse(match[1]));
+				} else if (Date.now() >= deadline) {
+					reject(new Error(`zigpty child did not become ready: ${output.join("")}`));
+				} else {
+					setTimeout(inspect, 25);
+				}
+			};
+			inspect();
+		});
+
+		await session.kill();
+		await Promise.all([
+			waitForProcessToDisappear(processTree.child, 5000),
+			waitForProcessToDisappear(processTree.grandchild, 5000),
+		]);
+	}, 20000);
+});
