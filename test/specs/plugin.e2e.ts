@@ -157,6 +157,43 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await waitForTerminalText("again");
 	});
 
+	it("[issue #33] ignores Caps Lock while preserving ordinary terminal input", async function () {
+		await browser.execute(async () => {
+			const app = (window as any).app;
+			for (const leaf of app.workspace.getLeavesOfType("opencode-terminal")) {
+				await leaf.detach();
+			}
+			await app.plugins.plugins.opencode.activateTerminalView();
+		});
+		const textarea = browser.$(".opencode-terminal-container .xterm-helper-textarea");
+		await expect(textarea).toExist();
+		await waitForTerminalText("OpenCode isolated test stub");
+
+		const capsLockPrevented = await browser.execute(() => {
+			const app = (window as any).app;
+			const view = app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			const helperTextarea = view.terminal.textarea as HTMLTextAreaElement;
+			view.terminal.clear();
+			helperTextarea.focus();
+			const event = new KeyboardEvent("keydown", {
+				key: "CapsLock",
+				bubbles: true,
+				cancelable: true,
+			});
+			helperTextarea.dispatchEvent(event);
+			return event.defaultPrevented;
+		});
+		expect(capsLockPrevented).toBe(false);
+
+		await textarea.click();
+		await browser.keys(["i", "s", "s", "u", "e", "3", "3", "i", "n", "p", "u", "t", "Enter"]);
+		const newline = process.platform === "win32" ? "\\r\\n" : "\\n";
+		await waitForTerminalText(`INPUT:"issue33input${newline}"`);
+		const output = await terminalBuffer();
+		expect(output).toContain(`INPUT:"issue33input${newline}"`);
+		expect(output).not.toContain("CapsLock");
+	});
+
 	it("[issue #26] sends only committed Chinese text during IME composition", async function () {
 		await browser.execute(async () => {
 			const app = (window as any).app;
