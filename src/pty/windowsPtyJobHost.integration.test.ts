@@ -3,6 +3,7 @@ import { ChildProcess, spawn } from "child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { clearTimeout as nodeClearTimeout, setTimeout as nodeSetTimeout } from "node:timers";
 import { WINDOWS_PTY_JOB_HOST_BASE64 } from "./windowsPtyJobHost";
 import { PtySession } from "../modules/ptySession";
 import type { Terminal } from "@xterm/xterm";
@@ -12,7 +13,7 @@ const cleanupProcesses = new Set<ChildProcess>();
 const cleanupDirectories = new Set<string>();
 
 beforeEach(() => {
-	vi.stubGlobal("window", { setTimeout, clearTimeout });
+	vi.stubGlobal("window", { setTimeout: nodeSetTimeout, clearTimeout: nodeClearTimeout });
 });
 
 afterEach(() => {
@@ -29,12 +30,27 @@ function waitForExit(child: ChildProcess, timeoutMs: number): Promise<void> {
 			resolve();
 			return;
 		}
-		const timeout = setTimeout(() => reject(new Error(`Process ${child.pid} did not exit`)), timeoutMs);
+		const timeout = nodeSetTimeout(() => reject(new Error(`Process ${child.pid} did not exit`)), timeoutMs);
 		child.once("exit", () => {
-			clearTimeout(timeout);
+			nodeClearTimeout(timeout);
 			resolve();
 		});
 	});
+}
+
+function parseProcessTree(value: string): { child: number; grandchild: number } {
+	const parsed: unknown = JSON.parse(value);
+	if (typeof parsed !== "object" || parsed === null) {
+		throw new Error(`Invalid process tree: ${value}`);
+	}
+	const processTree = parsed as Record<string, unknown>;
+	if (
+		typeof processTree.child === "number" &&
+		typeof processTree.grandchild === "number"
+	) {
+		return { child: processTree.child, grandchild: processTree.grandchild };
+	}
+	throw new Error(`Invalid process tree: ${value}`);
 }
 
 async function waitForProcessToDisappear(pid: number, timeoutMs: number): Promise<void> {
@@ -45,7 +61,7 @@ async function waitForProcessToDisappear(pid: number, timeoutMs: number): Promis
 		} catch {
 			return;
 		}
-		await new Promise((resolve) => setTimeout(resolve, 50));
+		await new Promise((resolve) => nodeSetTimeout(resolve, 50));
 	}
 	throw new Error(`Process ${pid} remained alive`);
 }
@@ -79,26 +95,26 @@ describe("Windows PTY Job Object host", () => {
 		});
 		cleanupProcesses.add(jobHost);
 		await new Promise<void>((resolve, reject) => {
-			const timeout = setTimeout(() => reject(new Error("PTY job host did not become ready")), 5000);
-			jobHost.stdout!.once("data", () => {
-				clearTimeout(timeout);
+			const timeout = nodeSetTimeout(() => reject(new Error("PTY job host did not become ready")), 5000);
+			jobHost.stdout.once("data", () => {
+				nodeClearTimeout(timeout);
 				resolve();
 			});
-			jobHost.stderr!.once("data", (data: Buffer) => {
-				clearTimeout(timeout);
+			jobHost.stderr.once("data", (data: Buffer) => {
+				nodeClearTimeout(timeout);
 				reject(new Error(data.toString()));
 			});
 		});
 		(target.stdio[3] as NodeJS.WritableStream).write("start\n");
 
 		const processTree = await new Promise<{ child: number; grandchild: number }>((resolve, reject) => {
-			const timeout = setTimeout(() => reject(new Error("PTY child did not become ready")), 5000);
+			const timeout = nodeSetTimeout(() => reject(new Error("PTY child did not become ready")), 5000);
 			target.stdout!.once("data", (data: Buffer) => {
-				clearTimeout(timeout);
-				resolve(JSON.parse(data.toString()));
+				nodeClearTimeout(timeout);
+				resolve(parseProcessTree(data.toString()));
 			});
 			jobHost.once("exit", (code) => {
-				clearTimeout(timeout);
+				nodeClearTimeout(timeout);
 				reject(new Error(`PTY job host exited with code ${code}`));
 			});
 		});
@@ -138,11 +154,11 @@ describe("Windows PTY Job Object host", () => {
 			const inspect = () => {
 				const match = output.join("").match(/TREE:(\{[^\r\n]+\})/);
 				if (match) {
-					resolve(JSON.parse(match[1]));
+					resolve(parseProcessTree(match[1]));
 				} else if (Date.now() >= deadline) {
 					reject(new Error(`zigpty child did not become ready: ${output.join("")}`));
 				} else {
-					setTimeout(inspect, 25);
+					nodeSetTimeout(inspect, 25);
 				}
 			};
 			inspect();

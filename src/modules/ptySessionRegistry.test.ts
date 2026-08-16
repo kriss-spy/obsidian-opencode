@@ -5,11 +5,13 @@ import type { PtySession } from "./ptySession";
 describe("PtySessionRegistry", () => {
 	it("waits for every active session during plugin shutdown", async () => {
 		let finishFirst: (() => void) | undefined;
+		const killFirst = vi.fn(() => new Promise<void>((resolve) => { finishFirst = resolve; }));
+		const killSecond = vi.fn().mockResolvedValue(undefined);
 		const first = {
-			kill: vi.fn(() => new Promise<void>((resolve) => { finishFirst = resolve; })),
+			kill: killFirst,
 		} as unknown as PtySession;
 		const second = {
-			kill: vi.fn().mockResolvedValue(undefined),
+			kill: killSecond,
 		} as unknown as PtySession;
 		const registry = new PtySessionRegistry();
 		registry.register(first);
@@ -18,8 +20,8 @@ describe("PtySessionRegistry", () => {
 		let stopped = false;
 		const stopping = registry.closeAll().then(() => { stopped = true; });
 		await Promise.resolve();
-		expect(first.kill).toHaveBeenCalledOnce();
-		expect(second.kill).toHaveBeenCalledOnce();
+		expect(killFirst).toHaveBeenCalledOnce();
+		expect(killSecond).toHaveBeenCalledOnce();
 		expect(stopped).toBe(false);
 
 		finishFirst!();

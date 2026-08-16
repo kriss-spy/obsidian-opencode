@@ -228,10 +228,20 @@ describe('OpencodeClient listSessions', () => {
 				['-e', expect.any(String), 'C:\\vault', 'C:\\tools\\opencode.EXE', 'session', 'list', '--format', 'json'],
 				expect.objectContaining({
 					windowsHide: true,
-					env: expect.objectContaining({ PATH: expect.stringContaining('C:\\tools') }),
 				}),
 				expect.any(Function)
 			);
+			const options: unknown = mockExecFile.mock.calls[0]?.[2];
+			if (typeof options !== 'object' || options === null || !('env' in options)) {
+				throw new Error('Expected exec options with an environment');
+			}
+			const env = (options as Record<string, unknown>).env;
+			if (typeof env !== 'object' || env === null) {
+				throw new Error('Expected exec environment with PATH');
+			}
+			const childEnv = env as Record<string, unknown>;
+			if (typeof childEnv.PATH !== 'string') throw new Error('Expected exec environment with PATH');
+			expect(childEnv.PATH).toContain('C:\\tools');
 		} finally {
 			delete process.env.Path;
 			process.env.PATH = oldPath;

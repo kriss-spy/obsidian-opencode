@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-17
+
+### Added
+
+- **New session panel action** — Added a compact new-session button to the conversations panel so OpenCode can be started without an existing session. ([#32](https://github.com/kriss-spy/obsidian-opencode/issues/32))
+- **Per-vault environment variables** — Added settings for environment variables passed to OpenCode session, export, delete, and terminal processes while preserving the inherited environment. Values are passed literally, including empty values and shell metacharacters. ([#37](https://github.com/kriss-spy/obsidian-opencode/issues/37))
+
+### Fixed
+
+- **Caps Lock inserted as terminal input** — Modifier-only Caps Lock events no longer write `CapsLock` or derived control sequences to the terminal, while native lock-state behavior and ordinary input remain available. ([#33](https://github.com/kriss-spy/obsidian-opencode/issues/33))
+
 ## [1.4.1] - 2026-08-01
 
 ### Fixed
