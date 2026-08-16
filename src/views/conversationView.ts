@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, Notice, moment as obsidianMoment, Modal, App } from "obsidian";
+import { ItemView, WorkspaceLeaf, Notice, moment as obsidianMoment, Modal, App, setIcon } from "obsidian";
 import OpencodePlugin from "../main";
 import { OpencodeClient, OpencodeSession, OpencodeExport, ExportTooLargeError } from "../utils/opencode";
 import { SessionExporter } from "../modules/sessionExporter";
@@ -41,7 +41,8 @@ export class OpencodeConversationView extends ItemView {
 		const header = container.createEl("div", { cls: "opencode-conversation-header" });
 		header.createEl("h3", { text: "Opencode sessions" });
 		const headerActions = header.createEl("div", { cls: "opencode-conversation-header-actions" });
-		const newSessionBtn = headerActions.createEl("button", { text: "New session", cls: "mod-cta" });
+		const newSessionBtn = headerActions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "New session" } });
+		setIcon(newSessionBtn, "plus");
 		newSessionBtn.addEventListener("click", () => { void this.plugin.newSession(); });
 		const refreshBtn = headerActions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Refresh sessions" } });
 		const svg = refreshBtn.createSvg("svg", { attr: { xmlns: "http://www.w3.org/2000/svg", width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" } });
