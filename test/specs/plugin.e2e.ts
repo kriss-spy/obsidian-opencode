@@ -88,6 +88,7 @@ describe("OpenCode plugin in a fresh vault", function () {
 		const view = browser.$(".opencode-conversation-container");
 		await expect(view).toExist();
 		await expect(view.$("h3")).toHaveText("Opencode sessions");
+		await expect(view.$("button=New session")).toExist();
 		await expect(view.$('button[aria-label="Refresh sessions"]')).toExist();
 		await expect(view.$(".opencode-session-title")).toHaveText("Fixture session");
 		await browser.saveScreenshot(path.join(artifactsDir, "conversations.png"));
@@ -126,6 +127,14 @@ describe("OpenCode plugin in a fresh vault", function () {
 		const terminal = browser.$(".opencode-terminal-container .xterm");
 		await expect(terminal).toExist();
 		await waitForTerminalText('ARGS:["-s","fixture-session"]');
+	});
+
+	it("[issue #32] starts a new session from the conversations view", async function () {
+		await browser.executeObsidianCommand("opencode:open-conversations");
+		await browser.$(".opencode-conversation-container").$("button=New session").click();
+
+		await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
+		await waitForTerminalText("ARGS:[]");
 	});
 
 	it("[issue #27] accepts input after New Session replaces an existing PTY", async function () {

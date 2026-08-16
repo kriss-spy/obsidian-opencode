@@ -310,6 +310,12 @@
 	margin: 0;
 }
 
+.opencode-conversation-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
 .opencode-conversation-main {
 	display: flex;
 	flex: 1;
