@@ -377,6 +377,7 @@ export class OpencodeTerminalView extends ItemView {
 			opencodePath,
 			cwd,
 			args,
+			environmentVariables: this.plugin.settings.environmentVariables,
 			editorPort: this.editorPort,
 		});
 	}

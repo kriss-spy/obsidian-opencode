@@ -149,6 +149,19 @@ describe('OpencodeClient listSessions', () => {
 		await expect(client.listSessions()).resolves.toEqual(sessions);
 	});
 
+	it('passes configured variables without dropping the inherited environment', async () => {
+		mockExecResult('[]', '');
+		const client = new OpencodeClient('opencode', '/tmp', { OPENCODE_CONFIG_DIR: '/tmp/vault', EMPTY: '' });
+		await client.listSessions();
+		expect(mockExecFile).toHaveBeenCalledWith('opencode', ['session', 'list', '--format', 'json'], expect.objectContaining({
+			env: expect.objectContaining({
+				HOME: process.env.HOME,
+				OPENCODE_CONFIG_DIR: '/tmp/vault',
+				EMPTY: '',
+			}),
+		}), expect.any(Function));
+	});
+
 	it('falls back to stderr when stdout is empty (issue #25 repro)', async () => {
 		const sessions = [{ id: 'ses_1', title: 't', updated: 1, created: 1, projectId: 'p', directory: '/tmp' }];
 		mockExecResult('', JSON.stringify(sessions));
@@ -232,6 +245,21 @@ describe('OpencodeClient listSessions', () => {
 		const client = new OpencodeClient('opencode', '/tmp');
 		await expect(client.listSessions()).resolves.toEqual(sessions);
 		expect(fs.unlinkSync).toHaveBeenCalled();
+	});
+
+	it('forwards configured variables to the Flatpak host', async () => {
+		vi.mocked(fs.existsSync).mockReturnValue(true);
+		mockExecResult('', '');
+		vi.mocked(fs.readFileSync).mockReturnValue('[]');
+		const client = new OpencodeClient('opencode', '/tmp', { OPENCODE_CONFIG_DIR: '/tmp/vault' });
+		await client.listSessions();
+		expect(mockExecFile).toHaveBeenCalledWith('flatpak-spawn', [
+			'--host',
+			'--env=OPENCODE_CONFIG_DIR=/tmp/vault',
+			'sh',
+			'-c',
+			expect.any(String),
+		], expect.any(Object), expect.any(Function));
 	});
 });
 

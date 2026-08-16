@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import OpencodePlugin from "./main";
+import { parseEnvironmentVariables, serializeEnvironmentVariables } from "./utils/environment";
 
 export class OpencodeSettingTab extends PluginSettingTab {
 	plugin: OpencodePlugin;
@@ -38,6 +39,27 @@ export class OpencodeSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		new Setting(containerEl)
+			.setName("Environment variables")
+			.setDesc("One NAME=value entry per line. Values are literal; empty values are allowed.")
+			.addTextArea((text) => {
+				text
+					.setPlaceholder("OPENCODE_CONFIG_DIR=/home/user/.config/opencode-vault")
+					.setValue(serializeEnvironmentVariables(this.plugin.settings.environmentVariables))
+					.onChange(async (value) => {
+						try {
+							const variables = parseEnvironmentVariables(value);
+							text.inputEl.setCustomValidity("");
+							this.plugin.settings.environmentVariables = variables;
+							await this.plugin.saveSettings();
+						} catch (error) {
+							text.inputEl.setCustomValidity(error instanceof Error ? error.message : String(error));
+							text.inputEl.reportValidity();
+						}
+					});
+				text.inputEl.rows = 5;
+			});
 
 		new Setting(containerEl)
 			.setName("Terminal font size")

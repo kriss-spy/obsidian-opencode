@@ -19400,6 +19400,7 @@ var import_obsidian8 = require("obsidian");
 var DEFAULT_SETTINGS = {
   opencodePath: "opencode",
   defaultWorkingDirectory: "",
+  environmentVariables: {},
   terminalFontSize: 14,
   terminalFontFamily: "monospace",
   newSessionArgs: ""
@@ -19407,6 +19408,53 @@ var DEFAULT_SETTINGS = {
 
 // src/settingsTab.ts
 var import_obsidian = require("obsidian");
+
+// src/utils/environment.ts
+var ENVIRONMENT_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+function parseEnvironmentVariables(text, caseInsensitive = process.platform === "win32") {
+  const entries = [];
+  const names = /* @__PURE__ */ new Set();
+  for (const [index, line] of text.split(/\r?\n/).entries()) {
+    if (!line.trim())
+      continue;
+    const separator = line.indexOf("=");
+    if (separator < 0) {
+      throw new Error(`Line ${index + 1}: expected NAME=value`);
+    }
+    const name = line.slice(0, separator);
+    if (!ENVIRONMENT_VARIABLE_NAME.test(name)) {
+      throw new Error(`Line ${index + 1}: invalid environment variable name`);
+    }
+    const comparableName = caseInsensitive ? name.toLowerCase() : name;
+    if (names.has(comparableName)) {
+      throw new Error(`Line ${index + 1}: duplicate environment variable ${name}`);
+    }
+    names.add(comparableName);
+    entries.push([name, line.slice(separator + 1)]);
+  }
+  return Object.fromEntries(entries);
+}
+function serializeEnvironmentVariables(variables) {
+  return Object.entries(variables).map(([name, value]) => `${name}=${value}`).join("\n");
+}
+function mergeEnvironmentVariables(inherited, configured, caseInsensitive = process.platform === "win32") {
+  const env = { ...inherited };
+  for (const [name, value] of Object.entries(configured)) {
+    if (caseInsensitive) {
+      for (const inheritedName of Object.keys(env)) {
+        if (inheritedName.toLowerCase() === name.toLowerCase())
+          delete env[inheritedName];
+      }
+    }
+    env[name] = value;
+  }
+  return env;
+}
+function flatpakEnvironmentArgs(variables) {
+  return Object.entries(variables).map(([name, value]) => `--env=${name}=${value}`);
+}
+
+// src/settingsTab.ts
 var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -19427,6 +19475,20 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
+    new import_obsidian.Setting(containerEl).setName("Environment variables").setDesc("One NAME=value entry per line. Values are literal; empty values are allowed.").addTextArea((text) => {
+      text.setPlaceholder("OPENCODE_CONFIG_DIR=/home/user/.config/opencode-vault").setValue(serializeEnvironmentVariables(this.plugin.settings.environmentVariables)).onChange(async (value) => {
+        try {
+          const variables = parseEnvironmentVariables(value);
+          text.inputEl.setCustomValidity("");
+          this.plugin.settings.environmentVariables = variables;
+          await this.plugin.saveSettings();
+        } catch (error) {
+          text.inputEl.setCustomValidity(error instanceof Error ? error.message : String(error));
+          text.inputEl.reportValidity();
+        }
+      });
+      text.inputEl.rows = 5;
+    });
     new import_obsidian.Setting(containerEl).setName("Terminal font size").setDesc("Font size for the integrated terminal.").addSlider(
       (slider) => slider.setLimits(8, 32, 1).setValue(this.plugin.settings.terminalFontSize).onChange(async (value) => {
         this.plugin.settings.terminalFontSize = value;
@@ -20256,6 +20318,7 @@ var OpencodeTerminalView = class extends import_obsidian2.ItemView {
       opencodePath,
       cwd,
       args,
+      environmentVariables: this.plugin.settings.environmentVariables,
       editorPort: this.editorPort
     });
   }
@@ -20303,11 +20366,12 @@ var FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesk
 function augmentPath(originalPath) {
   const homeDir = os2.homedir();
   const userDirs = COMMON_BIN_DIRS.map((sub) => path3.join(homeDir, sub));
-  return [...userDirs, ...(originalPath || "").split(path3.delimiter)].filter(Boolean).join(path3.delimiter);
+  const delimiter3 = process.platform === "win32" ? path3.win32.delimiter : path3.delimiter;
+  return [...userDirs, ...(originalPath || "").split(delimiter3)].filter(Boolean).join(delimiter3);
 }
-function createChildEnv() {
+function createChildEnv(configured) {
   var _a;
-  const env = { ...process.env };
+  const env = mergeEnvironmentVariables(process.env, configured);
   const inheritedPath = (_a = Object.entries(env).find(([key]) => key.toLowerCase() === "path")) == null ? void 0 : _a[1];
   for (const key of Object.keys(env)) {
     if (key.toLowerCase() === "path")
@@ -20365,15 +20429,15 @@ function windowsCommandReferences(tokens, env) {
   return { env: commandEnv, references };
 }
 function resolveWindowsExecutable(executable, env) {
-  if (path3.isAbsolute(executable))
+  if (path3.win32.isAbsolute(executable))
     return executable;
   const extensions = (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
-  const names = path3.extname(executable) ? [executable] : extensions.map((extension2) => `${executable}${extension2}`);
-  for (const directory of (env.PATH || "").split(path3.delimiter)) {
+  const names = path3.win32.extname(executable) ? [executable] : extensions.map((extension2) => `${executable}${extension2}`);
+  for (const directory of (env.PATH || "").split(path3.win32.delimiter)) {
     if (!directory)
       continue;
     for (const name of names) {
-      const candidate = path3.join(directory, name);
+      const candidate = path3.win32.join(directory, name);
       try {
         fs3.accessSync(candidate, fs3.constants.X_OK);
         return candidate;
@@ -20413,9 +20477,10 @@ var ExportTooLargeError = class extends Error {
   }
 };
 var OpencodeClient = class {
-  constructor(opencodePath, cwd) {
+  constructor(opencodePath, cwd, environmentVariables = {}) {
     this.opencodePath = opencodePath;
     this.cwd = cwd;
+    this.environmentVariables = environmentVariables;
   }
   resolvePath() {
     return this.opencodePath || "opencode";
@@ -20423,14 +20488,14 @@ var OpencodeClient = class {
   async listSessions() {
     const isFlatpak = fs3.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
     const executable = this.resolvePath();
-    const env = createChildEnv();
+    const env = createChildEnv(this.environmentVariables);
     let raw = "";
     let stderrText = "";
     try {
       if (isFlatpak) {
         const tmpFile = path3.join(os2.tmpdir(), `opencode-sessions-${Date.now()}.json`);
         const shellCmd = `${quoteShell(executable)} session list --format json > ${quoteShell(tmpFile)} 2>/dev/null`;
-        await runExecFile("flatpak-spawn", ["--host", "sh", "-c", shellCmd], { cwd: this.cwd, env });
+        await runExecFile("flatpak-spawn", ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), "sh", "-c", shellCmd], { cwd: this.cwd, env });
         try {
           raw = fs3.readFileSync(tmpFile, "utf-8");
         } finally {
@@ -20497,9 +20562,10 @@ var OpencodeClient = class {
       const isFlatpak = fs3.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
       let command = `${quoteShell(this.resolvePath())} export ${quoteShell(sessionId)} > ${quoteShell(tmpFile)} 2>/dev/null`;
       if (isFlatpak) {
-        command = `flatpak-spawn --host ${command}`;
+        const environmentArgs = flatpakEnvironmentArgs(this.environmentVariables).map(quoteShell).join(" ");
+        command = `flatpak-spawn --host${environmentArgs ? ` ${environmentArgs}` : ""} ${command}`;
       }
-      const exportEnv = createChildEnv();
+      const exportEnv = createChildEnv(this.environmentVariables);
       let child;
       if (process.platform === "win32") {
         const windowsCommand = windowsCommandReferences([this.resolvePath(), sessionId, tmpFile], exportEnv);
@@ -20556,10 +20622,10 @@ var OpencodeClient = class {
       let executable = this.resolvePath();
       let args = ["session", "delete", sessionId];
       if (isFlatpak) {
-        args = ["--host", executable, ...args];
+        args = ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), executable, ...args];
         executable = "flatpak-spawn";
       }
-      const env = createChildEnv();
+      const env = createChildEnv(this.environmentVariables);
       await runExecFile(executable, args, { cwd: this.cwd, env });
       return true;
     } catch (error) {
@@ -20656,7 +20722,7 @@ var OpencodeConversationView = class extends import_obsidian5.ItemView {
     this.listContainer = null;
     this.detailContainer = null;
     const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
-    this.client = new OpencodeClient(plugin.settings.opencodePath, cwd);
+    this.client = new OpencodeClient(plugin.settings.opencodePath, cwd, plugin.settings.environmentVariables);
     this.exporter = new SessionExporter(this.app);
   }
   getViewType() {
@@ -20700,7 +20766,7 @@ var OpencodeConversationView = class extends import_obsidian5.ItemView {
     this.listContainer.empty();
     this.listContainer.createEl("div", { cls: "opencode-loading", text: "Loading sessions..." });
     const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
-    this.client = new OpencodeClient(this.plugin.settings.opencodePath, cwd);
+    this.client = new OpencodeClient(this.plugin.settings.opencodePath, cwd, this.plugin.settings.environmentVariables);
     this.sessions = await this.client.listSessions();
     this.listContainer.empty();
     if (this.sessions.length === 0) {
@@ -21172,11 +21238,12 @@ function resolveExecutablePath(executable) {
 function augmentPath2(originalPath) {
   const homeDir = os3.homedir();
   const userDirs = COMMON_BIN_DIRS2.map((sub) => path4.join(homeDir, sub));
-  return [...userDirs, ...(originalPath || "").split(path4.delimiter)].filter(Boolean).join(path4.delimiter);
+  const delimiter3 = process.platform === "win32" ? path4.win32.delimiter : path4.delimiter;
+  return [...userDirs, ...(originalPath || "").split(delimiter3)].filter(Boolean).join(delimiter3);
 }
-function createChildEnv2() {
+function createChildEnv2(configured) {
   var _a;
-  const env = { ...process.env };
+  const env = mergeEnvironmentVariables(process.env, configured);
   const inheritedPath = (_a = Object.entries(env).find(([key]) => key.toLowerCase() === "path")) == null ? void 0 : _a[1];
   for (const key of Object.keys(env)) {
     if (key.toLowerCase() === "path")
@@ -21238,7 +21305,7 @@ var PtySession = class {
     this.windowsJobProcess = null;
   }
   spawn(terminal, options) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f, _g;
     if (process.platform === "win32") {
       const windowsBuild = Number(os3.release().split(".")[2]);
       if (Number.isFinite(windowsBuild) && windowsBuild > 0 && windowsBuild < 17763) {
@@ -21250,11 +21317,15 @@ var PtySession = class {
     let args = [...options.args];
     const isFlatpak = process.platform !== "win32" && (fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID);
     if (isFlatpak) {
-      const editorEnv = options.editorPort ? [`--env=OPENCODE_EDITOR_SSE_PORT=${options.editorPort}`] : [];
-      args = ["--host", "--env=TERM=xterm-256color", ...editorEnv, executable, ...args];
+      const hostEnvironment = {
+        ...(_a = options.environmentVariables) != null ? _a : {},
+        TERM: "xterm-256color",
+        ...options.editorPort ? { OPENCODE_EDITOR_SSE_PORT: String(options.editorPort) } : {}
+      };
+      args = ["--host", ...flatpakEnvironmentArgs(hostEnvironment), executable, ...args];
       executable = "flatpak-spawn";
     }
-    const env = createChildEnv2();
+    const env = createChildEnv2((_b = options.environmentVariables) != null ? _b : {});
     env.TERM = "xterm-256color";
     if (options.editorPort) {
       env.OPENCODE_EDITOR_SSE_PORT = String(options.editorPort);
@@ -21305,13 +21376,13 @@ Unsupported Windows Node.js architecture: ${nodeArchitecture}\r
         });
         this.windowsJobProcess = jobProcess;
         let jobReady = false;
-        (_a = jobProcess.stdout) == null ? void 0 : _a.once("data", () => {
+        (_c = jobProcess.stdout) == null ? void 0 : _c.once("data", () => {
           var _a2;
           jobReady = true;
           const startPipe = (_a2 = ptyProcess.stdio) == null ? void 0 : _a2[4];
           startPipe == null ? void 0 : startPipe.write("start\n");
         });
-        (_b = jobProcess.stderr) == null ? void 0 : _b.on("data", (chunk) => {
+        (_d = jobProcess.stderr) == null ? void 0 : _d.on("data", (chunk) => {
           terminal.write(chunk);
         });
         jobProcess.once("error", (error) => {
@@ -21332,7 +21403,7 @@ Unable to secure the OpenCode process tree (job host exited with code ${code}).\
         });
       } catch (error) {
         windowsPtyProcess == null ? void 0 : windowsPtyProcess.kill();
-        (_c = this.windowsJobProcess) == null ? void 0 : _c.kill();
+        (_e = this.windowsJobProcess) == null ? void 0 : _e.kill();
         this.windowsJobProcess = null;
         this.backend = null;
         const message = error instanceof Error ? error.message : String(error);
@@ -21350,14 +21421,14 @@ Unable to start the OpenCode Windows PTY: ${message}\r
       });
     }
     this.ptyProcess = ptyProcess;
-    (_d = ptyProcess.stdout) == null ? void 0 : _d.on("data", (chunk) => {
+    (_f = ptyProcess.stdout) == null ? void 0 : _f.on("data", (chunk) => {
       const str = chunk.toString();
       if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
         new import_obsidian7.Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND2}' on your host system to allow command execution.`, 15e3);
       }
       terminal.write(chunk);
     });
-    (_e = ptyProcess.stderr) == null ? void 0 : _e.on("data", (chunk) => {
+    (_g = ptyProcess.stderr) == null ? void 0 : _g.on("data", (chunk) => {
       const str = chunk.toString();
       console.error("PTY stderr:", str);
       if (this.backend === 1 /* WindowsConPty */) {

@@ -112,6 +112,30 @@ describe("PtySession", () => {
 		}
 	});
 
+	it("merges configured environment variables into the inherited environment", () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+		const child = createProcess();
+		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+		const terminal = { rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() };
+
+		try {
+			new PtySession().spawn(terminal as unknown as Terminal, {
+				opencodePath: "opencode",
+				cwd: "/tmp",
+				args: [],
+				environmentVariables: { OPENCODE_CONFIG_DIR: "/tmp/vault", EMPTY: "" },
+			});
+
+			expect(vi.mocked(spawn).mock.calls[0][2]?.env).toMatchObject({
+				OPENCODE_CONFIG_DIR: "/tmp/vault",
+				EMPTY: "",
+			});
+			expect(vi.mocked(spawn).mock.calls[0][2]?.env?.HOME).toBe(process.env.HOME);
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
 	it("reports Windows native PTY setup failures in the terminal", () => {
 		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
 		vi.mocked(execFileSync).mockReturnValueOnce("arm64\n");

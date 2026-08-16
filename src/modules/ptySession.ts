@@ -7,6 +7,7 @@ import * as path from "path";
 import { WINDOWS_PTY_NATIVE_X64_BASE64 } from "../pty/windowsPtyNativeX64";
 import { WINDOWS_PTY_NATIVE_ARM64_BASE64 } from "../pty/windowsPtyNativeArm64";
 import { WINDOWS_PTY_JOB_HOST_BASE64 } from "../pty/windowsPtyJobHost";
+import { EnvironmentVariables, flatpakEnvironmentArgs, mergeEnvironmentVariables } from "../utils/environment";
 
 const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian";
 
@@ -184,11 +185,12 @@ function resolveExecutablePath(executable: string): string {
 function augmentPath(originalPath?: string): string {
 	const homeDir = os.homedir();
 	const userDirs = COMMON_BIN_DIRS.map((sub) => path.join(homeDir, sub));
-	return [...userDirs, ...(originalPath || "").split(path.delimiter)].filter(Boolean).join(path.delimiter);
+	const delimiter = process.platform === "win32" ? path.win32.delimiter : path.delimiter;
+	return [...userDirs, ...(originalPath || "").split(delimiter)].filter(Boolean).join(delimiter);
 }
 
-function createChildEnv(): NodeJS.ProcessEnv {
-	const env = { ...process.env };
+function createChildEnv(configured: EnvironmentVariables): NodeJS.ProcessEnv {
+	const env = mergeEnvironmentVariables(process.env, configured);
 	const inheritedPath = Object.entries(env).find(([key]) => key.toLowerCase() === "path")?.[1];
 	for (const key of Object.keys(env)) {
 		if (key.toLowerCase() === "path") delete env[key];
@@ -224,6 +226,7 @@ export interface PtySessionOptions {
 	opencodePath: string;
 	cwd: string;
 	args: string[];
+	environmentVariables?: EnvironmentVariables;
 	editorPort?: number;
 }
 
@@ -279,13 +282,17 @@ export class PtySession {
 
 		const isFlatpak = process.platform !== "win32" && (fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID);
 		if (isFlatpak) {
-			const editorEnv = options.editorPort ? [`--env=OPENCODE_EDITOR_SSE_PORT=${options.editorPort}`] : [];
-			args = ["--host", "--env=TERM=xterm-256color", ...editorEnv, executable, ...args];
+			const hostEnvironment = {
+				...(options.environmentVariables ?? {}),
+				TERM: "xterm-256color",
+				...(options.editorPort ? { OPENCODE_EDITOR_SSE_PORT: String(options.editorPort) } : {}),
+			};
+			args = ["--host", ...flatpakEnvironmentArgs(hostEnvironment), executable, ...args];
 			executable = "flatpak-spawn";
 		}
 
 		// Augment PATH so the Python PTY proxy's execvp can find the binary
-		const env = createChildEnv();
+		const env = createChildEnv(options.environmentVariables ?? {});
 		env.TERM = "xterm-256color";
 		if (options.editorPort) {
 			env.OPENCODE_EDITOR_SSE_PORT = String(options.editorPort);
