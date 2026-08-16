@@ -185,7 +185,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session manager with history browser, conversation preview, one-click restore, and Markdown export.
 - Settings for `opencode` binary path, default CLI arguments, and terminal styling.
 
-[Unreleased]: https://github.com/kriss-spy/obsidian-opencode/compare/1.4.0...HEAD
+[Unreleased]: https://github.com/kriss-spy/obsidian-opencode/compare/1.5.0...HEAD
+[1.5.0]: https://github.com/kriss-spy/obsidian-opencode/compare/1.4.1...1.5.0
+[1.4.1]: https://github.com/kriss-spy/obsidian-opencode/compare/1.4.0...1.4.1
 [1.4.0]: https://github.com/kriss-spy/obsidian-opencode/compare/1.3.13...1.4.0
 [1.3.13]: https://github.com/kriss-spy/obsidian-opencode/compare/1.3.12...1.3.13
 [1.2.1]: https://github.com/kriss-spy/obsidian-opencode/compare/1.2.0...1.2.1
