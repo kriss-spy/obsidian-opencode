@@ -265,15 +265,28 @@ describe('OpencodeClient listSessions', () => {
 		vi.mocked(fs.existsSync).mockReturnValue(true);
 		mockExecResult('', '');
 		vi.mocked(fs.readFileSync).mockReturnValue('[]');
-		const client = new OpencodeClient('opencode', '/tmp', { OPENCODE_CONFIG_DIR: '/tmp/vault' });
+		const client = new OpencodeClient('opencode', '/tmp', {
+			OPENCODE_CONFIG_DIR: '/tmp/vault',
+			PATH: '/host/configured/bin',
+		});
 		await client.listSessions();
 		expect(mockExecFile).toHaveBeenCalledWith('flatpak-spawn', [
 			'--host',
 			'--env=OPENCODE_CONFIG_DIR=/tmp/vault',
+			'--env=PATH=/host/configured/bin',
 			'sh',
 			'-c',
 			expect.any(String),
 		], expect.any(Object), expect.any(Function));
+		const options: unknown = mockExecFile.mock.calls[0]?.[2];
+		if (typeof options !== 'object' || options === null || !('env' in options)) {
+			throw new Error('Expected Flatpak launch options with an environment');
+		}
+		const env: unknown = (options as Record<string, unknown>).env;
+		if (typeof env !== 'object' || env === null) throw new Error('Expected Flatpak launcher environment');
+		const launcherPath = (env as Record<string, unknown>).PATH;
+		if (typeof launcherPath !== 'string') throw new Error('Expected Flatpak launcher PATH');
+		expect(launcherPath).not.toContain('/host/configured/bin');
 	});
 });
 

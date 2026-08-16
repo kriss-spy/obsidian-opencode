@@ -8,7 +8,6 @@ const moment: (input: number) => { format: (fmt: string) => string } = obsidianM
 export const OPENCODE_CONVERSATION_VIEW_TYPE = "opencode-conversations";
 
 export class OpencodeConversationView extends ItemView {
-	client: OpencodeClient;
 	sessions: OpencodeSession[] = [];
 	listContainer: HTMLElement | null = null;
 	detailContainer: HTMLElement | null = null;
@@ -16,9 +15,12 @@ export class OpencodeConversationView extends ItemView {
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
-		const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
-		this.client = new OpencodeClient(plugin.settings.opencodePath, cwd, plugin.settings.environmentVariables);
 		this.exporter = new SessionExporter(this.app);
+	}
+
+	private createClient(): OpencodeClient {
+		const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
+		return new OpencodeClient(this.plugin.settings.opencodePath, cwd, this.plugin.settings.environmentVariables);
 	}
 
 	getViewType() {
@@ -64,9 +66,7 @@ export class OpencodeConversationView extends ItemView {
 		this.listContainer.empty();
 		this.listContainer.createEl("div", { cls: "opencode-loading", text: "Loading sessions..." });
 
-		const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
-		this.client = new OpencodeClient(this.plugin.settings.opencodePath, cwd, this.plugin.settings.environmentVariables);
-		this.sessions = await this.client.listSessions();
+		this.sessions = await this.createClient().listSessions();
 
 		this.listContainer.empty();
 
@@ -115,7 +115,7 @@ export class OpencodeConversationView extends ItemView {
 		const deleteBtn = actions.createEl("button", { text: "Delete", cls: "mod-warning" });
 		deleteBtn.addEventListener("click", () => {
 			new ConfirmDeleteModal(this.app, session.title, async () => {
-				const ok = await this.client.deleteSession(session.id);
+				const ok = await this.createClient().deleteSession(session.id);
 				if (ok) {
 					new Notice("Session deleted");
 					void this.loadSessions();
@@ -128,7 +128,7 @@ export class OpencodeConversationView extends ItemView {
 
 		let data: OpencodeExport | null;
 		try {
-			data = await this.client.exportSession(session.id);
+			data = await this.createClient().exportSession(session.id);
 		} catch (error) {
 			this.detailContainer.querySelector(".opencode-loading")?.remove();
 			if (error instanceof ExportTooLargeError) {
@@ -174,7 +174,7 @@ export class OpencodeConversationView extends ItemView {
 
 	async exportSessionToNote(session: OpencodeSession) {
 		try {
-			const data = await this.client.exportSession(session.id);
+			const data = await this.createClient().exportSession(session.id);
 			if (!data) {
 				new Notice("Failed to export session");
 				return;

@@ -3,32 +3,9 @@ import { execFile, spawn } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { EnvironmentVariables, flatpakEnvironmentArgs, mergeEnvironmentVariables } from "./environment";
-
-const COMMON_BIN_DIRS = [
-	".opencode/bin",
-	".local/bin",
-	"bin",
-] as const;
+import { createChildEnvironment, EnvironmentVariables, flatpakEnvironmentArgs } from "./environment";
 
 const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian";
-
-function augmentPath(originalPath?: string): string {
-	const homeDir = os.homedir();
-	const userDirs = COMMON_BIN_DIRS.map((sub) => path.join(homeDir, sub));
-	const delimiter = process.platform === "win32" ? path.win32.delimiter : path.delimiter;
-	return [...userDirs, ...(originalPath || "").split(delimiter)].filter(Boolean).join(delimiter);
-}
-
-function createChildEnv(configured: EnvironmentVariables): NodeJS.ProcessEnv {
-	const env = mergeEnvironmentVariables(process.env, configured);
-	const inheritedPath = Object.entries(env).find(([key]) => key.toLowerCase() === "path")?.[1];
-	for (const key of Object.keys(env)) {
-		if (key.toLowerCase() === "path") delete env[key];
-	}
-	env.PATH = augmentPath(inheritedPath);
-	return env;
-}
 
 export interface OpencodeSession {
 	id: string;
@@ -221,7 +198,7 @@ export class OpencodeClient {
 	async listSessions(): Promise<OpencodeSession[]> {
 		const isFlatpak = fs.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
 		const executable = this.resolvePath();
-		const env = createChildEnv(this.environmentVariables);
+		const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
 
 		let raw = "";
 		let stderrText = "";
@@ -310,7 +287,7 @@ export class OpencodeClient {
 				command = `flatpak-spawn --host${environmentArgs ? ` ${environmentArgs}` : ""} ${command}`;
 			}
 
-			const exportEnv = createChildEnv(this.environmentVariables);
+			const exportEnv = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
 			let child: import("child_process").ChildProcess;
 			if (process.platform === "win32") {
 				const windowsCommand = windowsCommandReferences([this.resolvePath(), sessionId, tmpFile], exportEnv);
@@ -373,7 +350,7 @@ export class OpencodeClient {
 				args = ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), executable, ...args];
 				executable = "flatpak-spawn";
 			}
-			const env = createChildEnv(this.environmentVariables);
+			const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
 			await runExecFile(executable, args, { cwd: this.cwd, env });
 			return true;
 		} catch (error) {

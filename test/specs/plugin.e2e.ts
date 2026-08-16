@@ -129,12 +129,40 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await waitForTerminalText('ARGS:["-s","fixture-session"]');
 	});
 
-	it("[issue #32] starts a new session from the conversations view", async function () {
+	it("[issue #32] starts a new session when session history is empty", async function () {
 		await browser.executeObsidianCommand("opencode:open-conversations");
-		await browser.$(".opencode-conversation-container").$('button[aria-label="New session"]').click();
+		const previousEnvironmentVariables = await browser.execute(() => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			return { ...plugin.settings.environmentVariables };
+		});
 
-		await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
-		await waitForTerminalText("ARGS:[]");
+		try {
+			await browser.execute(async () => {
+				const app = (window as any).app;
+				const plugin = app.plugins.plugins.opencode;
+				plugin.settings.environmentVariables = {
+					...plugin.settings.environmentVariables,
+					OBSIDIAN_OPENCODE_EMPTY_SESSIONS: "1",
+				};
+				await plugin.saveSettings();
+				await app.workspace.getLeavesOfType("opencode-conversations")[0].view.loadSessions();
+			});
+
+			const conversations = browser.$(".opencode-conversation-container");
+			await expect(conversations.$(".opencode-empty")).toHaveText("No sessions found.");
+			await expect(conversations.$(".opencode-session-item")).not.toExist();
+			await conversations.$('button[aria-label="New session"]').click();
+			await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
+			await waitForTerminalText("ARGS:[]");
+		} finally {
+			await browser.execute(async (serializedEnvironmentVariables: string) => {
+				const app = (window as any).app;
+				const plugin = app.plugins.plugins.opencode;
+				plugin.settings.environmentVariables = JSON.parse(serializedEnvironmentVariables);
+				await plugin.saveSettings();
+				await app.workspace.getLeavesOfType("opencode-conversations")[0].view.loadSessions();
+			}, JSON.stringify(previousEnvironmentVariables));
+		}
 	});
 
 	it("[issue #27] accepts input after New Session replaces an existing PTY", async function () {
@@ -205,11 +233,17 @@ describe("OpenCode plugin in a fresh vault", function () {
 				[name]: value,
 			};
 			await plugin.saveSettings();
-			await plugin.newSession();
 			return previous;
 		}, variableName, variableValue);
 
 		try {
+			await browser.executeObsidianCommand("opencode:open-conversations");
+			const conversations = browser.$(".opencode-conversation-container");
+			await conversations.$(".opencode-session-item").click();
+			await expect(conversations.$(".opencode-session-info")).toHaveText(expect.stringContaining(variableValue));
+			await browser.execute(async () => {
+				await (window as any).app.plugins.plugins.opencode.newSession();
+			});
 			await waitForTerminalText(`ENV:${variableName}=${JSON.stringify(variableValue)}`);
 		} finally {
 			await browser.execute(async (serializedEnvironmentVariables: string) => {

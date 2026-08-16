@@ -5,6 +5,7 @@ import * as os from 'os';
 import { setTimeout as delay } from 'timers/promises';
 import { WebSocket, RawData } from 'ws';
 import { EditorServer } from './editorServer';
+import * as manifest from '../manifest.json';
 
 interface LockContent {
     transport: string;
@@ -111,7 +112,7 @@ describe('EditorServer', () => {
         expect(response.result?.protocolVersion).toBe('2025-11-25');
         expect(response.result?.serverInfo).toEqual({
             name: 'obsidian-opencode',
-            version: '1.3.13'
+            version: manifest.version
         });
 
         client.close();

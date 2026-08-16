@@ -1,6 +1,10 @@
+import * as os from "os";
+import * as path from "path";
+
 export type EnvironmentVariables = Record<string, string>;
 
 const ENVIRONMENT_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const COMMON_BIN_DIRS = [".opencode/bin", ".local/bin", "bin"] as const;
 
 export function parseEnvironmentVariables(
 	text: string,
@@ -48,6 +52,37 @@ export function mergeEnvironmentVariables(
 		}
 		env[name] = value;
 	}
+	return env;
+}
+
+export function createChildEnvironment(
+	inherited: NodeJS.ProcessEnv,
+	configured: EnvironmentVariables,
+	platform = process.platform,
+	homeDir = os.homedir()
+): NodeJS.ProcessEnv {
+	const caseInsensitive = platform === "win32";
+	const isPathName = (name: string) => caseInsensitive ? name.toLowerCase() === "path" : name === "PATH";
+	const env = mergeEnvironmentVariables(inherited, configured, caseInsensitive);
+	const configuredPath = Object.keys(configured).find(isPathName);
+	if (configuredPath) {
+		if (caseInsensitive && configuredPath !== "PATH") {
+			const configuredValue = env[configuredPath];
+			for (const name of Object.keys(env)) {
+				if (isPathName(name)) delete env[name];
+			}
+			env.PATH = configuredValue;
+		}
+		return env;
+	}
+
+	const inheritedPath = Object.entries(env).find(([name]) => isPathName(name))?.[1];
+	for (const name of Object.keys(env)) {
+		if (isPathName(name)) delete env[name];
+	}
+	const delimiter = platform === "win32" ? path.win32.delimiter : path.delimiter;
+	const userDirs = COMMON_BIN_DIRS.map((directory) => path.join(homeDir, directory));
+	env.PATH = [...userDirs, ...(inheritedPath ?? "").split(delimiter)].filter(Boolean).join(delimiter);
 	return env;
 }
 

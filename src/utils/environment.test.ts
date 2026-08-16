@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeEnvironmentVariables, parseEnvironmentVariables } from "./environment";
+import { createChildEnvironment, mergeEnvironmentVariables, parseEnvironmentVariables } from "./environment";
 
 describe("parseEnvironmentVariables", () => {
 	it("parses literal values and preserves empty values", () => {
@@ -35,6 +35,28 @@ describe("mergeEnvironmentVariables", () => {
 		expect(mergeEnvironmentVariables({ Path: "inherited", HOME: "kept" }, { PATH: "configured" }, true)).toEqual({
 			HOME: "kept",
 			PATH: "configured",
+		});
+	});
+});
+
+describe("createChildEnvironment", () => {
+	it("augments an inherited PATH for desktop-launched processes", () => {
+		expect(createChildEnvironment({ PATH: "/usr/bin" }, {}, "linux", "/home/user").PATH).toBe(
+			"/home/user/.opencode/bin:/home/user/.local/bin:/home/user/bin:/usr/bin"
+		);
+	});
+
+	it("preserves a configured PATH literally, including an empty value", () => {
+		expect(createChildEnvironment({ PATH: "/usr/bin" }, { PATH: "" }, "linux", "/home/user").PATH).toBe("");
+		expect(createChildEnvironment({ PATH: "inherited" }, { Path: "configured" }, "win32", "C:\\Users\\user")).toEqual({
+			PATH: "configured",
+		});
+	});
+
+	it("treats PATH casing as significant outside Windows", () => {
+		expect(createChildEnvironment({ PATH: "/usr/bin" }, { Path: "literal" }, "linux", "/home/user")).toMatchObject({
+			PATH: "/home/user/.opencode/bin:/home/user/.local/bin:/home/user/bin:/usr/bin",
+			Path: "literal",
 		});
 	});
 });

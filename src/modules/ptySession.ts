@@ -7,7 +7,7 @@ import * as path from "path";
 import { WINDOWS_PTY_NATIVE_X64_BASE64 } from "../pty/windowsPtyNativeX64";
 import { WINDOWS_PTY_NATIVE_ARM64_BASE64 } from "../pty/windowsPtyNativeArm64";
 import { WINDOWS_PTY_JOB_HOST_BASE64 } from "../pty/windowsPtyJobHost";
-import { EnvironmentVariables, flatpakEnvironmentArgs, mergeEnvironmentVariables } from "../utils/environment";
+import { createChildEnvironment, EnvironmentVariables, flatpakEnvironmentArgs } from "../utils/environment";
 
 const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian";
 
@@ -182,23 +182,6 @@ function resolveExecutablePath(executable: string): string {
 	return executable;
 }
 
-function augmentPath(originalPath?: string): string {
-	const homeDir = os.homedir();
-	const userDirs = COMMON_BIN_DIRS.map((sub) => path.join(homeDir, sub));
-	const delimiter = process.platform === "win32" ? path.win32.delimiter : path.delimiter;
-	return [...userDirs, ...(originalPath || "").split(delimiter)].filter(Boolean).join(delimiter);
-}
-
-function createChildEnv(configured: EnvironmentVariables): NodeJS.ProcessEnv {
-	const env = mergeEnvironmentVariables(process.env, configured);
-	const inheritedPath = Object.entries(env).find(([key]) => key.toLowerCase() === "path")?.[1];
-	for (const key of Object.keys(env)) {
-		if (key.toLowerCase() === "path") delete env[key];
-	}
-	env.PATH = augmentPath(inheritedPath);
-	return env;
-}
-
 const materializedWindowsPty = new Map<string, string>();
 let materializedWindowsPtyJobHost: string | null = null;
 
@@ -292,7 +275,7 @@ export class PtySession {
 		}
 
 		// Augment PATH so the Python PTY proxy's execvp can find the binary
-		const env = createChildEnv(options.environmentVariables ?? {});
+		const env = createChildEnvironment(process.env, isFlatpak ? {} : options.environmentVariables ?? {});
 		env.TERM = "xterm-256color";
 		if (options.editorPort) {
 			env.OPENCODE_EDITOR_SSE_PORT = String(options.editorPort);
@@ -369,7 +352,7 @@ export class PtySession {
 			}
 		} else {
 			this.backend = PtyBackend.Unix;
-			ptyProcess = spawn("python3", ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
+			ptyProcess = spawn(resolveExecutablePath("python3"), ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
 				cwd: options.cwd,
 				env,
 				stdio: ["pipe", "pipe", "pipe", "pipe"],

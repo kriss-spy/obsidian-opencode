@@ -1,4 +1,5 @@
 import { WebSocketServer, WebSocket } from "ws";
+import * as manifest from "../manifest.json";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -82,7 +83,7 @@ export class EditorServer {
 						protocolVersion: "2025-11-25",
 						serverInfo: {
 							name: "obsidian-opencode",
-							version: "1.3.13",
+							version: manifest.version,
 						},
 					},
 				};

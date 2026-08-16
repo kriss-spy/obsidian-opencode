@@ -125,13 +125,24 @@ describe("PtySession", () => {
 				opencodePath: "opencode",
 				cwd: "/tmp",
 				args: [],
-				environmentVariables: { OPENCODE_CONFIG_DIR: "/tmp/vault", EMPTY: "" },
+				editorPort: 43210,
+				environmentVariables: {
+					OPENCODE_CONFIG_DIR: "/tmp/vault",
+					EMPTY: "",
+					PATH: "/configured/bin",
+					TERM: "configured-term",
+					OPENCODE_EDITOR_SSE_PORT: "configured-port",
+				},
 			});
 
 			expect(vi.mocked(spawn).mock.calls[0][2]?.env).toMatchObject({
 				OPENCODE_CONFIG_DIR: "/tmp/vault",
 				EMPTY: "",
+				PATH: "/configured/bin",
+				TERM: "xterm-256color",
+				OPENCODE_EDITOR_SSE_PORT: "43210",
 			});
+			expect(vi.mocked(spawn).mock.calls[0][0]).not.toBe("python3");
 			expect(vi.mocked(spawn).mock.calls[0][2]?.env?.HOME).toBe(process.env.HOME);
 		} finally {
 			platform.mockRestore();
