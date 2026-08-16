@@ -19455,6 +19455,8 @@ function flatpakEnvironmentArgs(variables) {
 }
 
 // src/settingsTab.ts
+var environmentVariableFormat = "NAME=value";
+var environmentVariableExample = "OPENCODE_CONFIG_DIR=/home/user/.config/opencode-vault";
 var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -19475,8 +19477,8 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Environment variables").setDesc("One NAME=value entry per line. Values are literal; empty values are allowed.").addTextArea((text) => {
-      text.setPlaceholder("OPENCODE_CONFIG_DIR=/home/user/.config/opencode-vault").setValue(serializeEnvironmentVariables(this.plugin.settings.environmentVariables)).onChange(async (value) => {
+    new import_obsidian.Setting(containerEl).setName("Environment variables").setDesc(`One environment variable per line in ${environmentVariableFormat} format. Values are literal; empty values are allowed.`).addTextArea((text) => {
+      text.setPlaceholder(environmentVariableExample).setValue(serializeEnvironmentVariables(this.plugin.settings.environmentVariables)).onChange(async (value) => {
         try {
           const variables = parseEnvironmentVariables(value);
           text.inputEl.setCustomValidity("");

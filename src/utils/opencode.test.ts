@@ -153,13 +153,17 @@ describe('OpencodeClient listSessions', () => {
 		mockExecResult('[]', '');
 		const client = new OpencodeClient('opencode', '/tmp', { OPENCODE_CONFIG_DIR: '/tmp/vault', EMPTY: '' });
 		await client.listSessions();
-		expect(mockExecFile).toHaveBeenCalledWith('opencode', ['session', 'list', '--format', 'json'], expect.objectContaining({
-			env: expect.objectContaining({
+		expect(mockExecFile).toHaveBeenCalledOnce();
+		const [file, args, options] = mockExecFile.mock.calls[0];
+		expect(file).toBe('opencode');
+		expect(args).toEqual(['session', 'list', '--format', 'json']);
+		expect(options).toMatchObject({
+			env: {
 				HOME: process.env.HOME,
 				OPENCODE_CONFIG_DIR: '/tmp/vault',
 				EMPTY: '',
-			}),
-		}), expect.any(Function));
+			},
+		});
 	});
 
 	it('falls back to stderr when stdout is empty (issue #25 repro)', async () => {

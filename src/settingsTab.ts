@@ -2,6 +2,9 @@ import { App, PluginSettingTab, Setting } from "obsidian";
 import OpencodePlugin from "./main";
 import { parseEnvironmentVariables, serializeEnvironmentVariables } from "./utils/environment";
 
+const environmentVariableFormat = "NAME=value";
+const environmentVariableExample = "OPENCODE_CONFIG_DIR=/home/user/.config/opencode-vault";
+
 export class OpencodeSettingTab extends PluginSettingTab {
 	plugin: OpencodePlugin;
 
@@ -42,10 +45,10 @@ export class OpencodeSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Environment variables")
-			.setDesc("One NAME=value entry per line. Values are literal; empty values are allowed.")
+			.setDesc(`One environment variable per line in ${environmentVariableFormat} format. Values are literal; empty values are allowed.`)
 			.addTextArea((text) => {
 				text
-					.setPlaceholder("OPENCODE_CONFIG_DIR=/home/user/.config/opencode-vault")
+					.setPlaceholder(environmentVariableExample)
 					.setValue(serializeEnvironmentVariables(this.plugin.settings.environmentVariables))
 					.onChange(async (value) => {
 						try {
