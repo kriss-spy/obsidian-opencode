@@ -20328,7 +20328,7 @@ var OpencodeTerminalView = class extends import_obsidian2.ItemView {
         return;
       await this.ptySession.kill();
       if (this.terminal && !this.closing) {
-        this.terminal.clear();
+        this.terminal.reset();
         this.spawnPty(this.terminal);
       }
     });
@@ -21281,6 +21281,13 @@ function childExit(child) {
     child.once("exit", finish);
   });
 }
+function childClose(child) {
+  if (!child.pid || child.exitCode != null || child.signalCode != null)
+    return Promise.resolve();
+  return new Promise((resolve) => {
+    child.once("close", resolve);
+  });
+}
 function withTimeout(promise, timeoutMs) {
   return new Promise((resolve) => {
     const timeoutWindow = window;
@@ -21493,8 +21500,13 @@ Error: ${err.message}\r
         }
         return;
       } else {
+        const ptyClosed = childClose(ptyProcess);
         ptyProcess.kill();
         windowsJobProcess == null ? void 0 : windowsJobProcess.kill();
+        if (!await withTimeout(ptyClosed.then(() => true), 5e3)) {
+          ptyProcess.kill("SIGKILL");
+          await withTimeout(ptyClosed, 1e3);
+        }
       }
     }
     windowsJobProcess == null ? void 0 : windowsJobProcess.kill();

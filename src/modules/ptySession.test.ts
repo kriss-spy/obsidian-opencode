@@ -76,10 +76,36 @@ describe("PtySession", () => {
 			void session.kill();
 			session.spawn(terminal as unknown as Terminal, options);
 			oldProcess.emit("exit", 0, null);
+			oldProcess.emit("close", 0, null);
 			session.writeStdin("hello");
 
 			expect(replacementProcess.stdin.write).toHaveBeenCalledWith("hello");
 			expect(terminal.writeln).not.toHaveBeenCalled();
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it("waits for Unix PTY output to close before completing shutdown", async () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+		const child = createProcess();
+		child.pid = 1234;
+		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+		const terminal = { rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() };
+
+		try {
+			const session = new PtySession();
+			session.spawn(terminal as unknown as Terminal, { opencodePath: "opencode", cwd: "/tmp", args: [] });
+			let stopped = false;
+			const stopping = session.kill().then(() => { stopped = true; });
+			await Promise.resolve();
+			expect(stopped).toBe(false);
+			child.emit("exit", 0, null);
+			await Promise.resolve();
+			expect(stopped).toBe(false);
+			child.emit("close", 0, null);
+			await stopping;
+			expect(stopped).toBe(true);
 		} finally {
 			platform.mockRestore();
 		}

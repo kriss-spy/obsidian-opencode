@@ -343,7 +343,7 @@ export class OpencodeTerminalView extends ItemView {
 			if (this.closing) return;
 			await this.ptySession.kill();
 			if (this.terminal && !this.closing) {
-				this.terminal.clear();
+				this.terminal.reset();
 				this.spawnPty(this.terminal);
 			}
 		});

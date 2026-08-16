@@ -88,7 +88,7 @@ Not yet automatable in this Linux job:
 
 The suite was executed in a Quickemu macOS 26.5.2 x86_64 guest against Obsidian app and installer 1.12.7:
 
-- `npm test`: 71 passing and 2 Windows-only tests skipped.
+- `npm test`: 72 passing and 2 Windows-only tests skipped.
 - `npm run build`: passing.
 - `npm run test:obsidian`: 13 passing and 6 Windows-only tests skipped.
 

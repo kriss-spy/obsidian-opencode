@@ -26,7 +26,11 @@ if (args.slice(0, 2).join(" ") === "session list") {
 } else if (args.slice(0, 2).join(" ") === "session delete") {
 	process.exit(0);
 } else {
-	console.log(`OpenCode isolated test stub ARGS:${JSON.stringify(args)}`);
+	if (args[0] === "-s") {
+		process.stdout.write(`\x1b[?1049hOpenCode isolated test stub ARGS:${JSON.stringify(args)}\n\x1b[5;1HSTALE_RESTART_CONTENT\x1b[1;1H\x1b(0`);
+	} else {
+		console.log(`OpenCode isolated test stub ARGS:${JSON.stringify(args)}`);
+	}
 	if (process.env.OBSIDIAN_OPENCODE_TEST_VARIABLE !== undefined) {
 		console.log(`ENV:OBSIDIAN_OPENCODE_TEST_VARIABLE=${JSON.stringify(process.env.OBSIDIAN_OPENCODE_TEST_VARIABLE)}`);
 	}

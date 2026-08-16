@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Caps Lock inserted as terminal input** — Modifier-only Caps Lock events no longer write `CapsLock` or derived control sequences to the terminal, while native lock-state behavior and ordinary input remain available. ([#33](https://github.com/kriss-spy/obsidian-opencode/issues/33))
+- **Corrupted text after restarting a session** — New and restored sessions now reset xterm state before launching, preventing stale alternate-screen cells and character-set modes from carrying into the replacement OpenCode process.
 
 ## [1.4.1] - 2026-08-01
 

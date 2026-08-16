@@ -154,6 +154,7 @@ describe("OpenCode plugin in a fresh vault", function () {
 			await conversations.$('button[aria-label="New session"]').click();
 			await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
 			await waitForTerminalText("ARGS:[]");
+			expect(await terminalBuffer()).not.toContain("STALE_RESTART_CONTENT");
 		} finally {
 			await browser.execute(async (serializedEnvironmentVariables: string) => {
 				const app = (window as any).app;

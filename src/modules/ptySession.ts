@@ -229,6 +229,13 @@ function childExit(child: ChildProcess | null): Promise<void> {
 	});
 }
 
+function childClose(child: ChildProcess): Promise<void> {
+	if (!child.pid || child.exitCode != null || child.signalCode != null) return Promise.resolve();
+	return new Promise((resolve) => {
+		child.once("close", resolve);
+	});
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
 	return new Promise((resolve) => {
 		const timeoutWindow = window;
@@ -435,8 +442,13 @@ export class PtySession {
 				}
 				return;
 			} else {
+				const ptyClosed = childClose(ptyProcess);
 				ptyProcess.kill();
 				windowsJobProcess?.kill();
+				if (!await withTimeout(ptyClosed.then(() => true), 5000)) {
+					ptyProcess.kill("SIGKILL");
+					await withTimeout(ptyClosed, 1000);
+				}
 			}
 		}
 		windowsJobProcess?.kill();
