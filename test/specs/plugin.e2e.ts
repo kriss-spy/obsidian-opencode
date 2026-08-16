@@ -194,6 +194,32 @@ describe("OpenCode plugin in a fresh vault", function () {
 		expect(output).not.toContain("CapsLock");
 	});
 
+	it("[issue #37] passes configured environment variables to the terminal child", async function () {
+		const variableName = "OBSIDIAN_OPENCODE_TEST_VARIABLE";
+		const variableValue = 'issue #37 exact value = $HOME; "quoted"';
+		const previousEnvironmentVariables = await browser.execute(async (name: string, value: string) => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			const previous = { ...plugin.settings.environmentVariables };
+			plugin.settings.environmentVariables = {
+				...plugin.settings.environmentVariables,
+				[name]: value,
+			};
+			await plugin.saveSettings();
+			await plugin.newSession();
+			return previous;
+		}, variableName, variableValue);
+
+		try {
+			await waitForTerminalText(`ENV:${variableName}=${JSON.stringify(variableValue)}`);
+		} finally {
+			await browser.execute(async (serializedEnvironmentVariables: string) => {
+				const plugin = (window as any).app.plugins.plugins.opencode;
+				plugin.settings.environmentVariables = JSON.parse(serializedEnvironmentVariables);
+				await plugin.saveSettings();
+			}, JSON.stringify(previousEnvironmentVariables));
+		}
+	});
+
 	it("[issue #26] sends only committed Chinese text during IME composition", async function () {
 		await browser.execute(async () => {
 			const app = (window as any).app;
