@@ -19721,7 +19721,7 @@ var TerminalKeyRouter = class {
       const inContainer = container.contains(target);
       if (!inContainer)
         return;
-      if (e.key === "Control" || e.key === "Alt" || e.key === "Shift" || e.key === "Meta")
+      if (e.key === "Control" || e.key === "Alt" || e.key === "Shift" || e.key === "Meta" || e.key === "CapsLock")
         return;
       if ((e.ctrlKey || e.metaKey) && e.key === "v")
         return;

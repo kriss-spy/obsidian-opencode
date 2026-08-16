@@ -74,7 +74,7 @@ export class TerminalKeyRouter {
 
 			if (!inContainer) return;
 
-			if (e.key === 'Control' || e.key === 'Alt' || e.key === 'Shift' || e.key === 'Meta') return;
+			if (e.key === 'Control' || e.key === 'Alt' || e.key === 'Shift' || e.key === 'Meta' || e.key === 'CapsLock') return;
 
 			if ((e.ctrlKey || e.metaKey) && e.key === 'v') return;
 
