@@ -18,12 +18,12 @@ function registerRouter() {
 		},
 		removeEventListener: vi.fn(),
 	};
-	Reflect.set(globalThis, "activeDocument", activeDocument);
+	vi.stubGlobal("activeDocument", activeDocument);
 
 	const writeStdin = vi.fn();
 	const context = {
 		app: {
-			vault: { adapter: {}, configDir: ".obsidian" },
+			vault: { adapter: {}, configDir: "test-config" },
 			hotkeyManager: { defaultKeys: {} },
 		},
 		terminal: {},
@@ -42,7 +42,9 @@ function registerRouter() {
 	router.register(context);
 
 	return {
-		dispatchKeydown(init: TestKeyboardEvent) {
+		dispatchKeydown: (init: TestKeyboardEvent) => {
+			const preventDefault = vi.fn();
+			const stopImmediatePropagation = vi.fn();
 			const event = {
 				ctrlKey: false,
 				metaKey: false,
@@ -50,12 +52,12 @@ function registerRouter() {
 				shiftKey: false,
 				isComposing: false,
 				target: {},
-				preventDefault: vi.fn(),
-				stopImmediatePropagation: vi.fn(),
+				preventDefault,
+				stopImmediatePropagation,
 				...init,
 			} as unknown as KeyboardEvent;
 			keydownHandler?.(event);
-			return event;
+			return { preventDefault, stopImmediatePropagation };
 		},
 		writeStdin,
 		router,
@@ -63,7 +65,7 @@ function registerRouter() {
 }
 
 afterEach(() => {
-	Reflect.deleteProperty(globalThis, "activeDocument");
+	vi.unstubAllGlobals();
 });
 
 describe("TerminalKeyRouter", () => {
