@@ -186,6 +186,38 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await waitForTerminalText("again");
 	});
 
+	it("fits the replacement PTY when restarting the terminal", async function () {
+		const expected = await browser.execute(async () => {
+			const app = (window as any).app;
+			const plugin = app.plugins.plugins.opencode;
+			plugin.settings.environmentVariables = {
+				...plugin.settings.environmentVariables,
+				OBSIDIAN_OPENCODE_REPORT_SIZE: "1",
+			};
+			await plugin.saveSettings();
+			const view = app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			view.terminal.resize(20, 5);
+			return view.fitAddon.proposeDimensions();
+		});
+		expect(expected).not.toBeNull();
+
+		try {
+			await browser.executeObsidianCommand("opencode:restart-terminal");
+			await waitForTerminalText(`SIZE:${expected!.cols}x${expected!.rows}`);
+			const dimensions = await browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				return { cols: view.terminal.cols, rows: view.terminal.rows };
+			});
+			expect(dimensions).toEqual(expected);
+		} finally {
+			await browser.execute(async () => {
+				const plugin = (window as any).app.plugins.plugins.opencode;
+				delete plugin.settings.environmentVariables.OBSIDIAN_OPENCODE_REPORT_SIZE;
+				await plugin.saveSettings();
+			});
+		}
+	});
+
 	it("[issue #33] ignores Caps Lock while preserving ordinary terminal input", async function () {
 		await browser.execute(async () => {
 			const app = (window as any).app;

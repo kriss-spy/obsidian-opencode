@@ -90,7 +90,7 @@ The suite was executed in a Quickemu macOS 26.5.2 x86_64 guest against Obsidian 
 
 - `npm test`: 72 passing and 2 Windows-only tests skipped.
 - `npm run build`: passing.
-- `npm run test:obsidian`: 13 passing and 6 Windows-only tests skipped.
+- `npm run test:obsidian`: 14 passing and 6 Windows-only tests skipped.
 
 The #26 test drives Chromium's composition event sequence inside the real macOS Obsidian/Electron process. It does not automate selection of the macOS Pinyin input source or generate native keystrokes through Accessibility APIs. Its assertion is at the plugin boundary: keydowns marked `isComposing` must be suppressed, while the committed text must be delivered once.
 

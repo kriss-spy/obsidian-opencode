@@ -344,7 +344,13 @@ export class OpencodeTerminalView extends ItemView {
 			await this.ptySession.kill();
 			if (this.terminal && !this.closing) {
 				this.terminal.reset();
+				try {
+					this.fitAddon?.fit();
+				} catch (error) {
+					console.warn("Restart fit failed:", error);
+				}
 				this.spawnPty(this.terminal);
+				this.ptySession.sendResize(this.terminal);
 			}
 		});
 	}

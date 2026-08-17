@@ -20324,12 +20324,19 @@ var OpencodeTerminalView = class extends import_obsidian2.ItemView {
   }
   async restartPty() {
     await this.lifecycle.enqueue(async () => {
+      var _a;
       if (this.closing)
         return;
       await this.ptySession.kill();
       if (this.terminal && !this.closing) {
         this.terminal.reset();
+        try {
+          (_a = this.fitAddon) == null ? void 0 : _a.fit();
+        } catch (error) {
+          console.warn("Restart fit failed:", error);
+        }
         this.spawnPty(this.terminal);
+        this.ptySession.sendResize(this.terminal);
       }
     });
   }
