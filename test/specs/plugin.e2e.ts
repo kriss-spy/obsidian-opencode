@@ -91,6 +91,12 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await expect(view.$('button[aria-label="New session"]')).toExist();
 		await expect(view.$('button[aria-label="Refresh sessions"]')).toExist();
 		await expect(view.$(".opencode-session-title")).toHaveText("Fixture session");
+		await expect(view.$(".opencode-session-dir")).not.toExist();
+		const splitter = view.$('.opencode-session-splitter[role="separator"]');
+		await expect(splitter).toExist();
+		const initialListWidth = await view.$(".opencode-session-list").getSize("width");
+		await splitter.dragAndDrop({ x: 64, y: 0 });
+		expect(await view.$(".opencode-session-list").getSize("width")).toBeGreaterThan(initialListWidth);
 		await browser.saveScreenshot(path.join(artifactsDir, "conversations.png"));
 	});
 
@@ -100,6 +106,8 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await expect(view.$(".opencode-session-detail h4")).toHaveText("Fixture session");
 		await expect(view.$(".opencode-session-info")).toHaveText(expect.stringContaining("fixture-model"));
 		await expect(view.$(".opencode-message-text")).toHaveText("Fixture conversation message");
+		await expect(view.$(".opencode-message-assistant .opencode-message-role")).toHaveText("AGENT");
+		await expect(view.$(".opencode-message-assistant .opencode-message-text")).toHaveText("Fixture agent response");
 
 		await expect(view.$("button=Export to note")).toExist();
 		await browser.execute(() => {

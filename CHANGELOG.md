@@ -13,12 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **New session panel action** — Added a compact new-session button to the conversations panel so OpenCode can be started without an existing session. ([#32](https://github.com/kriss-spy/obsidian-opencode/issues/32))
 - **Per-vault environment variables** — Added settings for environment variables passed to OpenCode session, export, delete, and terminal processes while preserving the inherited environment. Values are passed literally, including empty values and shell metacharacters. ([#37](https://github.com/kriss-spy/obsidian-opencode/issues/37))
+- **Resizable conversation list** — Drag the divider in the conversations view to adjust the session-list width.
 
 ### Fixed
 
 - **Caps Lock inserted as terminal input** — Modifier-only Caps Lock events no longer write `CapsLock` or derived control sequences to the terminal, while native lock-state behavior and ordinary input remain available. ([#33](https://github.com/kriss-spy/obsidian-opencode/issues/33))
 - **Corrupted text after restarting a session** — New and restored sessions now reset xterm state before launching, preventing stale alternate-screen cells and character-set modes from carrying into the replacement OpenCode process.
 - **Incorrect layout after restarting the terminal** — Restarting now refits xterm to the current sidebar and passes the fitted dimensions to the replacement OpenCode process.
+- **Conversation panel terminology and metadata** — Session rows no longer repeat the vault path, and assistant messages are labeled as agent messages.
 
 ## [1.4.1] - 2026-08-01
 

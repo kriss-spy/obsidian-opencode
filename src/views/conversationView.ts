@@ -56,7 +56,73 @@ export class OpencodeConversationView extends ItemView {
 
 		const main = container.createEl("div", { cls: "opencode-conversation-main" });
 		this.listContainer = main.createEl("div", { cls: "opencode-session-list" });
+		const splitter = main.createEl("div", {
+			cls: "opencode-session-splitter",
+			attr: {
+				role: "separator",
+				"aria-label": "Resize session list",
+				"aria-orientation": "vertical",
+				tabindex: "0",
+			},
+		});
 		this.detailContainer = main.createEl("div", { cls: "opencode-session-detail" });
+
+		const minimumListWidth = 140;
+		const resizeList = (width: number) => {
+			if (!this.listContainer) return;
+			const availableWidth = main.clientWidth;
+			const reservedDetailWidth = Math.min(240, Math.max(100, availableWidth * 0.35));
+			const maximumListWidth = availableWidth > 0
+				? Math.max(minimumListWidth, availableWidth - reservedDetailWidth - splitter.offsetWidth)
+				: Math.max(minimumListWidth, width);
+			const nextWidth = Math.round(Math.min(maximumListWidth, Math.max(minimumListWidth, width)));
+			this.listContainer.style.width = `${nextWidth}px`;
+			splitter.setAttribute("aria-valuemin", String(minimumListWidth));
+			splitter.setAttribute("aria-valuemax", String(Math.round(maximumListWidth)));
+			splitter.setAttribute("aria-valuenow", String(nextWidth));
+		};
+		resizeList(this.listContainer.getBoundingClientRect().width || 280);
+		const resizeObserver = new ResizeObserver(() => {
+			if (this.listContainer) resizeList(this.listContainer.getBoundingClientRect().width);
+		});
+		resizeObserver.observe(main);
+		this.register(() => resizeObserver.disconnect());
+
+		let dragStartX = 0;
+		let dragStartWidth = 0;
+		let activePointerId: number | null = null;
+		splitter.addEventListener("pointerdown", (event) => {
+			if (event.button !== 0 || activePointerId !== null || !this.listContainer) return;
+			activePointerId = event.pointerId;
+			dragStartX = event.clientX;
+			dragStartWidth = this.listContainer.getBoundingClientRect().width;
+			splitter.setPointerCapture(event.pointerId);
+			splitter.addClass("is-resizing");
+			event.preventDefault();
+		});
+		splitter.addEventListener("pointermove", (event) => {
+			if (event.pointerId !== activePointerId || !splitter.hasPointerCapture(event.pointerId)) return;
+			resizeList(dragStartWidth + event.clientX - dragStartX);
+		});
+		const finishResize = (event: PointerEvent) => {
+			if (event.pointerId !== activePointerId) return;
+			activePointerId = null;
+			if (splitter.hasPointerCapture(event.pointerId)) splitter.releasePointerCapture(event.pointerId);
+			splitter.removeClass("is-resizing");
+		};
+		splitter.addEventListener("pointerup", finishResize);
+		splitter.addEventListener("pointercancel", finishResize);
+		splitter.addEventListener("lostpointercapture", (event) => {
+			if (event.pointerId !== activePointerId) return;
+			activePointerId = null;
+			splitter.removeClass("is-resizing");
+		});
+		splitter.addEventListener("keydown", (event) => {
+			if (!this.listContainer || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+			const direction = event.key === "ArrowLeft" ? -1 : 1;
+			resizeList(this.listContainer.getBoundingClientRect().width + direction * 16);
+			event.preventDefault();
+		});
 
 		await this.loadSessions();
 	}
@@ -83,7 +149,6 @@ export class OpencodeConversationView extends ItemView {
 			item.createEl("div", { cls: "opencode-session-title", text: session.title || "Untitled" });
 			const meta = item.createEl("div", { cls: "opencode-session-meta" });
 			meta.createEl("span", { text: moment(session.updated).format("YYYY-MM-DD HH:mm") });
-			meta.createEl("span", { cls: "opencode-session-dir", text: session.directory });
 
 			item.addEventListener("click", () => {
 				// Highlight selected
@@ -155,7 +220,10 @@ export class OpencodeConversationView extends ItemView {
 		for (const msg of data.messages) {
 			const msgEl = messages.createEl("div", { cls: `opencode-message opencode-message-${msg.info.role}` });
 			const header = msgEl.createEl("div", { cls: "opencode-message-header" });
-			header.createEl("span", { cls: "opencode-message-role", text: msg.info.role });
+			header.createEl("span", {
+				cls: "opencode-message-role",
+				text: msg.info.role === "assistant" ? "AGENT" : msg.info.role,
+			});
 			header.createEl("span", { cls: "opencode-message-time", text: moment(msg.info.time.created).format("HH:mm:ss") });
 
 			const body = msgEl.createEl("div", { cls: "opencode-message-body" });

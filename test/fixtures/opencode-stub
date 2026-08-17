@@ -21,6 +21,9 @@ if (args.slice(0, 2).join(" ") === "session list") {
 		messages: [{
 			info: { role: "user", time: { created: 1_700_000_000_000 } },
 			parts: [{ type: "text", text: "Fixture conversation message" }],
+		}, {
+			info: { role: "assistant", time: { created: 1_700_000_001_000 } },
+			parts: [{ type: "text", text: "Fixture agent response" }],
 		}],
 	}));
 } else if (args.slice(0, 2).join(" ") === "session delete") {
