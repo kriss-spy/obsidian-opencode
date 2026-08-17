@@ -31,8 +31,11 @@ The suite builds and installs the plugin, configures a deterministic local fake 
 - The plugin activates in the isolated Obsidian process.
 - Its expected commands are registered.
 - Session history renders fixture data, previews messages, and exports a Markdown note.
+- The conversations panel can start a new session when session history is empty.
 - Restoring a session launches the terminal with the exact `-s <session>` arguments.
 - New Session and Continue Last Session restart an existing PTY and remain responsive to keyboard input.
+- Caps Lock is ignored as terminal input while ordinary keyboard input remains responsive.
+- Per-vault environment variables reach both conversation commands and terminal processes as literal values.
 - The terminal is a singleton with usable dimensions, rows, and columns, and its sidebar collapses and reveals.
 - The private editor server completes the JSON-RPC handshake, sends single and multiple `at_mentioned` messages, closes clients, and stays out of global lock-file discovery.
 
@@ -69,6 +72,9 @@ It cannot non-interactively create or register an arbitrary fresh vault. `vault:
 | #24 | The Linux terminal must have non-trivial pixel dimensions and xterm rows/columns. |
 | #27 | New Session and Continue Last Session replace an existing PTY and remain responsive to keyboard input. |
 | #28 | The editor server is passed directly to the embedded OpenCode process and is not published for unrelated OpenCode clients to discover. |
+| #32 | The conversations panel keeps its compact new-session action available and functional when session history is empty. |
+| #33 | Caps Lock does not reach the PTY as text or a derived control sequence; ordinary input still does. |
+| #37 | Per-vault environment variables propagate literally to conversation commands and terminal child processes. |
 | #26 | Pinyin keydowns emitted while `isComposing` do not reach the PTY; only committed Chinese text is sent. Run with `npm run test:obsidian:macos-ime`. |
 | #22 | Unit tests verify the isolated Windows ConPTY helper and resize channel. Windows CI covers stubbed rendering, input, live resizing, restart, and session workflows; `npm run test:obsidian:windows-ui` covers the real CLI and mouse interactions. |
 | #10 | Unit tests cover large-export limits; E2E covers normal preview and export-to-note behavior. |
@@ -82,11 +88,9 @@ Not yet automatable in this Linux job:
 
 The suite was executed in a Quickemu macOS 26.5.2 x86_64 guest against Obsidian app and installer 1.12.7:
 
-- `npm test`: 33 passing.
+- `npm test`: 72 passing and 2 Windows-only tests skipped.
 - `npm run build`: passing.
-- `npm run test:obsidian:smoke`: 6 passing.
-- `npm run test:obsidian`: 7 passing and 3 requirement failures (#26, #27, #28).
-- `npm run test:obsidian:macos-ime`: reproduces #26 as `nihao你好` reaching the PTY instead of only `你好`.
+- `npm run test:obsidian`: 14 passing and 6 Windows-only tests skipped.
 
 The #26 test drives Chromium's composition event sequence inside the real macOS Obsidian/Electron process. It does not automate selection of the macOS Pinyin input source or generate native keystrokes through Accessibility APIs. Its assertion is at the plugin boundary: keydowns marked `isComposing` must be suppressed, while the committed text must be delivered once.
 

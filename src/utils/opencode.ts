@@ -3,30 +3,9 @@ import { execFile, spawn } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-
-const COMMON_BIN_DIRS = [
-	".opencode/bin",
-	".local/bin",
-	"bin",
-] as const;
+import { createChildEnvironment, EnvironmentVariables, flatpakEnvironmentArgs } from "./environment";
 
 const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian";
-
-function augmentPath(originalPath?: string): string {
-	const homeDir = os.homedir();
-	const userDirs = COMMON_BIN_DIRS.map((sub) => path.join(homeDir, sub));
-	return [...userDirs, ...(originalPath || "").split(path.delimiter)].filter(Boolean).join(path.delimiter);
-}
-
-function createChildEnv(): NodeJS.ProcessEnv {
-	const env = { ...process.env };
-	const inheritedPath = Object.entries(env).find(([key]) => key.toLowerCase() === "path")?.[1];
-	for (const key of Object.keys(env)) {
-		if (key.toLowerCase() === "path") delete env[key];
-	}
-	env.PATH = augmentPath(inheritedPath);
-	return env;
-}
 
 export interface OpencodeSession {
 	id: string;
@@ -157,13 +136,13 @@ function windowsCommandReferences(tokens: string[], env: NodeJS.ProcessEnv): { e
 }
 
 function resolveWindowsExecutable(executable: string, env: NodeJS.ProcessEnv): string {
-	if (path.isAbsolute(executable)) return executable;
+	if (path.win32.isAbsolute(executable)) return executable;
 	const extensions = (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
-	const names = path.extname(executable) ? [executable] : extensions.map((extension) => `${executable}${extension}`);
-	for (const directory of (env.PATH || "").split(path.delimiter)) {
+	const names = path.win32.extname(executable) ? [executable] : extensions.map((extension) => `${executable}${extension}`);
+	for (const directory of (env.PATH || "").split(path.win32.delimiter)) {
 		if (!directory) continue;
 		for (const name of names) {
-			const candidate = path.join(directory, name);
+			const candidate = path.win32.join(directory, name);
 			try {
 				fs.accessSync(candidate, fs.constants.X_OK);
 				return candidate;
@@ -206,7 +185,11 @@ export class ExportTooLargeError extends Error {
 }
 
 export class OpencodeClient {
-	constructor(private opencodePath: string, private cwd: string) {}
+	constructor(
+		private opencodePath: string,
+		private cwd: string,
+		private environmentVariables: EnvironmentVariables = {}
+	) {}
 
 	private resolvePath(): string {
 		return this.opencodePath || "opencode";
@@ -215,7 +198,7 @@ export class OpencodeClient {
 	async listSessions(): Promise<OpencodeSession[]> {
 		const isFlatpak = fs.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
 		const executable = this.resolvePath();
-		const env = createChildEnv();
+		const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
 
 		let raw = "";
 		let stderrText = "";
@@ -226,7 +209,7 @@ export class OpencodeClient {
 				// Route through a host-side temp file, matching the export path.
 				const tmpFile = path.join(os.tmpdir(), `opencode-sessions-${Date.now()}.json`);
 				const shellCmd = `${quoteShell(executable)} session list --format json > ${quoteShell(tmpFile)} 2>/dev/null`;
-				await runExecFile("flatpak-spawn", ["--host", "sh", "-c", shellCmd], { cwd: this.cwd, env });
+				await runExecFile("flatpak-spawn", ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), "sh", "-c", shellCmd], { cwd: this.cwd, env });
 				try {
 					raw = fs.readFileSync(tmpFile, "utf-8");
 				} finally {
@@ -300,10 +283,11 @@ export class OpencodeClient {
 			const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
 			let command = `${quoteShell(this.resolvePath())} export ${quoteShell(sessionId)} > ${quoteShell(tmpFile)} 2>/dev/null`;
 			if (isFlatpak) {
-				command = `flatpak-spawn --host ${command}`;
+				const environmentArgs = flatpakEnvironmentArgs(this.environmentVariables).map(quoteShell).join(" ");
+				command = `flatpak-spawn --host${environmentArgs ? ` ${environmentArgs}` : ""} ${command}`;
 			}
 
-			const exportEnv = createChildEnv();
+			const exportEnv = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
 			let child: import("child_process").ChildProcess;
 			if (process.platform === "win32") {
 				const windowsCommand = windowsCommandReferences([this.resolvePath(), sessionId, tmpFile], exportEnv);
@@ -363,10 +347,10 @@ export class OpencodeClient {
 			let executable = this.resolvePath();
 			let args = ["session", "delete", sessionId];
 			if (isFlatpak) {
-				args = ["--host", executable, ...args];
+				args = ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), executable, ...args];
 				executable = "flatpak-spawn";
 			}
-			const env = createChildEnv();
+			const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
 			await runExecFile(executable, args, { cwd: this.cwd, env });
 			return true;
 		} catch (error) {

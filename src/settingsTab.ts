@@ -1,5 +1,9 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import OpencodePlugin from "./main";
+import { parseEnvironmentVariables, serializeEnvironmentVariables } from "./utils/environment";
+
+const environmentVariableFormat = "NAME=value";
+const environmentVariableExample = "OPENCODE_CONFIG_DIR=/home/user/.config/opencode-vault";
 
 export class OpencodeSettingTab extends PluginSettingTab {
 	plugin: OpencodePlugin;
@@ -15,7 +19,7 @@ export class OpencodeSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Opencode path")
-			.setDesc("Path to the opencode executable. Leave as 'opencode' to use path.")
+			.setDesc("Full absolute path to the opencode executable. Obsidian may not inherit your shell path.")
 			.addText((text) =>
 				text
 					.setPlaceholder("Opencode")
@@ -38,6 +42,27 @@ export class OpencodeSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			);
+
+		new Setting(containerEl)
+			.setName("Environment variables")
+			.setDesc(`One environment variable per line in ${environmentVariableFormat} format. Values are literal; empty values are allowed.`)
+			.addTextArea((text) => {
+				text
+					.setPlaceholder(environmentVariableExample)
+					.setValue(serializeEnvironmentVariables(this.plugin.settings.environmentVariables))
+					.onChange(async (value) => {
+						try {
+							const variables = parseEnvironmentVariables(value);
+							text.inputEl.setCustomValidity("");
+							this.plugin.settings.environmentVariables = variables;
+							await this.plugin.saveSettings();
+						} catch (error) {
+							text.inputEl.setCustomValidity(error instanceof Error ? error.message : String(error));
+							text.inputEl.reportValidity();
+						}
+					});
+				text.inputEl.rows = 5;
+			});
 
 		new Setting(containerEl)
 			.setName("Terminal font size")

@@ -310,6 +310,12 @@
 	margin: 0;
 }
 
+.opencode-conversation-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
 .opencode-conversation-main {
 	display: flex;
 	flex: 1;
@@ -317,14 +323,40 @@
 }
 
 .opencode-session-list {
-	width: 280px;
-	min-width: 200px;
-	border-right: 1px solid var(--background-modifier-border);
+	width: min(280px, 45%);
+	min-width: 140px;
+	flex: 0 0 auto;
 	overflow-y: auto;
+}
+
+.opencode-session-splitter {
+	position: relative;
+	width: 12px;
+	flex: 0 0 12px;
+	cursor: col-resize;
+	touch-action: none;
+}
+
+.opencode-session-splitter::after {
+	content: "";
+	position: absolute;
+	inset: 0 5px;
+	background: var(--background-modifier-border);
+}
+
+.opencode-session-splitter:hover::after,
+.opencode-session-splitter.is-resizing::after,
+.opencode-session-splitter:focus-visible::after {
+	background: var(--interactive-accent);
+}
+
+.opencode-session-splitter:focus-visible {
+	outline: none;
 }
 
 .opencode-session-detail {
 	flex: 1;
+	min-width: 0;
 	padding: 12px;
 	overflow-y: auto;
 }
@@ -357,13 +389,6 @@
 	color: var(--text-muted);
 	display: flex;
 	gap: 8px;
-}
-
-.opencode-session-dir {
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	max-width: 120px;
 }
 
 .opencode-session-actions {

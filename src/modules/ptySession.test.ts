@@ -5,6 +5,8 @@ import { EventEmitter } from "events";
 import type { Terminal } from "@xterm/xterm";
 import { PtySession } from "./ptySession";
 
+/* eslint-disable obsidianmd/prefer-window-timers -- This Node-only window mock must use Vitest's dynamically patched timers. */
+
 vi.mock("obsidian", () => ({
 	Notice: class {},
 }));
@@ -45,8 +47,8 @@ describe("PtySession", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.stubGlobal("window", {
-			setTimeout: (...args: Parameters<typeof setTimeout>) => setTimeout(...args),
-			clearTimeout: (...args: Parameters<typeof clearTimeout>) => clearTimeout(...args),
+			setTimeout: (callback: () => void, delay?: number) => setTimeout(callback, delay),
+			clearTimeout: (timeout: ReturnType<typeof setTimeout>) => clearTimeout(timeout),
 		});
 	});
 
@@ -74,10 +76,36 @@ describe("PtySession", () => {
 			void session.kill();
 			session.spawn(terminal as unknown as Terminal, options);
 			oldProcess.emit("exit", 0, null);
+			oldProcess.emit("close", 0, null);
 			session.writeStdin("hello");
 
 			expect(replacementProcess.stdin.write).toHaveBeenCalledWith("hello");
 			expect(terminal.writeln).not.toHaveBeenCalled();
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it("waits for Unix PTY output to close before completing shutdown", async () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+		const child = createProcess();
+		child.pid = 1234;
+		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+		const terminal = { rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() };
+
+		try {
+			const session = new PtySession();
+			session.spawn(terminal as unknown as Terminal, { opencodePath: "opencode", cwd: "/tmp", args: [] });
+			let stopped = false;
+			const stopping = session.kill().then(() => { stopped = true; });
+			await Promise.resolve();
+			expect(stopped).toBe(false);
+			child.emit("exit", 0, null);
+			await Promise.resolve();
+			expect(stopped).toBe(false);
+			child.emit("close", 0, null);
+			await stopping;
+			expect(stopped).toBe(true);
 		} finally {
 			platform.mockRestore();
 		}
@@ -107,6 +135,41 @@ describe("PtySession", () => {
 			expect(vi.mocked(spawn).mock.calls[0][2]?.env).toMatchObject({
 				OPENCODE_EDITOR_SSE_PORT: "43210",
 			});
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it("merges configured environment variables into the inherited environment", () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+		const child = createProcess();
+		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+		const terminal = { rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() };
+
+		try {
+			new PtySession().spawn(terminal as unknown as Terminal, {
+				opencodePath: "opencode",
+				cwd: "/tmp",
+				args: [],
+				editorPort: 43210,
+				environmentVariables: {
+					OPENCODE_CONFIG_DIR: "/tmp/vault",
+					EMPTY: "",
+					PATH: "/configured/bin",
+					TERM: "configured-term",
+					OPENCODE_EDITOR_SSE_PORT: "configured-port",
+				},
+			});
+
+			expect(vi.mocked(spawn).mock.calls[0][2]?.env).toMatchObject({
+				OPENCODE_CONFIG_DIR: "/tmp/vault",
+				EMPTY: "",
+				PATH: "/configured/bin",
+				TERM: "xterm-256color",
+				OPENCODE_EDITOR_SSE_PORT: "43210",
+			});
+			expect(vi.mocked(spawn).mock.calls[0][0]).not.toBe("python3");
+			expect(vi.mocked(spawn).mock.calls[0][2]?.env?.HOME).toBe(process.env.HOME);
 		} finally {
 			platform.mockRestore();
 		}

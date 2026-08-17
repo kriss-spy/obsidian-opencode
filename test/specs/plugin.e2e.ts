@@ -88,8 +88,15 @@ describe("OpenCode plugin in a fresh vault", function () {
 		const view = browser.$(".opencode-conversation-container");
 		await expect(view).toExist();
 		await expect(view.$("h3")).toHaveText("Opencode sessions");
+		await expect(view.$('button[aria-label="New session"]')).toExist();
 		await expect(view.$('button[aria-label="Refresh sessions"]')).toExist();
 		await expect(view.$(".opencode-session-title")).toHaveText("Fixture session");
+		await expect(view.$(".opencode-session-dir")).not.toExist();
+		const splitter = view.$('.opencode-session-splitter[role="separator"]');
+		await expect(splitter).toExist();
+		const initialListWidth = await view.$(".opencode-session-list").getSize("width");
+		await splitter.dragAndDrop({ x: 64, y: 0 });
+		expect(await view.$(".opencode-session-list").getSize("width")).toBeGreaterThan(initialListWidth);
 		await browser.saveScreenshot(path.join(artifactsDir, "conversations.png"));
 	});
 
@@ -99,6 +106,8 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await expect(view.$(".opencode-session-detail h4")).toHaveText("Fixture session");
 		await expect(view.$(".opencode-session-info")).toHaveText(expect.stringContaining("fixture-model"));
 		await expect(view.$(".opencode-message-text")).toHaveText("Fixture conversation message");
+		await expect(view.$(".opencode-message-assistant .opencode-message-role")).toHaveText("AGENT");
+		await expect(view.$(".opencode-message-assistant .opencode-message-text")).toHaveText("Fixture agent response");
 
 		await expect(view.$("button=Export to note")).toExist();
 		await browser.execute(() => {
@@ -128,6 +137,43 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await waitForTerminalText('ARGS:["-s","fixture-session"]');
 	});
 
+	it("[issue #32] starts a new session when session history is empty", async function () {
+		await browser.executeObsidianCommand("opencode:open-conversations");
+		const previousEnvironmentVariables = await browser.execute(() => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			return { ...plugin.settings.environmentVariables };
+		});
+
+		try {
+			await browser.execute(async () => {
+				const app = (window as any).app;
+				const plugin = app.plugins.plugins.opencode;
+				plugin.settings.environmentVariables = {
+					...plugin.settings.environmentVariables,
+					OBSIDIAN_OPENCODE_EMPTY_SESSIONS: "1",
+				};
+				await plugin.saveSettings();
+				await app.workspace.getLeavesOfType("opencode-conversations")[0].view.loadSessions();
+			});
+
+			const conversations = browser.$(".opencode-conversation-container");
+			await expect(conversations.$(".opencode-empty")).toHaveText("No sessions found.");
+			await expect(conversations.$(".opencode-session-item")).not.toExist();
+			await conversations.$('button[aria-label="New session"]').click();
+			await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
+			await waitForTerminalText("ARGS:[]");
+			expect(await terminalBuffer()).not.toContain("STALE_RESTART_CONTENT");
+		} finally {
+			await browser.execute(async (serializedEnvironmentVariables: string) => {
+				const app = (window as any).app;
+				const plugin = app.plugins.plugins.opencode;
+				plugin.settings.environmentVariables = JSON.parse(serializedEnvironmentVariables);
+				await plugin.saveSettings();
+				await app.workspace.getLeavesOfType("opencode-conversations")[0].view.loadSessions();
+			}, JSON.stringify(previousEnvironmentVariables));
+		}
+	});
+
 	it("[issue #27] accepts input after New Session replaces an existing PTY", async function () {
 		await browser.executeObsidianCommand("opencode:new-session");
 		await waitForTerminalText("ARGS:[]");
@@ -146,6 +192,107 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await textarea.click();
 		await browser.keys(["a", "g", "a", "i", "n", "Enter"]);
 		await waitForTerminalText("again");
+	});
+
+	it("fits the replacement PTY when restarting the terminal", async function () {
+		const expected = await browser.execute(async () => {
+			const app = (window as any).app;
+			const plugin = app.plugins.plugins.opencode;
+			plugin.settings.environmentVariables = {
+				...plugin.settings.environmentVariables,
+				OBSIDIAN_OPENCODE_REPORT_SIZE: "1",
+			};
+			await plugin.saveSettings();
+			const view = app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			view.terminal.resize(20, 5);
+			return view.fitAddon.proposeDimensions();
+		});
+		expect(expected).not.toBeNull();
+
+		try {
+			await browser.executeObsidianCommand("opencode:restart-terminal");
+			await waitForTerminalText(`SIZE:${expected!.cols}x${expected!.rows}`);
+			const dimensions = await browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				return { cols: view.terminal.cols, rows: view.terminal.rows };
+			});
+			expect(dimensions).toEqual(expected);
+		} finally {
+			await browser.execute(async () => {
+				const plugin = (window as any).app.plugins.plugins.opencode;
+				delete plugin.settings.environmentVariables.OBSIDIAN_OPENCODE_REPORT_SIZE;
+				await plugin.saveSettings();
+			});
+		}
+	});
+
+	it("[issue #33] ignores Caps Lock while preserving ordinary terminal input", async function () {
+		await browser.execute(async () => {
+			const app = (window as any).app;
+			for (const leaf of app.workspace.getLeavesOfType("opencode-terminal")) {
+				await leaf.detach();
+			}
+			await app.plugins.plugins.opencode.activateTerminalView();
+		});
+		const textarea = browser.$(".opencode-terminal-container .xterm-helper-textarea");
+		await expect(textarea).toExist();
+		await waitForTerminalText("OpenCode isolated test stub");
+
+		const capsLockPrevented = await browser.execute(() => {
+			const app = (window as any).app;
+			const view = app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			const helperTextarea = view.terminal.textarea as HTMLTextAreaElement;
+			view.terminal.clear();
+			helperTextarea.focus();
+			const event = new KeyboardEvent("keydown", {
+				key: "CapsLock",
+				bubbles: true,
+				cancelable: true,
+			});
+			helperTextarea.dispatchEvent(event);
+			return event.defaultPrevented;
+		});
+		expect(capsLockPrevented).toBe(false);
+
+		await textarea.click();
+		await browser.keys(["i", "s", "s", "u", "e", "3", "3", "i", "n", "p", "u", "t", "Enter"]);
+		const newline = process.platform === "win32" ? "\\r\\n" : "\\n";
+		await waitForTerminalText(`INPUT:"issue33input${newline}"`);
+		const output = await terminalBuffer();
+		expect(output).toContain(`INPUT:"issue33input${newline}"`);
+		expect(output).not.toContain("CapsLock");
+	});
+
+	it("[issue #37] passes configured environment variables to the terminal child", async function () {
+		const variableName = "OBSIDIAN_OPENCODE_TEST_VARIABLE";
+		const variableValue = 'issue #37 exact value = $HOME; "quoted"';
+		const previousEnvironmentVariables = await browser.execute(async (name: string, value: string) => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			const previous = { ...plugin.settings.environmentVariables };
+			plugin.settings.environmentVariables = {
+				...plugin.settings.environmentVariables,
+				[name]: value,
+			};
+			await plugin.saveSettings();
+			return previous;
+		}, variableName, variableValue);
+
+		try {
+			await browser.executeObsidianCommand("opencode:open-conversations");
+			const conversations = browser.$(".opencode-conversation-container");
+			await conversations.$(".opencode-session-item").click();
+			await expect(conversations.$(".opencode-session-info")).toHaveText(expect.stringContaining(variableValue));
+			await browser.execute(async () => {
+				await (window as any).app.plugins.plugins.opencode.newSession();
+			});
+			await waitForTerminalText(`ENV:${variableName}=${JSON.stringify(variableValue)}`);
+		} finally {
+			await browser.execute(async (serializedEnvironmentVariables: string) => {
+				const plugin = (window as any).app.plugins.plugins.opencode;
+				plugin.settings.environmentVariables = JSON.parse(serializedEnvironmentVariables);
+				await plugin.saveSettings();
+			}, JSON.stringify(previousEnvironmentVariables));
+		}
 	});
 
 	it("[issue #26] sends only committed Chinese text during IME composition", async function () {

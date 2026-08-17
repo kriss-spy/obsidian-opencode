@@ -149,6 +149,23 @@ describe('OpencodeClient listSessions', () => {
 		await expect(client.listSessions()).resolves.toEqual(sessions);
 	});
 
+	it('passes configured variables without dropping the inherited environment', async () => {
+		mockExecResult('[]', '');
+		const client = new OpencodeClient('opencode', '/tmp', { OPENCODE_CONFIG_DIR: '/tmp/vault', EMPTY: '' });
+		await client.listSessions();
+		expect(mockExecFile).toHaveBeenCalledOnce();
+		const [file, args, options] = mockExecFile.mock.calls[0];
+		expect(file).toBe('opencode');
+		expect(args).toEqual(['session', 'list', '--format', 'json']);
+		expect(options).toMatchObject({
+			env: {
+				HOME: process.env.HOME,
+				OPENCODE_CONFIG_DIR: '/tmp/vault',
+				EMPTY: '',
+			},
+		});
+	});
+
 	it('falls back to stderr when stdout is empty (issue #25 repro)', async () => {
 		const sessions = [{ id: 'ses_1', title: 't', updated: 1, created: 1, projectId: 'p', directory: '/tmp' }];
 		mockExecResult('', JSON.stringify(sessions));
@@ -211,10 +228,20 @@ describe('OpencodeClient listSessions', () => {
 				['-e', expect.any(String), 'C:\\vault', 'C:\\tools\\opencode.EXE', 'session', 'list', '--format', 'json'],
 				expect.objectContaining({
 					windowsHide: true,
-					env: expect.objectContaining({ PATH: expect.stringContaining('C:\\tools') }),
 				}),
 				expect.any(Function)
 			);
+			const options: unknown = mockExecFile.mock.calls[0]?.[2];
+			if (typeof options !== 'object' || options === null || !('env' in options)) {
+				throw new Error('Expected exec options with an environment');
+			}
+			const env = (options as Record<string, unknown>).env;
+			if (typeof env !== 'object' || env === null) {
+				throw new Error('Expected exec environment with PATH');
+			}
+			const childEnv = env as Record<string, unknown>;
+			if (typeof childEnv.PATH !== 'string') throw new Error('Expected exec environment with PATH');
+			expect(childEnv.PATH).toContain('C:\\tools');
 		} finally {
 			delete process.env.Path;
 			process.env.PATH = oldPath;
@@ -232,6 +259,34 @@ describe('OpencodeClient listSessions', () => {
 		const client = new OpencodeClient('opencode', '/tmp');
 		await expect(client.listSessions()).resolves.toEqual(sessions);
 		expect(fs.unlinkSync).toHaveBeenCalled();
+	});
+
+	it('forwards configured variables to the Flatpak host', async () => {
+		vi.mocked(fs.existsSync).mockReturnValue(true);
+		mockExecResult('', '');
+		vi.mocked(fs.readFileSync).mockReturnValue('[]');
+		const client = new OpencodeClient('opencode', '/tmp', {
+			OPENCODE_CONFIG_DIR: '/tmp/vault',
+			PATH: '/host/configured/bin',
+		});
+		await client.listSessions();
+		expect(mockExecFile).toHaveBeenCalledWith('flatpak-spawn', [
+			'--host',
+			'--env=OPENCODE_CONFIG_DIR=/tmp/vault',
+			'--env=PATH=/host/configured/bin',
+			'sh',
+			'-c',
+			expect.any(String),
+		], expect.any(Object), expect.any(Function));
+		const options: unknown = mockExecFile.mock.calls[0]?.[2];
+		if (typeof options !== 'object' || options === null || !('env' in options)) {
+			throw new Error('Expected Flatpak launch options with an environment');
+		}
+		const env: unknown = (options as Record<string, unknown>).env;
+		if (typeof env !== 'object' || env === null) throw new Error('Expected Flatpak launcher environment');
+		const launcherPath = (env as Record<string, unknown>).PATH;
+		if (typeof launcherPath !== 'string') throw new Error('Expected Flatpak launcher PATH');
+		expect(launcherPath).not.toContain('/host/configured/bin');
 	});
 });
 

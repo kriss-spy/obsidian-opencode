@@ -7,6 +7,7 @@ import * as path from "path";
 import { WINDOWS_PTY_NATIVE_X64_BASE64 } from "../pty/windowsPtyNativeX64";
 import { WINDOWS_PTY_NATIVE_ARM64_BASE64 } from "../pty/windowsPtyNativeArm64";
 import { WINDOWS_PTY_JOB_HOST_BASE64 } from "../pty/windowsPtyJobHost";
+import { createChildEnvironment, EnvironmentVariables, flatpakEnvironmentArgs } from "../utils/environment";
 
 const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian";
 
@@ -181,22 +182,6 @@ function resolveExecutablePath(executable: string): string {
 	return executable;
 }
 
-function augmentPath(originalPath?: string): string {
-	const homeDir = os.homedir();
-	const userDirs = COMMON_BIN_DIRS.map((sub) => path.join(homeDir, sub));
-	return [...userDirs, ...(originalPath || "").split(path.delimiter)].filter(Boolean).join(path.delimiter);
-}
-
-function createChildEnv(): NodeJS.ProcessEnv {
-	const env = { ...process.env };
-	const inheritedPath = Object.entries(env).find(([key]) => key.toLowerCase() === "path")?.[1];
-	for (const key of Object.keys(env)) {
-		if (key.toLowerCase() === "path") delete env[key];
-	}
-	env.PATH = augmentPath(inheritedPath);
-	return env;
-}
-
 const materializedWindowsPty = new Map<string, string>();
 let materializedWindowsPtyJobHost: string | null = null;
 
@@ -224,6 +209,7 @@ export interface PtySessionOptions {
 	opencodePath: string;
 	cwd: string;
 	args: string[];
+	environmentVariables?: EnvironmentVariables;
 	editorPort?: number;
 }
 
@@ -240,6 +226,13 @@ function childExit(child: ChildProcess | null): Promise<void> {
 			resolve();
 		};
 		child.once("exit", finish);
+	});
+}
+
+function childClose(child: ChildProcess): Promise<void> {
+	if (!child.pid || child.exitCode != null || child.signalCode != null) return Promise.resolve();
+	return new Promise((resolve) => {
+		child.once("close", resolve);
 	});
 }
 
@@ -279,13 +272,17 @@ export class PtySession {
 
 		const isFlatpak = process.platform !== "win32" && (fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID);
 		if (isFlatpak) {
-			const editorEnv = options.editorPort ? [`--env=OPENCODE_EDITOR_SSE_PORT=${options.editorPort}`] : [];
-			args = ["--host", "--env=TERM=xterm-256color", ...editorEnv, executable, ...args];
+			const hostEnvironment = {
+				...(options.environmentVariables ?? {}),
+				TERM: "xterm-256color",
+				...(options.editorPort ? { OPENCODE_EDITOR_SSE_PORT: String(options.editorPort) } : {}),
+			};
+			args = ["--host", ...flatpakEnvironmentArgs(hostEnvironment), executable, ...args];
 			executable = "flatpak-spawn";
 		}
 
 		// Augment PATH so the Python PTY proxy's execvp can find the binary
-		const env = createChildEnv();
+		const env = createChildEnvironment(process.env, isFlatpak ? {} : options.environmentVariables ?? {});
 		env.TERM = "xterm-256color";
 		if (options.editorPort) {
 			env.OPENCODE_EDITOR_SSE_PORT = String(options.editorPort);
@@ -362,7 +359,7 @@ export class PtySession {
 			}
 		} else {
 			this.backend = PtyBackend.Unix;
-			ptyProcess = spawn("python3", ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
+			ptyProcess = spawn(resolveExecutablePath("python3"), ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
 				cwd: options.cwd,
 				env,
 				stdio: ["pipe", "pipe", "pipe", "pipe"],
@@ -445,8 +442,13 @@ export class PtySession {
 				}
 				return;
 			} else {
+				const ptyClosed = childClose(ptyProcess);
 				ptyProcess.kill();
 				windowsJobProcess?.kill();
+				if (!await withTimeout(ptyClosed.then(() => true), 5000)) {
+					ptyProcess.kill("SIGKILL");
+					await withTimeout(ptyClosed, 1000);
+				}
 			}
 		}
 		windowsJobProcess?.kill();

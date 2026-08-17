@@ -343,8 +343,14 @@ export class OpencodeTerminalView extends ItemView {
 			if (this.closing) return;
 			await this.ptySession.kill();
 			if (this.terminal && !this.closing) {
-				this.terminal.clear();
+				this.terminal.reset();
+				try {
+					this.fitAddon?.fit();
+				} catch (error) {
+					console.warn("Restart fit failed:", error);
+				}
 				this.spawnPty(this.terminal);
+				this.ptySession.sendResize(this.terminal);
 			}
 		});
 	}
@@ -377,6 +383,7 @@ export class OpencodeTerminalView extends ItemView {
 			opencodePath,
 			cwd,
 			args,
+			environmentVariables: this.plugin.settings.environmentVariables,
 			editorPort: this.editorPort,
 		});
 	}

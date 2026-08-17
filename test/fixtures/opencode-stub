@@ -3,7 +3,7 @@
 const args = process.argv.slice(2);
 
 if (args.slice(0, 2).join(" ") === "session list") {
-	console.log(JSON.stringify([{
+	console.log(JSON.stringify(process.env.OBSIDIAN_OPENCODE_EMPTY_SESSIONS ? [] : [{
 		id: "fixture-session",
 		title: "Fixture session",
 		directory: process.cwd(),
@@ -13,7 +13,7 @@ if (args.slice(0, 2).join(" ") === "session list") {
 	console.log(JSON.stringify({
 		info: {
 			model: { id: "fixture-model" },
-			agent: "fixture-agent",
+			agent: process.env.OBSIDIAN_OPENCODE_TEST_VARIABLE || "fixture-agent",
 			cost: 0.125,
 			time: { created: 1_700_000_000_000, updated: 1_700_000_001_000 },
 			tokens: { input: 12, output: 34 },
@@ -21,12 +21,25 @@ if (args.slice(0, 2).join(" ") === "session list") {
 		messages: [{
 			info: { role: "user", time: { created: 1_700_000_000_000 } },
 			parts: [{ type: "text", text: "Fixture conversation message" }],
+		}, {
+			info: { role: "assistant", time: { created: 1_700_000_001_000 } },
+			parts: [{ type: "text", text: "Fixture agent response" }],
 		}],
 	}));
 } else if (args.slice(0, 2).join(" ") === "session delete") {
 	process.exit(0);
 } else {
-	console.log(`OpenCode isolated test stub ARGS:${JSON.stringify(args)}`);
+	if (args[0] === "-s") {
+		process.stdout.write(`\x1b[?1049hOpenCode isolated test stub ARGS:${JSON.stringify(args)}\n\x1b[5;1HSTALE_RESTART_CONTENT\x1b[1;1H\x1b(0`);
+	} else {
+		console.log(`OpenCode isolated test stub ARGS:${JSON.stringify(args)}`);
+	}
+	if (process.env.OBSIDIAN_OPENCODE_TEST_VARIABLE !== undefined) {
+		console.log(`ENV:OBSIDIAN_OPENCODE_TEST_VARIABLE=${JSON.stringify(process.env.OBSIDIAN_OPENCODE_TEST_VARIABLE)}`);
+	}
+	if (process.env.OBSIDIAN_OPENCODE_REPORT_SIZE) {
+		setTimeout(() => console.log(`SIZE:${process.stdout.columns}x${process.stdout.rows}`), 100);
+	}
 	process.stdin.setEncoding("utf8");
 	process.stdin.on("data", (data) => process.stdout.write(`INPUT:${JSON.stringify(data)}\n`));
 	process.stdin.resume();

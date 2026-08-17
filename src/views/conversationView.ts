@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, Notice, moment as obsidianMoment, Modal, App } from "obsidian";
+import { ItemView, WorkspaceLeaf, Notice, moment as obsidianMoment, Modal, App, setIcon } from "obsidian";
 import OpencodePlugin from "../main";
 import { OpencodeClient, OpencodeSession, OpencodeExport, ExportTooLargeError } from "../utils/opencode";
 import { SessionExporter } from "../modules/sessionExporter";
@@ -8,7 +8,6 @@ const moment: (input: number) => { format: (fmt: string) => string } = obsidianM
 export const OPENCODE_CONVERSATION_VIEW_TYPE = "opencode-conversations";
 
 export class OpencodeConversationView extends ItemView {
-	client: OpencodeClient;
 	sessions: OpencodeSession[] = [];
 	listContainer: HTMLElement | null = null;
 	detailContainer: HTMLElement | null = null;
@@ -16,9 +15,12 @@ export class OpencodeConversationView extends ItemView {
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
-		const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
-		this.client = new OpencodeClient(plugin.settings.opencodePath, cwd);
 		this.exporter = new SessionExporter(this.app);
+	}
+
+	private createClient(): OpencodeClient {
+		const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
+		return new OpencodeClient(this.plugin.settings.opencodePath, cwd, this.plugin.settings.environmentVariables);
 	}
 
 	getViewType() {
@@ -40,7 +42,11 @@ export class OpencodeConversationView extends ItemView {
 
 		const header = container.createEl("div", { cls: "opencode-conversation-header" });
 		header.createEl("h3", { text: "Opencode sessions" });
-		const refreshBtn = header.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Refresh sessions" } });
+		const headerActions = header.createEl("div", { cls: "opencode-conversation-header-actions" });
+		const newSessionBtn = headerActions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "New session" } });
+		setIcon(newSessionBtn, "plus");
+		newSessionBtn.addEventListener("click", () => { void this.plugin.newSession(); });
+		const refreshBtn = headerActions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Refresh sessions" } });
 		const svg = refreshBtn.createSvg("svg", { attr: { xmlns: "http://www.w3.org/2000/svg", width: "16", height: "16", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" } });
 		svg.createSvg("path", { attr: { d: "M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" } });
 		svg.createSvg("path", { attr: { d: "M3 3v5h5" } });
@@ -50,7 +56,73 @@ export class OpencodeConversationView extends ItemView {
 
 		const main = container.createEl("div", { cls: "opencode-conversation-main" });
 		this.listContainer = main.createEl("div", { cls: "opencode-session-list" });
+		const splitter = main.createEl("div", {
+			cls: "opencode-session-splitter",
+			attr: {
+				role: "separator",
+				"aria-label": "Resize session list",
+				"aria-orientation": "vertical",
+				tabindex: "0",
+			},
+		});
 		this.detailContainer = main.createEl("div", { cls: "opencode-session-detail" });
+
+		const minimumListWidth = 140;
+		const resizeList = (width: number) => {
+			if (!this.listContainer) return;
+			const availableWidth = main.clientWidth;
+			const reservedDetailWidth = Math.min(240, Math.max(100, availableWidth * 0.35));
+			const maximumListWidth = availableWidth > 0
+				? Math.max(minimumListWidth, availableWidth - reservedDetailWidth - splitter.offsetWidth)
+				: Math.max(minimumListWidth, width);
+			const nextWidth = Math.round(Math.min(maximumListWidth, Math.max(minimumListWidth, width)));
+			this.listContainer.style.width = `${nextWidth}px`;
+			splitter.setAttribute("aria-valuemin", String(minimumListWidth));
+			splitter.setAttribute("aria-valuemax", String(Math.round(maximumListWidth)));
+			splitter.setAttribute("aria-valuenow", String(nextWidth));
+		};
+		resizeList(this.listContainer.getBoundingClientRect().width || 280);
+		const resizeObserver = new ResizeObserver(() => {
+			if (this.listContainer) resizeList(this.listContainer.getBoundingClientRect().width);
+		});
+		resizeObserver.observe(main);
+		this.register(() => resizeObserver.disconnect());
+
+		let dragStartX = 0;
+		let dragStartWidth = 0;
+		let activePointerId: number | null = null;
+		splitter.addEventListener("pointerdown", (event) => {
+			if (event.button !== 0 || activePointerId !== null || !this.listContainer) return;
+			activePointerId = event.pointerId;
+			dragStartX = event.clientX;
+			dragStartWidth = this.listContainer.getBoundingClientRect().width;
+			splitter.setPointerCapture(event.pointerId);
+			splitter.addClass("is-resizing");
+			event.preventDefault();
+		});
+		splitter.addEventListener("pointermove", (event) => {
+			if (event.pointerId !== activePointerId || !splitter.hasPointerCapture(event.pointerId)) return;
+			resizeList(dragStartWidth + event.clientX - dragStartX);
+		});
+		const finishResize = (event: PointerEvent) => {
+			if (event.pointerId !== activePointerId) return;
+			activePointerId = null;
+			if (splitter.hasPointerCapture(event.pointerId)) splitter.releasePointerCapture(event.pointerId);
+			splitter.removeClass("is-resizing");
+		};
+		splitter.addEventListener("pointerup", finishResize);
+		splitter.addEventListener("pointercancel", finishResize);
+		splitter.addEventListener("lostpointercapture", (event) => {
+			if (event.pointerId !== activePointerId) return;
+			activePointerId = null;
+			splitter.removeClass("is-resizing");
+		});
+		splitter.addEventListener("keydown", (event) => {
+			if (!this.listContainer || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+			const direction = event.key === "ArrowLeft" ? -1 : 1;
+			resizeList(this.listContainer.getBoundingClientRect().width + direction * 16);
+			event.preventDefault();
+		});
 
 		await this.loadSessions();
 	}
@@ -60,9 +132,7 @@ export class OpencodeConversationView extends ItemView {
 		this.listContainer.empty();
 		this.listContainer.createEl("div", { cls: "opencode-loading", text: "Loading sessions..." });
 
-		const cwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
-		this.client = new OpencodeClient(this.plugin.settings.opencodePath, cwd);
-		this.sessions = await this.client.listSessions();
+		this.sessions = await this.createClient().listSessions();
 
 		this.listContainer.empty();
 
@@ -79,7 +149,6 @@ export class OpencodeConversationView extends ItemView {
 			item.createEl("div", { cls: "opencode-session-title", text: session.title || "Untitled" });
 			const meta = item.createEl("div", { cls: "opencode-session-meta" });
 			meta.createEl("span", { text: moment(session.updated).format("YYYY-MM-DD HH:mm") });
-			meta.createEl("span", { cls: "opencode-session-dir", text: session.directory });
 
 			item.addEventListener("click", () => {
 				// Highlight selected
@@ -111,7 +180,7 @@ export class OpencodeConversationView extends ItemView {
 		const deleteBtn = actions.createEl("button", { text: "Delete", cls: "mod-warning" });
 		deleteBtn.addEventListener("click", () => {
 			new ConfirmDeleteModal(this.app, session.title, async () => {
-				const ok = await this.client.deleteSession(session.id);
+				const ok = await this.createClient().deleteSession(session.id);
 				if (ok) {
 					new Notice("Session deleted");
 					void this.loadSessions();
@@ -124,7 +193,7 @@ export class OpencodeConversationView extends ItemView {
 
 		let data: OpencodeExport | null;
 		try {
-			data = await this.client.exportSession(session.id);
+			data = await this.createClient().exportSession(session.id);
 		} catch (error) {
 			this.detailContainer.querySelector(".opencode-loading")?.remove();
 			if (error instanceof ExportTooLargeError) {
@@ -151,7 +220,10 @@ export class OpencodeConversationView extends ItemView {
 		for (const msg of data.messages) {
 			const msgEl = messages.createEl("div", { cls: `opencode-message opencode-message-${msg.info.role}` });
 			const header = msgEl.createEl("div", { cls: "opencode-message-header" });
-			header.createEl("span", { cls: "opencode-message-role", text: msg.info.role });
+			header.createEl("span", {
+				cls: "opencode-message-role",
+				text: msg.info.role === "assistant" ? "AGENT" : msg.info.role,
+			});
 			header.createEl("span", { cls: "opencode-message-time", text: moment(msg.info.time.created).format("HH:mm:ss") });
 
 			const body = msgEl.createEl("div", { cls: "opencode-message-body" });
@@ -170,7 +242,7 @@ export class OpencodeConversationView extends ItemView {
 
 	async exportSessionToNote(session: OpencodeSession) {
 		try {
-			const data = await this.client.exportSession(session.id);
+			const data = await this.createClient().exportSession(session.id);
 			if (!data) {
 				new Notice("Failed to export session");
 				return;
