@@ -10,6 +10,15 @@ import { WINDOWS_PTY_JOB_HOST_BASE64 } from "../pty/windowsPtyJobHost";
 import { createChildEnvironment, EnvironmentVariables, flatpakEnvironmentArgs } from "../utils/environment";
 
 const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian";
+const WINDOWS_CONPTY_PROBE_ARTIFACT = "+q4d73Gi=31337,s=1,v=1,a=q,t=d,f=24;AAAA";
+const WINDOWS_CONPTY_XTGETTCAP_ARTIFACT = "+q4d73";
+const WINDOWS_TUI_TEARDOWN_SEQUENCES = ["\x1b[?2004l", "\x1b[?2031l"];
+
+export function stripWindowsConPtyProbeArtifact(output: string): string {
+	return output
+		.split(WINDOWS_CONPTY_PROBE_ARTIFACT).join("")
+		.split(WINDOWS_CONPTY_XTGETTCAP_ARTIFACT).join("");
+}
 
 const UNIX_PSEUDOTERMINAL_PY = `
 import sys
@@ -254,8 +263,12 @@ export class PtySession {
 	ptyProcess: ChildProcess | null = null;
 	private backend: PtyBackend | null = null;
 	private windowsJobProcess: ChildProcess | null = null;
+	private windowsInterruptPending = false;
+	private windowsInterruptResetTimer: number | null = null;
+	private windowsGracefulExitRequested = false;
 
 	spawn(terminal: Terminal, options: PtySessionOptions): void {
+		this.windowsGracefulExitRequested = false;
 		if (process.platform === "win32") {
 			const windowsBuild = Number(os.release().split(".")[2]);
 			if (Number.isFinite(windowsBuild) && windowsBuild > 0 && windowsBuild < 17763) {
@@ -269,6 +282,10 @@ export class PtySession {
 		// don't read shell init files like .bashrc / .zshrc).
 		let executable = resolveExecutablePath(options.opencodePath);
 		let args = [...options.args];
+		if (process.platform === "win32" && /\.ps1$/i.test(executable)) {
+			args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", executable, ...args];
+			executable = resolveExecutablePath("powershell.exe");
+		}
 
 		const isFlatpak = process.platform !== "win32" && (fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID);
 		if (isFlatpak) {
@@ -335,7 +352,8 @@ export class PtySession {
 					startPipe?.write("start\n");
 				});
 				jobProcess.stderr?.on("data", (chunk: Buffer) => {
-					terminal.write(chunk);
+					const message = chunk.toString();
+					if (!message.includes("Unable to read the Windows PTY host exit code")) terminal.write(chunk);
 				});
 				jobProcess.once("error", (error) => {
 					terminal.writeln(`\r\nUnable to secure the OpenCode process tree: ${error.message}\r\n`);
@@ -372,7 +390,24 @@ export class PtySession {
 			if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
 				new Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND}' on your host system to allow command execution.`, 15000);
 			}
-			terminal.write(chunk);
+			const output = this.backend === PtyBackend.WindowsConPty ? stripWindowsConPtyProbeArtifact(str) : chunk;
+			if (output.length > 0) terminal.write(output);
+			if (
+				this.backend === PtyBackend.WindowsConPty &&
+				this.windowsInterruptPending &&
+				WINDOWS_TUI_TEARDOWN_SEQUENCES.every((sequence) => str.includes(sequence))
+			) {
+				this.windowsInterruptPending = false;
+				if (this.windowsInterruptResetTimer !== null) {
+					window.clearTimeout(this.windowsInterruptResetTimer);
+					this.windowsInterruptResetTimer = null;
+				}
+				window.setTimeout(() => {
+					if (this.ptyProcess !== ptyProcess) return;
+					this.windowsGracefulExitRequested = true;
+					ptyProcess.kill();
+				}, 100);
+			}
 		});
 
 		ptyProcess.stderr?.on("data", (chunk: Buffer) => {
@@ -388,7 +423,10 @@ export class PtySession {
 
 		ptyProcess.on("exit", (code, signal) => {
 			if (this.ptyProcess === ptyProcess) {
-				terminal.writeln(`\r\n[Process exited with code ${code ?? signal}]\r\n`);
+				const exitStatus = this.windowsGracefulExitRequested ? 0 : code ?? signal;
+				this.clearWindowsInterrupt();
+				this.windowsGracefulExitRequested = false;
+				terminal.writeln(`\r\n[Process exited with code ${exitStatus}]\r\n`);
 				this.ptyProcess = null;
 			}
 		});
@@ -400,6 +438,8 @@ export class PtySession {
 	}
 
 	async kill(): Promise<void> {
+		this.clearWindowsInterrupt();
+		this.windowsGracefulExitRequested = false;
 		const windowsJobProcess = this.windowsJobProcess;
 		this.windowsJobProcess = null;
 		if (this.ptyProcess) {
@@ -460,7 +500,23 @@ export class PtySession {
 
 	writeStdin(data: string): void {
 		if (this.ptyProcess?.stdin) {
+			if (this.backend === PtyBackend.WindowsConPty && data.includes("\x03")) {
+				this.windowsInterruptPending = true;
+				if (this.windowsInterruptResetTimer !== null) window.clearTimeout(this.windowsInterruptResetTimer);
+				this.windowsInterruptResetTimer = window.setTimeout(() => {
+					this.windowsInterruptPending = false;
+					this.windowsInterruptResetTimer = null;
+				}, 3000);
+			}
 			this.ptyProcess.stdin.write(data);
+		}
+	}
+
+	private clearWindowsInterrupt(): void {
+		this.windowsInterruptPending = false;
+		if (this.windowsInterruptResetTimer !== null) {
+			window.clearTimeout(this.windowsInterruptResetTimer);
+			this.windowsInterruptResetTimer = null;
 		}
 	}
 

@@ -170,4 +170,102 @@ describe("Windows PTY Job Object host", () => {
 			waitForProcessToDisappear(processTree.grandchild, 5000),
 		]);
 	}, 20000);
+
+	windowsIt("launches a configured PowerShell script through ConPTY", async () => {
+		const directory = mkdtempSync(join(tmpdir(), "obsidian-opencode-ps1-test-"));
+		cleanupDirectories.add(directory);
+		const scriptPath = join(directory, "opencode.ps1");
+		writeFileSync(scriptPath, 'Write-Output "PS1_OK:$($args -join \",\")"');
+		const output: string[] = [];
+		const terminal = {
+			rows: 24,
+			cols: 80,
+			write: (data: string | Uint8Array) => output.push(data.toString()),
+			writeln: (data: string) => output.push(data),
+		};
+		const session = new PtySession();
+		session.spawn(terminal as unknown as Terminal, {
+			opencodePath: scriptPath,
+			cwd: directory,
+			args: ["one", "two"],
+		});
+
+		try {
+			await new Promise<void>((resolve, reject) => {
+				const deadline = Date.now() + 5000;
+				const inspect = () => {
+					if (output.join("").includes("PS1_OK:one,two")) resolve();
+					else if (Date.now() >= deadline) reject(new Error(`PowerShell script did not run: ${output.join("")}`));
+					else nodeSetTimeout(inspect, 25);
+				};
+				inspect();
+			});
+		} finally {
+			await session.kill();
+		}
+	}, 10000);
+
+	windowsIt("launches an npm command shim through ConPTY", async () => {
+		const output: string[] = [];
+		const terminal = {
+			rows: 24,
+			cols: 80,
+			write: (data: string | Uint8Array) => output.push(data.toString()),
+			writeln: (data: string) => output.push(data),
+		};
+		const session = new PtySession();
+		session.spawn(terminal as unknown as Terminal, {
+			opencodePath: join(process.cwd(), "test", "fixtures", "opencode-stub.cmd"),
+			cwd: process.cwd(),
+			args: ["one", "two"],
+		});
+
+		try {
+			await new Promise<void>((resolve, reject) => {
+				const deadline = Date.now() + 5000;
+				const inspect = () => {
+					if (output.join("").includes('ARGS:["one","two"]')) resolve();
+					else if (Date.now() >= deadline) reject(new Error(`npm command shim did not run: ${output.join("")}`));
+					else nodeSetTimeout(inspect, 25);
+				};
+				inspect();
+			});
+		} finally {
+			await session.kill();
+		}
+	}, 10000);
+
+	windowsIt("hides terminal capability probes mangled by ConPTY", async () => {
+		const output: string[] = [];
+		const terminal = {
+			rows: 24,
+			cols: 80,
+			write: (data: string | Uint8Array) => output.push(data.toString()),
+			writeln: (data: string) => output.push(data),
+		};
+		const probe = "\x1bP+q4d73\x1b\\\x1b_Gi=31337,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\";
+		const session = new PtySession();
+		session.spawn(terminal as unknown as Terminal, {
+			opencodePath: process.execPath,
+			cwd: process.cwd(),
+			args: ["-e", `process.stdout.write(${JSON.stringify(`before${probe}after`)})`],
+		});
+
+		try {
+			await new Promise<void>((resolve, reject) => {
+				const deadline = Date.now() + 5000;
+				const inspect = () => {
+					if (output.join("").includes("after")) resolve();
+					else if (Date.now() >= deadline) reject(new Error(`ConPTY probe fixture did not run: ${output.join("")}`));
+					else nodeSetTimeout(inspect, 25);
+				};
+				inspect();
+			});
+			expect(output.join("")).toContain("beforeafter");
+			expect(output.join("")).not.toContain("+q4d73Gi=31337");
+		} finally {
+			await session.kill();
+		}
+	}, 10000);
+
 });

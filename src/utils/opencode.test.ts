@@ -116,6 +116,30 @@ describe('OpencodeClient export with large sessions', () => {
 		expect(result).toBeNull();
 		expect(fs.unlinkSync).toHaveBeenCalled();
 	});
+
+	it('routes PowerShell script exports through powershell.exe', async () => {
+		const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+		const mockProcess = createMockProcess();
+		mockSpawn.mockReturnValue(mockProcess.process);
+
+		try {
+			const promise = new OpencodeClient('C:\\Users\\test\\opencode.ps1', 'C:\\vault').exportSession('session-1');
+			const [, args, options] = mockSpawn.mock.calls[0];
+			expect(args).toEqual(['/d', '/s', '/c', expect.stringContaining('OPENCODE_PLUGIN_CMD_0')]);
+			expect(options?.env).toMatchObject({
+				OPENCODE_PLUGIN_CMD_0: 'powershell.exe',
+				OPENCODE_PLUGIN_CMD_1: '-NoLogo',
+				OPENCODE_PLUGIN_CMD_5: '-File',
+				OPENCODE_PLUGIN_CMD_6: 'C:\\Users\\test\\opencode.ps1',
+				OPENCODE_PLUGIN_CMD_7: 'export',
+				OPENCODE_PLUGIN_CMD_8: 'session-1',
+			});
+			mockProcess.emitClose(1);
+			await expect(promise).resolves.toBeNull();
+		} finally {
+			platform.mockRestore();
+		}
+	});
 });
 
 describe('OpencodeClient listSessions', () => {
@@ -150,20 +174,25 @@ describe('OpencodeClient listSessions', () => {
 	});
 
 	it('passes configured variables without dropping the inherited environment', async () => {
+		const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
 		mockExecResult('[]', '');
 		const client = new OpencodeClient('opencode', '/tmp', { OPENCODE_CONFIG_DIR: '/tmp/vault', EMPTY: '' });
-		await client.listSessions();
-		expect(mockExecFile).toHaveBeenCalledOnce();
-		const [file, args, options] = mockExecFile.mock.calls[0];
-		expect(file).toBe('opencode');
-		expect(args).toEqual(['session', 'list', '--format', 'json']);
-		expect(options).toMatchObject({
-			env: {
-				HOME: process.env.HOME,
-				OPENCODE_CONFIG_DIR: '/tmp/vault',
-				EMPTY: '',
-			},
-		});
+		try {
+			await client.listSessions();
+			expect(mockExecFile).toHaveBeenCalledOnce();
+			const [file, args, options] = mockExecFile.mock.calls[0];
+			expect(file).toBe('opencode');
+			expect(args).toEqual(['session', 'list', '--format', 'json']);
+			expect(options).toMatchObject({
+				env: {
+					HOME: process.env.HOME,
+					OPENCODE_CONFIG_DIR: '/tmp/vault',
+					EMPTY: '',
+				},
+			});
+		} finally {
+			platform.mockRestore();
+		}
 	});
 
 	it('falls back to stderr when stdout is empty (issue #25 repro)', async () => {
@@ -200,6 +229,24 @@ describe('OpencodeClient listSessions', () => {
 				expect.objectContaining({
 					windowsHide: true,
 				}),
+				expect.any(Function)
+			);
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it('routes a configured PowerShell script through powershell.exe', async () => {
+		const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+		mockExecResult('[]', '');
+		const executable = 'C:\\Users\\test\\opencode.ps1';
+
+		try {
+			await new OpencodeClient(executable, 'C:\\vault').listSessions();
+			expect(mockExecFile).toHaveBeenCalledWith(
+				'node.exe',
+				['-e', expect.stringMatching(/\.ps1[\s\S]*powershell\.exe/), 'C:\\vault', executable, 'session', 'list', '--format', 'json'],
+				expect.objectContaining({ windowsHide: true }),
 				expect.any(Function)
 			);
 		} finally {
@@ -262,6 +309,7 @@ describe('OpencodeClient listSessions', () => {
 	});
 
 	it('forwards configured variables to the Flatpak host', async () => {
+		const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
 		vi.mocked(fs.existsSync).mockReturnValue(true);
 		mockExecResult('', '');
 		vi.mocked(fs.readFileSync).mockReturnValue('[]');
@@ -269,24 +317,28 @@ describe('OpencodeClient listSessions', () => {
 			OPENCODE_CONFIG_DIR: '/tmp/vault',
 			PATH: '/host/configured/bin',
 		});
-		await client.listSessions();
-		expect(mockExecFile).toHaveBeenCalledWith('flatpak-spawn', [
-			'--host',
-			'--env=OPENCODE_CONFIG_DIR=/tmp/vault',
-			'--env=PATH=/host/configured/bin',
-			'sh',
-			'-c',
-			expect.any(String),
-		], expect.any(Object), expect.any(Function));
-		const options: unknown = mockExecFile.mock.calls[0]?.[2];
-		if (typeof options !== 'object' || options === null || !('env' in options)) {
-			throw new Error('Expected Flatpak launch options with an environment');
+		try {
+			await client.listSessions();
+			expect(mockExecFile).toHaveBeenCalledWith('flatpak-spawn', [
+				'--host',
+				'--env=OPENCODE_CONFIG_DIR=/tmp/vault',
+				'--env=PATH=/host/configured/bin',
+				'sh',
+				'-c',
+				expect.any(String),
+			], expect.any(Object), expect.any(Function));
+			const options: unknown = mockExecFile.mock.calls[0]?.[2];
+			if (typeof options !== 'object' || options === null || !('env' in options)) {
+				throw new Error('Expected Flatpak launch options with an environment');
+			}
+			const env: unknown = (options as Record<string, unknown>).env;
+			if (typeof env !== 'object' || env === null) throw new Error('Expected Flatpak launcher environment');
+			const launcherPath = (env as Record<string, unknown>).PATH;
+			if (typeof launcherPath !== 'string') throw new Error('Expected Flatpak launcher PATH');
+			expect(launcherPath).not.toContain('/host/configured/bin');
+		} finally {
+			platform.mockRestore();
 		}
-		const env: unknown = (options as Record<string, unknown>).env;
-		if (typeof env !== 'object' || env === null) throw new Error('Expected Flatpak launcher environment');
-		const launcherPath = (env as Record<string, unknown>).PATH;
-		if (typeof launcherPath !== 'string') throw new Error('Expected Flatpak launcher PATH');
-		expect(launcherPath).not.toContain('/host/configured/bin');
 	});
 });
 

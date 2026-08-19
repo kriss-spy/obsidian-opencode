@@ -19475,9 +19475,10 @@ function createChildEnvironment(inherited, configured, platform = process.platfo
     if (isPathName(name))
       delete env[name];
   }
-  const delimiter3 = platform === "win32" ? path.win32.delimiter : path.delimiter;
-  const userDirs = COMMON_BIN_DIRS.map((directory) => path.join(homeDir, directory));
-  env.PATH = [...userDirs, ...(inheritedPath != null ? inheritedPath : "").split(delimiter3)].filter(Boolean).join(delimiter3);
+  const pathApi = platform === "win32" ? path.win32 : path.posix;
+  const delimiter2 = pathApi.delimiter;
+  const userDirs = COMMON_BIN_DIRS.map((directory) => pathApi.join(homeDir, directory));
+  env.PATH = [...userDirs, ...(inheritedPath != null ? inheritedPath : "").split(delimiter2)].filter(Boolean).join(delimiter2);
   return env;
 }
 function flatpakEnvironmentArgs(variables) {
@@ -19623,7 +19624,7 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // manifest.json
-var version = "1.5.0";
+var version = "1.5.1";
 
 // src/editorServer.ts
 var fs = __toESM(require("fs"));
@@ -20418,7 +20419,10 @@ var WINDOWS_EXEC_HOST_JS = String.raw`
 const { spawn } = require("child_process");
 let [cwd, file, ...args] = process.argv.slice(1);
 let options = { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true };
-if (/\.(cmd|bat)$/i.test(file)) {
+if (/\.ps1$/i.test(file)) {
+  args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file, ...args];
+  file = "powershell.exe";
+} else if (/\.(cmd|bat)$/i.test(file)) {
   const env = { ...process.env };
   const tokens = [file, ...args];
   const references = tokens.map((token, index) => {
@@ -20588,9 +20592,11 @@ var OpencodeClient = class {
       const exportEnv = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
       let child;
       if (process.platform === "win32") {
-        const windowsCommand = windowsCommandReferences([this.resolvePath(), sessionId, tmpFile], exportEnv);
-        const [executableRef, sessionRef, tmpFileRef] = windowsCommand.references;
-        const commandLine = `${executableRef} export ${sessionRef} > ${tmpFileRef} 2>NUL`;
+        const configuredExecutable = this.resolvePath();
+        const commandTokens = /\.ps1$/i.test(configuredExecutable) ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", configuredExecutable, "export", sessionId] : [configuredExecutable, "export", sessionId];
+        const windowsCommand = windowsCommandReferences([...commandTokens, tmpFile], exportEnv);
+        const tmpFileRef = windowsCommand.references.at(-1);
+        const commandLine = `${windowsCommand.references.slice(0, -1).join(" ")} > ${tmpFileRef} 2>NUL`;
         child = (0, import_child_process.spawn)(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", `"${commandLine}"`], {
           cwd: this.cwd,
           env: windowsCommand.env,
@@ -21160,6 +21166,12 @@ var WINDOWS_PTY_JOB_HOST_BASE64 = "TVqQAAMAAAAEAAAA//8AALgAAAAAAAAAQAAAAAAAAAAAA
 
 // src/modules/ptySession.ts
 var FLATPAK_OVERRIDE_COMMAND2 = "flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian";
+var WINDOWS_CONPTY_PROBE_ARTIFACT = "+q4d73Gi=31337,s=1,v=1,a=q,t=d,f=24;AAAA";
+var WINDOWS_CONPTY_XTGETTCAP_ARTIFACT = "+q4d73";
+var WINDOWS_TUI_TEARDOWN_SEQUENCES = ["\x1B[?2004l", "\x1B[?2031l"];
+function stripWindowsConPtyProbeArtifact(output) {
+  return output.split(WINDOWS_CONPTY_PROBE_ARTIFACT).join("").split(WINDOWS_CONPTY_XTGETTCAP_ARTIFACT).join("");
+}
 var UNIX_PSEUDOTERMINAL_PY = `
 import sys
 from os import execvp, read, write, waitpid, waitstatus_to_exitcode
@@ -21385,9 +21397,13 @@ var PtySession = class {
     this.ptyProcess = null;
     this.backend = null;
     this.windowsJobProcess = null;
+    this.windowsInterruptPending = false;
+    this.windowsInterruptResetTimer = null;
+    this.windowsGracefulExitRequested = false;
   }
   spawn(terminal, options) {
     var _a, _b, _c, _d, _e, _f, _g;
+    this.windowsGracefulExitRequested = false;
     if (process.platform === "win32") {
       const windowsBuild = Number(os4.release().split(".")[2]);
       if (Number.isFinite(windowsBuild) && windowsBuild > 0 && windowsBuild < 17763) {
@@ -21397,6 +21413,10 @@ var PtySession = class {
     }
     let executable = resolveExecutablePath(options.opencodePath);
     let args = [...options.args];
+    if (process.platform === "win32" && /\.ps1$/i.test(executable)) {
+      args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", executable, ...args];
+      executable = resolveExecutablePath("powershell.exe");
+    }
     const isFlatpak = process.platform !== "win32" && (fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID);
     if (isFlatpak) {
       const hostEnvironment = {
@@ -21465,7 +21485,9 @@ Unsupported Windows Node.js architecture: ${nodeArchitecture}\r
           startPipe == null ? void 0 : startPipe.write("start\n");
         });
         (_d = jobProcess.stderr) == null ? void 0 : _d.on("data", (chunk) => {
-          terminal.write(chunk);
+          const message = chunk.toString();
+          if (!message.includes("Unable to read the Windows PTY host exit code"))
+            terminal.write(chunk);
         });
         jobProcess.once("error", (error) => {
           terminal.writeln(`\r
@@ -21508,7 +21530,22 @@ Unable to start the OpenCode Windows PTY: ${message}\r
       if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
         new import_obsidian7.Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND2}' on your host system to allow command execution.`, 15e3);
       }
-      terminal.write(chunk);
+      const output = this.backend === 1 /* WindowsConPty */ ? stripWindowsConPtyProbeArtifact(str) : chunk;
+      if (output.length > 0)
+        terminal.write(output);
+      if (this.backend === 1 /* WindowsConPty */ && this.windowsInterruptPending && WINDOWS_TUI_TEARDOWN_SEQUENCES.every((sequence) => str.includes(sequence))) {
+        this.windowsInterruptPending = false;
+        if (this.windowsInterruptResetTimer !== null) {
+          window.clearTimeout(this.windowsInterruptResetTimer);
+          this.windowsInterruptResetTimer = null;
+        }
+        window.setTimeout(() => {
+          if (this.ptyProcess !== ptyProcess)
+            return;
+          this.windowsGracefulExitRequested = true;
+          ptyProcess.kill();
+        }, 100);
+      }
     });
     (_g = ptyProcess.stderr) == null ? void 0 : _g.on("data", (chunk) => {
       const str = chunk.toString();
@@ -21522,8 +21559,11 @@ Unable to start the OpenCode Windows PTY: ${message}\r
     });
     ptyProcess.on("exit", (code, signal) => {
       if (this.ptyProcess === ptyProcess) {
+        const exitStatus = this.windowsGracefulExitRequested ? 0 : code != null ? code : signal;
+        this.clearWindowsInterrupt();
+        this.windowsGracefulExitRequested = false;
         terminal.writeln(`\r
-[Process exited with code ${code != null ? code : signal}]\r
+[Process exited with code ${exitStatus}]\r
 `);
         this.ptyProcess = null;
       }
@@ -21535,6 +21575,8 @@ Error: ${err.message}\r
     });
   }
   async kill() {
+    this.clearWindowsInterrupt();
+    this.windowsGracefulExitRequested = false;
     const windowsJobProcess = this.windowsJobProcess;
     this.windowsJobProcess = null;
     if (this.ptyProcess) {
@@ -21597,7 +21639,23 @@ Error: ${err.message}\r
   writeStdin(data) {
     var _a;
     if ((_a = this.ptyProcess) == null ? void 0 : _a.stdin) {
+      if (this.backend === 1 /* WindowsConPty */ && data.includes("")) {
+        this.windowsInterruptPending = true;
+        if (this.windowsInterruptResetTimer !== null)
+          window.clearTimeout(this.windowsInterruptResetTimer);
+        this.windowsInterruptResetTimer = window.setTimeout(() => {
+          this.windowsInterruptPending = false;
+          this.windowsInterruptResetTimer = null;
+        }, 3e3);
+      }
       this.ptyProcess.stdin.write(data);
+    }
+  }
+  clearWindowsInterrupt() {
+    this.windowsInterruptPending = false;
+    if (this.windowsInterruptResetTimer !== null) {
+      window.clearTimeout(this.windowsInterruptResetTimer);
+      this.windowsInterruptResetTimer = null;
     }
   }
   sendResize(terminal) {

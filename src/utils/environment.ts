@@ -80,8 +80,9 @@ export function createChildEnvironment(
 	for (const name of Object.keys(env)) {
 		if (isPathName(name)) delete env[name];
 	}
-	const delimiter = platform === "win32" ? path.win32.delimiter : path.delimiter;
-	const userDirs = COMMON_BIN_DIRS.map((directory) => path.join(homeDir, directory));
+	const pathApi = platform === "win32" ? path.win32 : path.posix;
+	const delimiter = pathApi.delimiter;
+	const userDirs = COMMON_BIN_DIRS.map((directory) => pathApi.join(homeDir, directory));
 	env.PATH = [...userDirs, ...(inheritedPath ?? "").split(delimiter)].filter(Boolean).join(delimiter);
 	return env;
 }

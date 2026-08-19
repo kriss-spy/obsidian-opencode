@@ -3,7 +3,7 @@ import { spawn, ChildProcess, execFileSync } from "child_process";
 import { writeFileSync } from "fs";
 import { EventEmitter } from "events";
 import type { Terminal } from "@xterm/xterm";
-import { PtySession } from "./ptySession";
+import { PtySession, stripWindowsConPtyProbeArtifact } from "./ptySession";
 
 /* eslint-disable obsidianmd/prefer-window-timers -- This Node-only window mock must use Vitest's dynamically patched timers. */
 
@@ -247,6 +247,85 @@ describe("PtySession", () => {
 			job.stdout.emit("data", Buffer.from("ready\n"));
 			expect((child.stdio[4] as { write: ReturnType<typeof vi.fn> }).write).toHaveBeenCalledWith("start\n");
 		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it("launches a configured PowerShell script through powershell.exe", () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+		const child = createProcess();
+		child.pid = 1234;
+		const job = createProcess();
+		job.pid = 5678;
+		vi.mocked(spawn)
+			.mockReturnValueOnce(child as unknown as ChildProcess)
+			.mockReturnValueOnce(job as unknown as ChildProcess);
+
+		try {
+			new PtySession().spawn({ rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() } as unknown as Terminal, {
+				opencodePath: "C:\\Users\\test\\opencode.ps1",
+				cwd: "C:\\vault",
+				args: ["--help"],
+			});
+
+			expect(spawn).toHaveBeenNthCalledWith(1, expect.stringMatching(/node\.exe$/i), [
+				"-e",
+				expect.any(String),
+				expect.stringMatching(/[\\/]zigpty-x64\.node$/i),
+				"80",
+				"24",
+				expect.stringMatching(/powershell\.exe$/i),
+				"-NoLogo",
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"C:\\Users\\test\\opencode.ps1",
+				"--help",
+			], expect.any(Object));
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it("removes the terminal capability probe payload leaked by Windows ConPTY", () => {
+		expect(stripWindowsConPtyProbeArtifact(
+			"before+q4d73Gi=31337,s=1,v=1,a=q,t=d,f=24;AAAAafter"
+		)).toBe("beforeafter");
+		expect(stripWindowsConPtyProbeArtifact("before+q4d73after")).toBe("beforeafter");
+	});
+
+	it("stops a Windows PTY after an interrupt triggers TUI teardown", async () => {
+		vi.useFakeTimers();
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+		const child = createProcess();
+		child.pid = 1234;
+		const job = createProcess();
+		job.pid = 5678;
+		vi.mocked(spawn)
+			.mockReturnValueOnce(child as unknown as ChildProcess)
+			.mockReturnValueOnce(job as unknown as ChildProcess);
+		const terminal = { rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() };
+
+		try {
+			const session = new PtySession();
+			session.spawn(terminal as unknown as Terminal, {
+				opencodePath: "opencode",
+				cwd: "C:\\vault",
+				args: [],
+			});
+			session.writeStdin("\x03");
+			child.stdout.emit("data", Buffer.from("\x1b[?2004l\x1b[?2031l"));
+
+			expect(child.kill).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(100);
+			expect(child.kill).toHaveBeenCalledOnce();
+			job.stderr.emit("data", Buffer.from("Unable to read the Windows PTY host exit code\r\n"));
+			child.emit("exit", null, "SIGTERM");
+			expect(terminal.writeln).toHaveBeenCalledWith("\r\n[Process exited with code 0]\r\n");
+			expect(terminal.write.mock.calls.flat().join("")).not.toContain("Unable to read");
+		} finally {
+			vi.useRealTimers();
 			platform.mockRestore();
 		}
 	});

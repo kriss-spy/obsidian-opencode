@@ -103,7 +103,10 @@ const WINDOWS_EXEC_HOST_JS = String.raw`
 const { spawn } = require("child_process");
 let [cwd, file, ...args] = process.argv.slice(1);
 let options = { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true };
-if (/\.(cmd|bat)$/i.test(file)) {
+if (/\.ps1$/i.test(file)) {
+  args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file, ...args];
+  file = "powershell.exe";
+} else if (/\.(cmd|bat)$/i.test(file)) {
   const env = { ...process.env };
   const tokens = [file, ...args];
   const references = tokens.map((token, index) => {
@@ -290,9 +293,13 @@ export class OpencodeClient {
 			const exportEnv = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
 			let child: import("child_process").ChildProcess;
 			if (process.platform === "win32") {
-				const windowsCommand = windowsCommandReferences([this.resolvePath(), sessionId, tmpFile], exportEnv);
-				const [executableRef, sessionRef, tmpFileRef] = windowsCommand.references;
-				const commandLine = `${executableRef} export ${sessionRef} > ${tmpFileRef} 2>NUL`;
+				const configuredExecutable = this.resolvePath();
+				const commandTokens = /\.ps1$/i.test(configuredExecutable)
+					? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", configuredExecutable, "export", sessionId]
+					: [configuredExecutable, "export", sessionId];
+				const windowsCommand = windowsCommandReferences([...commandTokens, tmpFile], exportEnv);
+				const tmpFileRef = windowsCommand.references.at(-1)!;
+				const commandLine = `${windowsCommand.references.slice(0, -1).join(" ")} > ${tmpFileRef} 2>NUL`;
 				child = spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", `"${commandLine}"`], {
 					cwd: this.cwd,
 					env: windowsCommand.env,

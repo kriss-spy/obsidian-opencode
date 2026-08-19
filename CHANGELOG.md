@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-08-19
+
+### Fixed
+
+- **Windows npm launchers** — OpenCode paths installed through npm now work with Windows PowerShell (`.ps1`) and command (`.cmd`) shims for terminal and session operations, including stable and beta CLI variants.
+- **Terminal probe text after Ctrl+C** — Filters XTGETTCAP and Kitty graphics capability payloads exposed as visible text when ConPTY strips their unsupported control-sequence framing.
+- **Windows terminal hanging after Ctrl+C** — Completes shutdown after OpenCode restores terminal modes, reports a clean exit, and suppresses the internal Job Object diagnostic caused by terminating the PTY host.
+
 ## [1.5.0] - 2026-08-17
 
 ### Added
