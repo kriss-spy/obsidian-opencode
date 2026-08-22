@@ -1,25 +1,25 @@
 # Obsidian OpenCode
 
-A plugin that embeds the OpenCode CLI directly into Obsidian. Manage your AI coding sessions, browse conversation history, and resume work without leaving your vault.
+A plugin that embeds the OpenCode CLI directly into Obsidian. Browse conversation history and resume work without leaving your vault.
 
-## ✨ Features
+## Features
 
-- **Native OpenCode Execution:** Runs the OpenCode CLI directly inside Obsidian using an integrated terminal, ensuring smooth performance for long coding sessions.
+- **Native OpenCode Execution:** Runs the OpenCode CLI directly inside Obsidian using an integrated terminal, ensuring smooth performance for long sessions.
 - **Vault-Centric Workflow:** Automatically spawns the agent in your vault's root, ensuring it has immediate access to your notes and project files.
-- **Drag and Drop Context:** Drop files from Obsidian's file explorer directly into the terminal to insert them as `@path/to/file.md#1` mentions for OpenCode.
+- **Drag and Drop Context:** Drop notes from Obsidian's file explorer directly into the terminal to insert them as `@path/to/file.md#1` mentions for OpenCode.
 - **Session Manager:**
-  - **History Browser:** View a list of all your past OpenCode sessions with timestamps and working directories.
-  - **Conversation Preview:** Inspect message history, token usage, model details, and costs before deciding to resume.
+  - **History Browser:** View a list of all your past OpenCode sessions with timestamps.
+  - **Conversation Preview:** Inspect message history, token usage and model details.
   - **One-Click Restore:** Instantly resume a previous session in the embedded terminal.
   - **Export to Markdown:** Save entire conversation threads as formatted notes in your vault for documentation or review.
 
-## 🖥️ Platform Support
+## Platform Support
 
 - **Linux**: stable on my daily driver, not tested on all distros.
 - **Windows**: Beta support on Windows 10 version 1809 and later through ConPTY. Node.js must be available on `PATH` for the isolated PTY helper.
 - **macOS**: Experimental.
 
-## 🚀 Installation
+## Installation
 
 ### From Obsidian Community Plugins (Recommended)
 
@@ -38,7 +38,7 @@ A plugin that embeds the OpenCode CLI directly into Obsidian. Manage your AI cod
 
 - **Terminal:** Use the command palette (`Ctrl/Cmd + P`) and select **"OpenCode: Open Terminal"** to launch the CLI.
 - **Sessions View:** Use the command palette to select **"OpenCode: Open conversations"** to browse, restore, or export past conversations, or start a new session from the panel header.
-- **Settings:** Configure the full absolute path to your `opencode` executable, default CLI arguments, per-vault environment variables, and terminal styling preferences (font size/family) in the Obsidian settings under the "OpenCode" tab. Environment values are passed literally. Do not rely on a command name from your shell `PATH`, because desktop-launched Obsidian may not inherit your shell environment.
+- **Settings:** Configure the **full absolute path** to your `opencode` executable, default CLI arguments, per-vault environment variables, and terminal styling preferences (font size/family) in the Obsidian settings under the "OpenCode" tab. Environment values are passed literally. Do not rely on a command name from your shell `PATH`, because desktop-launched Obsidian may not inherit your shell environment.
 
 ## Development
 
@@ -58,16 +58,20 @@ Use `npm run test:obsidian:smoke` for the smaller baseline suite. Windows contri
 
 See [Testing in Obsidian](docs/testing-obsidian.md) for setup, coverage, evidence, and limitations.
 
-## ⚠️ Known Issues
+## Known Issues
 
-- **Session Previews / Loading:** While the buffer size for exporting sessions has been increased (up to 100MB), exceptionally large or deeply complex OpenCode sessions with massive token counts may still occasionally fail to preview or load properly.
+- **large session preview:** While the buffer size for exporting sessions has been increased (up to 100MB), exceptionally large or deeply complex OpenCode sessions with massive token counts may still occasionally fail to preview or load properly.
 
-- **Limited Linux support:** While the plugin should work on major distros, it's only tested on manjaro, ubuntu, and fedora.
+- **not tested on all Linux distros:** While the plugin should work on major distros, it's only tested on manjaro, ubuntu, and fedora.
 
-## 🙏 Acknowledgements
+- **Experimental Windows pty:** It's usable but far from linux and macos experience.
+
+- **shortcuts conflicts:**: Default opencode shortcuts like `Ctrl+P` could conflict with obsidian shortcuts. A solution for now is to always use leader key for opencode shortcuts.
+
+## Acknowledgements
 
 - **Terminal integration approach** inspired by [polyipseity/obsidian-terminal](https://github.com/polyipseity/obsidian-terminal) — the Python PTY proxy with `pty.fork()` and 4-pipe stdio for resize control (FD 3).
 
-## 📄 License
+## License
 
 MIT License
