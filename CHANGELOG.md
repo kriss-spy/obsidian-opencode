@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-08-28
+
+### Fixed
+
+- **Korean IME input ordering on Windows** — Let xterm own keyboard encoding and composition so committed Hangul reaches OpenCode before a following Space. Paste, drop, and synthesized mouse input now use the same ordered xterm input stream. ([#44](https://github.com/kriss-spy/obsidian-opencode/issues/44))
+- **Shortcuts while the terminal is focused** — Load OpenCode's effective keymap and give it priority on conflicts while allowing every non-conflicting Obsidian shortcut to work normally. The router respects both applications' custom keybindings and suppresses Obsidian commands during IME composition. ([#45](https://github.com/kriss-spy/obsidian-opencode/issues/45))
+
 ## [1.5.1] - 2026-08-19
 
 ### Fixed

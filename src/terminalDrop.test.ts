@@ -14,52 +14,52 @@ describe('TerminalDropHandler', () => {
     });
     it('should inject @filePath and stop (leaving menu open) for a single file', async () => {
         vi.useFakeTimers();
-        const ptyWriteMock = vi.fn();
+        const terminalInputMock = vi.fn();
         
         handleTerminalDrop({
             dragManager: { draggable: { type: 'file', file: { path: 'folder/note.md' } } },
-            ptyWrite: ptyWriteMock
+            terminalInput: terminalInputMock
         });
 
-        expect(ptyWriteMock).toHaveBeenCalledTimes(1);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@folder/note.md');
+        expect(terminalInputMock).toHaveBeenCalledTimes(1);
+        expect(terminalInputMock).toHaveBeenNthCalledWith(1, '@folder/note.md');
 
         // Fast forward all timers
         await vi.runAllTimersAsync();
         
         // No more writes!
-        expect(ptyWriteMock).toHaveBeenCalledTimes(1);
+        expect(terminalInputMock).toHaveBeenCalledTimes(1);
 
         vi.useRealTimers();
     });
 
     it('should inject space only between files for multiple files', async () => {
         vi.useFakeTimers();
-        const ptyWriteMock = vi.fn();
+        const terminalInputMock = vi.fn();
         
         handleTerminalDrop({
             dragManager: { draggable: { type: 'files', files: [{ path: 'file1.md' }, { path: 'file2.md' }] } },
-            ptyWrite: ptyWriteMock
+            terminalInput: terminalInputMock
         });
 
         // File 1
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@file1.md');
+        expect(terminalInputMock).toHaveBeenNthCalledWith(1, '@file1.md');
         
         // Wait 100ms
         await vi.advanceTimersByTimeAsync(100);
         // Space added because there is another file
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(2, ' ');
+        expect(terminalInputMock).toHaveBeenNthCalledWith(2, ' ');
         
         // Wait 50ms
         await vi.advanceTimersByTimeAsync(50);
         // File 2
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(3, '@file2.md');
+        expect(terminalInputMock).toHaveBeenNthCalledWith(3, '@file2.md');
         
         // Fast forward remaining
         await vi.runAllTimersAsync();
         
         // No more writes! (No trailing space, so menu stays open for file 2)
-        expect(ptyWriteMock).toHaveBeenCalledTimes(3);
+        expect(terminalInputMock).toHaveBeenCalledTimes(3);
 
         vi.useRealTimers();
     });
@@ -106,19 +106,19 @@ describe('TerminalDropHandler', () => {
         vi.useRealTimers();
     });
 
-    it('should prefer onFileDrop over ptyWrite when both are provided', () => {
+    it('should prefer onFileDrop over terminalInput when both are provided', () => {
         const onFileDropMock = vi.fn();
-        const ptyWriteMock = vi.fn();
+        const terminalInputMock = vi.fn();
         
         handleTerminalDrop({
             dragManager: { draggable: { type: 'file', file: { path: 'note.md' } } },
             onFileDrop: onFileDropMock,
-            ptyWrite: ptyWriteMock
+            terminalInput: terminalInputMock
         });
 
         expect(onFileDropMock).toHaveBeenCalledTimes(1);
         expect(onFileDropMock).toHaveBeenCalledWith('note.md');
-        expect(ptyWriteMock).not.toHaveBeenCalled();
+        expect(terminalInputMock).not.toHaveBeenCalled();
     });
 
     it('should fall back to dataTransfer.files when dragManager has no draggable', async () => {
@@ -146,9 +146,9 @@ describe('TerminalDropHandler', () => {
         vi.useRealTimers();
     });
 
-    it('should fall back to dataTransfer.files for ptyWrite when dragManager has no draggable', async () => {
+    it('should fall back to dataTransfer.files for terminalInput when dragManager has no draggable', async () => {
         vi.useFakeTimers();
-        const ptyWriteMock = vi.fn();
+        const terminalInputMock = vi.fn();
         
         handleTerminalDrop({
             dragManager: {},
@@ -157,14 +157,14 @@ describe('TerminalDropHandler', () => {
                     { path: 'fallback.md' } as unknown as File
                 ]
             } as unknown as DataTransfer,
-            ptyWrite: ptyWriteMock
+            terminalInput: terminalInputMock
         });
 
-        expect(ptyWriteMock).toHaveBeenCalledTimes(1);
-        expect(ptyWriteMock).toHaveBeenNthCalledWith(1, '@fallback.md');
+        expect(terminalInputMock).toHaveBeenCalledTimes(1);
+        expect(terminalInputMock).toHaveBeenNthCalledWith(1, '@fallback.md');
 
         await vi.runAllTimersAsync();
-        expect(ptyWriteMock).toHaveBeenCalledTimes(1);
+        expect(terminalInputMock).toHaveBeenCalledTimes(1);
 
         vi.useRealTimers();
     });

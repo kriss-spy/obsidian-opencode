@@ -11,7 +11,7 @@ interface DragManagerDraggable {
 export interface DropContext {
     dragManager?: { draggable?: unknown };
     dataTransfer?: DataTransfer | null;
-    ptyWrite?: (data: string) => void;
+    terminalInput?: (data: string) => void;
     onFileDrop?: (filePath: string) => void;
 }
 
@@ -59,21 +59,21 @@ export function handleTerminalDrop(context: DropContext): void {
         return;
     }
 
-    // Legacy PTY keystroke injection path
-    if (!context.ptyWrite) return;
+    // Legacy terminal keystroke injection path
+    if (!context.terminalInput) return;
 
     const processNext = (index: number) => {
         if (index >= filesToProcess.length) return;
         
         const filePath = filesToProcess[index];
-        context.ptyWrite!(`@${filePath}`);
+        context.terminalInput!(`@${filePath}`);
         
         window.setTimeout(() => {
             // If there is a next file, insert a space so they don't stick together.
             // We DO NOT inject a space (or Enter/Tab) after the LAST file.
             // This guarantees the TUI mention menu stays OPEN for the user to manually confirm.
             if (index < filesToProcess.length - 1) {
-                context.ptyWrite!(' ');
+                context.terminalInput!(' ');
             }
             
             window.setTimeout(() => {

@@ -13,6 +13,7 @@ import { PtySession } from "../modules/ptySession";
 import { TerminalKeyRouter } from "../modules/terminalKeyRouter";
 import { CLEAR_PICKER_QUERY, isOpenCodePicker, pickerTargetAtRow } from "../modules/windowsTerminalMouse";
 import { LifecycleQueue } from "../modules/lifecycleQueue";
+import { loadOpenCodeHotkeys } from "../modules/openCodeKeymap";
 
 interface VaultWithConfig {
 	getConfig?(key: string): string;
@@ -233,7 +234,7 @@ export class OpencodeTerminalView extends ItemView {
 			const delta = column - buffer.cursorX;
 			if (delta === 0) return;
 			window.setTimeout(() => {
-				this.ptySession.writeStdin((delta < 0 ? "\x1b[D" : "\x1b[C").repeat(Math.abs(delta)));
+				terminal.input((delta < 0 ? "\x1b[D" : "\x1b[C").repeat(Math.abs(delta)), true);
 			}, 0);
 		};
 		termContainer.addEventListener("mousedown", moveCursorOnMouseDown);
@@ -250,8 +251,8 @@ export class OpencodeTerminalView extends ItemView {
 			if (event.type === "mouseup") {
 				const targetText = pickerTargetAtRow(terminal.buffer.active, clickedRow);
 				if (!targetText) return;
-				this.ptySession.writeStdin(CLEAR_PICKER_QUERY + targetText);
-				window.setTimeout(() => this.ptySession.writeStdin("\r"), 300);
+				terminal.input(CLEAR_PICKER_QUERY + targetText, true);
+				window.setTimeout(() => terminal.input("\r", true), 300);
 			}
 		};
 		termContainer.addEventListener("mousedown", handlePickerMouse, true);
@@ -293,8 +294,8 @@ export class OpencodeTerminalView extends ItemView {
 		this.keyRouter.register({
 			app: this.app,
 			terminal,
-			ptySession: this.ptySession,
 			container,
+			reservedTerminalHotkeys: loadOpenCodeHotkeys(this.plugin.vaultRoot),
 		});
 		this.register(() => this.keyRouter.dispose());
 
@@ -316,7 +317,7 @@ export class OpencodeTerminalView extends ItemView {
 			handleTerminalDrop({
 				dragManager: dragMgr,
 				dataTransfer: e.dataTransfer,
-				ptyWrite: this.ptySession.getStdin() ? (data: string) => this.ptySession.writeStdin(data) : undefined,
+				terminalInput: this.ptySession.getStdin() ? (data: string) => terminal.input(data, true) : undefined,
 				onFileDrop: this.editorServer ? (filePath: string) => {
 					const normalized = normalizeVaultPath(filePath, this.plugin.vaultRoot);
 					this.editorServer!.notifyAtMentioned(normalized);

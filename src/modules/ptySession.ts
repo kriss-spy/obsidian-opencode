@@ -151,8 +151,13 @@ function executableNames(executable: string): string[] {
 	return extensions.map((extension) => `${executable}${extension}`);
 }
 
-function resolveExecutablePath(executable: string): string {
-	if (path.isAbsolute(executable)) {
+export function isAbsoluteExecutablePath(executable: string, platform: NodeJS.Platform = process.platform): boolean {
+	return (platform === "win32" ? path.win32 : path.posix).isAbsolute(executable);
+}
+
+function resolveExecutablePath(executable: string, platform: NodeJS.Platform = process.platform): string {
+	const pathApi = platform === "win32" ? path.win32 : path.posix;
+	if (isAbsoluteExecutablePath(executable, platform)) {
 		for (const candidate of executableNames(executable)) {
 			try {
 				fs.accessSync(candidate, fs.constants.X_OK);
@@ -163,11 +168,11 @@ function resolveExecutablePath(executable: string): string {
 		}
 		return executable;
 	}
-	const pathDirs = (process.env.PATH || "").split(path.delimiter);
+	const pathDirs = (process.env.PATH || "").split(pathApi.delimiter);
 	for (const dir of pathDirs) {
 		if (!dir) continue;
 		for (const candidate of executableNames(executable)) {
-			const fullPath = path.join(dir, candidate);
+			const fullPath = pathApi.join(dir, candidate);
 			try {
 				fs.accessSync(fullPath, fs.constants.X_OK);
 				return fullPath;
@@ -179,7 +184,7 @@ function resolveExecutablePath(executable: string): string {
 	const homeDir = os.homedir();
 	for (const sub of COMMON_BIN_DIRS) {
 		for (const candidate of executableNames(executable)) {
-			const fullPath = path.join(homeDir, sub, candidate);
+			const fullPath = pathApi.join(homeDir, sub, candidate);
 			try {
 				fs.accessSync(fullPath, fs.constants.X_OK);
 				return fullPath;

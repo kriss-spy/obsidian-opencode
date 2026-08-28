@@ -3,7 +3,7 @@ import { spawn, ChildProcess, execFileSync } from "child_process";
 import { writeFileSync } from "fs";
 import { EventEmitter } from "events";
 import type { Terminal } from "@xterm/xterm";
-import { PtySession, stripWindowsConPtyProbeArtifact } from "./ptySession";
+import { isAbsoluteExecutablePath, PtySession, stripWindowsConPtyProbeArtifact } from "./ptySession";
 
 /* eslint-disable obsidianmd/prefer-window-timers -- This Node-only window mock must use Vitest's dynamically patched timers. */
 
@@ -44,6 +44,10 @@ function createProcess(): MockProcess {
 }
 
 describe("PtySession", () => {
+	it("recognizes Windows absolute executable paths on every CI host", () => {
+		expect(isAbsoluteExecutablePath("C:\\Users\\test\\opencode.ps1", "win32")).toBe(true);
+		expect(isAbsoluteExecutablePath("C:\\Users\\test\\opencode.ps1", "linux")).toBe(false);
+	});
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.stubGlobal("window", {

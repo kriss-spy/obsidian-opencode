@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import { mkdirSync } from "node:fs";
 import { release } from "node:os";
+import { createHash } from "node:crypto";
 import { browser, expect } from "@wdio/globals";
 import { WebSocket, RawData } from "ws";
 
@@ -285,7 +286,8 @@ describe("OpenCode plugin in a fresh vault", function () {
 			await browser.execute(async () => {
 				await (window as any).app.plugins.plugins.opencode.newSession();
 			});
-			await waitForTerminalText(`ENV:${variableName}=${JSON.stringify(variableValue)}`);
+			const digest = createHash("sha256").update(variableValue).digest("hex").slice(0, 16);
+			await waitForTerminalText(`ENV_SHA256:${digest}`);
 		} finally {
 			await browser.execute(async (serializedEnvironmentVariables: string) => {
 				const plugin = (window as any).app.plugins.plugins.opencode;
@@ -343,6 +345,61 @@ describe("OpenCode plugin in a fresh vault", function () {
 		const newline = process.platform === "win32" ? "\\r\\n" : "\\n";
 		expect(output).toContain(`INPUT:"你好${newline}"`);
 		expect(output).not.toContain("nihao你好");
+	});
+
+	it("[issue #44] keeps a post-composition Space after committed Korean text", async function () {
+		await browser.execute(async () => {
+			const app = (window as any).app;
+			for (const leaf of app.workspace.getLeavesOfType("opencode-terminal")) {
+				await leaf.detach();
+			}
+			await app.plugins.plugins.opencode.activateTerminalView();
+		});
+		await expect(browser.$(".opencode-terminal-container .xterm-helper-textarea")).toExist();
+		await waitForTerminalText("OpenCode isolated test stub");
+
+		await browser.execute(async () => {
+			const app = (window as any).app;
+			const view = app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			const textarea = view.terminal.textarea as HTMLTextAreaElement;
+			view.terminal.clear();
+			textarea.focus();
+			textarea.dispatchEvent(new CompositionEvent("compositionstart", {
+				bubbles: true,
+				data: "",
+			}));
+			textarea.value = "안녕";
+			textarea.dispatchEvent(new CompositionEvent("compositionupdate", {
+				bubbles: true,
+				data: "안녕",
+			}));
+			// Chromium updates the textarea before xterm records the end of the
+			// composition range on the next task.
+			await new Promise((resolve) => window.setTimeout(resolve, 0));
+			textarea.dispatchEvent(new CompositionEvent("compositionend", {
+				bubbles: true,
+				data: "안녕",
+			}));
+			const space = new KeyboardEvent("keydown", {
+				key: " ",
+				code: "Space",
+				bubbles: true,
+				cancelable: true,
+			});
+			// Chromium reports the legacy keyCode to xterm's composition helper.
+			Object.defineProperty(space, "keyCode", { value: 32 });
+			textarea.dispatchEvent(space);
+			// Electron does not translate an untrusted synthetic keydown into text;
+			// supply the character at xterm's public input boundary instead.
+			view.terminal.input(" ", true);
+			await new Promise((resolve) => window.setTimeout(resolve, 20));
+			view.terminal.input("\r", true);
+		});
+
+		await waitForTerminalText("INPUT:");
+		const output = await terminalBuffer();
+		const newline = process.platform === "win32" ? "\\r\\n" : "\\n";
+		expect(output).toContain(`INPUT:"안녕 ${newline}"`);
 	});
 
 	it("[issue #22] resizes the running Windows ConPTY", async function () {

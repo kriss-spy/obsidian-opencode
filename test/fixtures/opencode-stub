@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+const { createHash } = require("node:crypto");
 const args = process.argv.slice(2);
 
 if (args.slice(0, 2).join(" ") === "session list") {
@@ -35,7 +36,11 @@ if (args.slice(0, 2).join(" ") === "session list") {
 		console.log(`OpenCode isolated test stub ARGS:${JSON.stringify(args)}`);
 	}
 	if (process.env.OBSIDIAN_OPENCODE_TEST_VARIABLE !== undefined) {
-		console.log(`ENV:OBSIDIAN_OPENCODE_TEST_VARIABLE=${JSON.stringify(process.env.OBSIDIAN_OPENCODE_TEST_VARIABLE)}`);
+		const digest = createHash("sha256")
+			.update(process.env.OBSIDIAN_OPENCODE_TEST_VARIABLE)
+			.digest("hex")
+			.slice(0, 16);
+		console.log(`ENV_SHA256:${digest}`);
 	}
 	if (process.env.OBSIDIAN_OPENCODE_REPORT_SIZE) {
 		setTimeout(() => console.log(`SIZE:${process.stdout.columns}x${process.stdout.rows}`), 100);

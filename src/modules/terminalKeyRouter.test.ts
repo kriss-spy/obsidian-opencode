@@ -1,39 +1,39 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { Scope } from "obsidian";
 import type { KeyRouterContext } from "./terminalKeyRouter";
 import { TerminalKeyRouter } from "./terminalKeyRouter";
 
-interface TestKeyboardEvent {
-	key: string;
-	ctrlKey?: boolean;
-	metaKey?: boolean;
-	altKey?: boolean;
-	shiftKey?: boolean;
-}
+function registerRouter(
+	customKeys: Record<string, Array<{ modifiers: string[]; key: string }> | undefined> = {},
+	reservedTerminalHotkeys: ReadonlySet<string> = new Set(),
+) {
+	const containerHandlers = new Map<string, (event: Event) => void>();
 
-function registerRouter() {
-	let keydownHandler: ((event: KeyboardEvent) => void) | undefined;
-	const activeDocument = {
-		addEventListener: (type: string, handler: (event: KeyboardEvent) => void) => {
-			if (type === "keydown") keydownHandler = handler;
-		},
-		removeEventListener: vi.fn(),
-	};
-	vi.stubGlobal("activeDocument", activeDocument);
-
-	const writeStdin = vi.fn();
+	const terminalPaste = vi.fn();
+	const executeCommandById = vi.fn(() => true);
+	const pushScope = vi.fn();
+	const popScope = vi.fn();
 	const context = {
 		app: {
 			vault: { adapter: {}, configDir: "test-config" },
-			hotkeyManager: { defaultKeys: {} },
+			hotkeyManager: {
+				defaultKeys: {
+					"opencode:new-session": [{ modifiers: ["Mod"], key: "n" }],
+					"app:open-settings": [{ modifiers: ["Mod"], key: "," }],
+				},
+				customKeys,
+			},
+			commands: { executeCommandById },
+			keymap: { pushScope, popScope },
 		},
-		terminal: {},
-		ptySession: {
-			getStdin: () => ({}),
-			writeStdin,
-		},
+		terminal: { paste: terminalPaste },
+		reservedTerminalHotkeys,
 		container: {
 			contains: () => true,
-			addEventListener: vi.fn(),
+			ownerDocument: { activeElement: null },
+			addEventListener: (type: string, handler: (event: Event) => void) => {
+				containerHandlers.set(type, handler);
+			},
 			removeEventListener: vi.fn(),
 		},
 	} as unknown as KeyRouterContext;
@@ -42,59 +42,142 @@ function registerRouter() {
 	router.register(context);
 
 	return {
-		dispatchKeydown: (init: TestKeyboardEvent) => {
+		terminalPaste,
+		executeCommandById,
+		pushScope,
+		popScope,
+		dispatchContainerEvent: (type: string, event: Partial<FocusEvent> = {}) => {
+			containerHandlers.get(type)?.(event as FocusEvent);
+		},
+		dispatchPaste: (text: string) => {
 			const preventDefault = vi.fn();
 			const stopImmediatePropagation = vi.fn();
-			const event = {
-				ctrlKey: false,
-				metaKey: false,
-				altKey: false,
-				shiftKey: false,
-				isComposing: false,
+			containerHandlers.get("paste")?.({
 				target: {},
+				clipboardData: { getData: () => text },
 				preventDefault,
 				stopImmediatePropagation,
-				...init,
-			} as unknown as KeyboardEvent;
-			keydownHandler?.(event);
+			} as unknown as ClipboardEvent);
 			return { preventDefault, stopImmediatePropagation };
 		},
-		writeStdin,
 		router,
 	};
 }
 
-afterEach(() => {
-	vi.unstubAllGlobals();
-});
-
 describe("TerminalKeyRouter", () => {
-	it.each([
-		{},
-		{ shiftKey: true },
-		{ ctrlKey: true },
-		{ metaKey: true },
-		{ altKey: true },
-	])("does not forward Caps Lock presses with modifiers %o", (modifiers) => {
-		const { dispatchKeydown, writeStdin, router } = registerRouter();
+	it("activates an isolated scope for effective Obsidian shortcuts", () => {
+		const { dispatchContainerEvent, executeCommandById, pushScope, router } = registerRouter();
 
-		const event = dispatchKeydown({ key: "CapsLock", ...modifiers });
+		dispatchContainerEvent("focusin");
 
-		expect(writeStdin).not.toHaveBeenCalled();
-		expect(event.preventDefault).not.toHaveBeenCalled();
-		expect(event.stopImmediatePropagation).not.toHaveBeenCalled();
+		expect(pushScope).toHaveBeenCalledOnce();
+		const scope = pushScope.mock.calls[0][0] as Scope & {
+			handlers: Array<{
+				modifiers: string[] | null;
+				key: string | null;
+				callback: (event: KeyboardEvent, context: unknown) => unknown;
+			}>;
+		};
+		expect(scope.handlers.map(({ modifiers, key }) => ({ modifiers, key }))).toEqual([
+			{ modifiers: ["Mod"], key: "n" },
+			{ modifiers: ["Mod"], key: "," },
+		]);
+		scope.handlers[0].callback({ isComposing: false } as KeyboardEvent, {});
+		expect(executeCommandById).toHaveBeenCalledWith("opencode:new-session");
 		router.dispose();
 	});
 
-	it("continues forwarding text and modifier sequences", () => {
-		const { dispatchKeydown, writeStdin, router } = registerRouter();
+	it("uses a custom hotkey instead of the command default", () => {
+		const { dispatchContainerEvent, pushScope, router } = registerRouter({
+			"opencode:new-session": [{ modifiers: ["Alt"], key: "x" }],
+		});
 
-		dispatchKeydown({ key: "a" });
-		dispatchKeydown({ key: "A", shiftKey: true });
-		dispatchKeydown({ key: "c", ctrlKey: true });
-		dispatchKeydown({ key: "x", altKey: true });
+		dispatchContainerEvent("focusin");
+		const scope = pushScope.mock.calls[0][0] as Scope & {
+			handlers: Array<{ modifiers: string[] | null; key: string | null }>;
+		};
+		expect(scope.handlers.map(({ modifiers, key }) => ({ modifiers, key }))).toEqual([
+			{ modifiers: ["Alt"], key: "x" },
+			{ modifiers: ["Mod"], key: "," },
+		]);
+		router.dispose();
+	});
 
-		expect(writeStdin.mock.calls).toEqual([["a"], ["A"], ["\x03"], ["\x1bx"]]);
+	it("runs a user-assigned Obsidian shortcut when OpenCode does not own it", () => {
+		const commandId = "darlal-switcher-plus:switcher-plus:open-commands";
+		const { dispatchContainerEvent, executeCommandById, pushScope, router } = registerRouter({
+			[commandId]: [{ modifiers: ["Mod"], key: "P" }],
+		});
+
+		dispatchContainerEvent("focusin");
+		const scope = pushScope.mock.calls[0][0] as Scope & {
+			handlers: Array<{ key: string | null; callback: (event: KeyboardEvent) => unknown }>;
+		};
+		const ctrlP = scope.handlers.find(({ key }) => key === "P");
+		expect(ctrlP).toBeDefined();
+		ctrlP!.callback({ isComposing: false } as KeyboardEvent);
+		expect(executeCommandById).toHaveBeenCalledWith(commandId);
+		router.dispose();
+	});
+
+	it("leaves a shortcut with OpenCode when OpenCode owns it", () => {
+		const commandId = "darlal-switcher-plus:switcher-plus:open-commands";
+		const { dispatchContainerEvent, pushScope, router } = registerRouter({
+			[commandId]: [{ modifiers: ["Mod"], key: "P" }],
+		}, new Set(["ctrl+p"]));
+
+		dispatchContainerEvent("focusin");
+		const scope = pushScope.mock.calls[0][0] as Scope & { handlers: Array<{ key: string | null }> };
+		expect(scope.handlers.some(({ key }) => key === "P")).toBe(false);
+		router.dispose();
+	});
+
+	it("does not restore a default hotkey the user removed", () => {
+		const { dispatchContainerEvent, pushScope, router } = registerRouter({
+			"opencode:new-session": [],
+		});
+
+		dispatchContainerEvent("focusin");
+		const scope = pushScope.mock.calls[0][0] as Scope & { handlers: unknown[] };
+		expect(scope.handlers).toHaveLength(1);
+		expect(scope.handlers[0]).toMatchObject({ modifiers: ["Mod"], key: "," });
+		router.dispose();
+	});
+
+	it("does not run an Obsidian command during IME composition", () => {
+		const { dispatchContainerEvent, executeCommandById, pushScope, router } = registerRouter();
+
+		dispatchContainerEvent("focusin");
+		const scope = pushScope.mock.calls[0][0] as Scope & {
+			handlers: Array<{ callback: (event: KeyboardEvent, context: unknown) => unknown }>;
+		};
+		const result = scope.handlers[0].callback({ isComposing: true } as KeyboardEvent, {});
+		expect(result).toBeUndefined();
+		expect(executeCommandById).not.toHaveBeenCalled();
+		router.dispose();
+	});
+
+	it("pushes the terminal scope once on focus and removes it on blur", () => {
+		const { dispatchContainerEvent, pushScope, popScope, router } = registerRouter();
+
+		dispatchContainerEvent("focusin");
+		dispatchContainerEvent("focusin");
+		dispatchContainerEvent("focusout", { relatedTarget: null });
+
+		expect(pushScope).toHaveBeenCalledOnce();
+		expect(popScope).toHaveBeenCalledOnce();
+		expect(popScope).toHaveBeenCalledWith(pushScope.mock.calls[0][0]);
+		router.dispose();
+	});
+
+	it("routes paste through xterm's input path", () => {
+		const { dispatchPaste, terminalPaste, router } = registerRouter();
+
+		const event = dispatchPaste("first\r\nsecond\rthird");
+
+		expect(terminalPaste).toHaveBeenCalledWith("first\nsecond\nthird");
+		expect(event.preventDefault).toHaveBeenCalledOnce();
+		expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
 		router.dispose();
 	});
 });
