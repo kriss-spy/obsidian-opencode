@@ -10,7 +10,7 @@ const COMMON_BIN_DIRS = [
 	"bin",
 ] as const;
 
-const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian";
+const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian";
 
 function augmentPath(originalPath?: string): string {
 	const homeDir = os.homedir();
