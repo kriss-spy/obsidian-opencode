@@ -9,7 +9,7 @@ import { WINDOWS_PTY_NATIVE_ARM64_BASE64 } from "../pty/windowsPtyNativeArm64";
 import { WINDOWS_PTY_JOB_HOST_BASE64 } from "../pty/windowsPtyJobHost";
 import { createChildEnvironment, EnvironmentVariables, flatpakEnvironmentArgs } from "../utils/environment";
 
-const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian";
+const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian";
 const WINDOWS_CONPTY_PROBE_ARTIFACT = "+q4d73Gi=31337,s=1,v=1,a=q,t=d,f=24;AAAA";
 const WINDOWS_CONPTY_XTGETTCAP_ARTIFACT = "+q4d73";
 const WINDOWS_TUI_TEARDOWN_SEQUENCES = ["\x1b[?2004l", "\x1b[?2031l"];
@@ -20,8 +20,37 @@ export function stripWindowsConPtyProbeArtifact(output: string): string {
 		.split(WINDOWS_CONPTY_XTGETTCAP_ARTIFACT).join("");
 }
 
+// When the PTY proxy execs into `flatpak-spawn --host`, the host-side process
+// has no controlling terminal, so the kernel never delivers SIGWINCH after
+// TIOCSWINSZ (the winsize itself propagates, the signal does not). The TUI
+// then keeps drawing at its startup size and overlaps itself on every
+// terminal resize. This host-side supervisor polls the PTY winsize and
+// forwards SIGWINCH explicitly. It also tears the app down when the plugin
+// kills the proxy, since nothing else carries the signal across the portal
+// boundary. Must not contain single quotes (it is passed as one argv element
+// to `sh -c`).
+const FLATPAK_HOST_RESIZE_WRAPPER = `
+token=$1
+shift
+"$@" 0<&0 &
+pid=$!
+last=""
+trap 'kill -TERM "$pid" 2>/dev/null; exit 0' TERM INT HUP
+while kill -0 "$pid" 2>/dev/null; do
+  cur=$(stty size 2>/dev/null)
+  if [ -n "$cur" ] && [ "$cur" != "$last" ]; then
+    kill -WINCH "$pid" 2>/dev/null
+    last="$cur"
+  fi
+  sleep 0.3
+done
+wait "$pid"
+`;
+
 const UNIX_PSEUDOTERMINAL_PY = `
-import sys
+import sys, os
+import signal
+import subprocess
 from os import execvp, read, write, waitpid, waitstatus_to_exitcode
 from fcntl import ioctl
 from pty import fork
@@ -31,6 +60,20 @@ from selectors import DefaultSelector, EVENT_READ
 
 _CHUNK_SIZE = 1024
 _CMDIO = 3
+_KILL_TOKEN = os.environ.get("OPENCODE_PTY_KILL_TOKEN", "")
+
+def forward_termination(signum, frame):
+    # Killing the proxy closes the PTY master, but the kernel cannot carry a
+    # hangup across the flatpak portal boundary to the host-side process.
+    # The kill token identifies this session's host supervisor so pkill can
+    # deliver SIGTERM to it (the supervisor then terminates the TUI).
+    if _KILL_TOKEN:
+        subprocess.Popen(["flatpak-spawn", "--host", "pkill", "--signal", "TERM", "-f", _KILL_TOKEN])
+    sys.exit(0)
+
+if _KILL_TOKEN:
+    signal.signal(signal.SIGTERM, forward_termination)
+    signal.signal(signal.SIGINT, forward_termination)
 
 def write_all(fd, data):
     while data:
@@ -40,6 +83,14 @@ def main():
     pid, pty_fd = fork()
     if pid == 0:
         execvp(sys.argv[1], sys.argv[1:])
+
+    initial_size = os.environ.get("OPENCODE_PTY_INITIAL_SIZE", "")
+    if initial_size:
+        try:
+            rows, columns = (int(s) for s in initial_size.split("x", 2))
+            ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, 0, 0))
+        except (ValueError, OSError):
+            pass
 
     with DefaultSelector() as selector:
         selector.register(pty_fd, EVENT_READ, lambda: forward_pty(pty_fd))
@@ -288,13 +339,19 @@ export class PtySession {
 		}
 
 		const isFlatpak = process.platform !== "win32" && (fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID);
+		// Unique per-session token embedded in the host wrapper's command line;
+		// lets the proxy tear the host process down when the plugin kills the
+		// PTY (no signal path exists across the flatpak portal boundary).
+		const killToken = `opencode-pty-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 		if (isFlatpak) {
 			const hostEnvironment = {
 				...(options.environmentVariables ?? {}),
 				TERM: "xterm-256color",
 				...(options.editorPort ? { OPENCODE_EDITOR_SSE_PORT: String(options.editorPort) } : {}),
 			};
-			args = ["--host", ...flatpakEnvironmentArgs(hostEnvironment), executable, ...args];
+			// Wrap the host command so SIGWINCH is forwarded on resize; the
+			// kernel cannot deliver it across the flatpak portal boundary.
+			args = ["--host", ...flatpakEnvironmentArgs(hostEnvironment), "sh", "-c", FLATPAK_HOST_RESIZE_WRAPPER.trim(), "opencode-host-wrapper", killToken, executable, ...args];
 			executable = "flatpak-spawn";
 		}
 
@@ -303,6 +360,12 @@ export class PtySession {
 		env.TERM = "xterm-256color";
 		if (options.editorPort) {
 			env.OPENCODE_EDITOR_SSE_PORT = String(options.editorPort);
+		}
+		// pty.fork() starts at 0x0, which the TUI cannot use. Apply the
+		// terminal's current size to the PTY before the app starts.
+		env.OPENCODE_PTY_INITIAL_SIZE = `${Math.min(65535, Math.max(1, terminal.rows))}x${Math.min(65535, Math.max(1, terminal.cols))}`;
+		if (isFlatpak) {
+			env.OPENCODE_PTY_KILL_TOKEN = killToken;
 		}
 
 		let ptyProcess: ChildProcess;
