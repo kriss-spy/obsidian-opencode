@@ -131,8 +131,14 @@ function bindingKeys(value: BindingValue | undefined, leader: string): string[] 
 	}).filter(Boolean);
 }
 
-export function resolveOpenCodeHotkeys(overrides: Record<string, BindingValue> = {}): ReadonlySet<string> {
+export function resolveOpenCodeHotkeys(
+	overrides: Record<string, BindingValue> = {},
+	platform: NodeJS.Platform = process.platform,
+): ReadonlySet<string> {
 	const bindings = { ...DEFAULT_BINDINGS, ...overrides };
+	if (platform === "win32" && !Object.prototype.hasOwnProperty.call(overrides, "terminal_suspend")) {
+		bindings.terminal_suspend = false;
+	}
 	const leaderValue = bindings.leader;
 	const leader = bindingKeys(leaderValue, "ctrl+x")[0] ?? "ctrl+x";
 	const result = new Set<string>([leader]);
@@ -171,12 +177,50 @@ function parseJsonc(text: string): unknown {
 		}
 		result += char;
 	}
-	return JSON.parse(result.replace(/,\s*([}\]])/g, "$1"));
+
+	let withoutTrailingCommas = "";
+	inString = false;
+	escaped = false;
+	for (let index = 0; index < result.length; index += 1) {
+		const char = result[index];
+		if (inString) {
+			withoutTrailingCommas += char;
+			if (escaped) escaped = false;
+			else if (char === "\\") escaped = true;
+			else if (char === '"') inString = false;
+			continue;
+		}
+		if (char === '"') {
+			inString = true;
+			withoutTrailingCommas += char;
+			continue;
+		}
+		if (char === ",") {
+			let following = index + 1;
+			while (/\s/.test(result[following] ?? "")) following += 1;
+			if (result[following] === "}" || result[following] === "]") continue;
+		}
+		withoutTrailingCommas += char;
+	}
+	return JSON.parse(withoutTrailingCommas);
 }
 
-function readOverrides(file: string): Record<string, BindingValue> {
+function readOverrides(file: string, env: NodeJS.ProcessEnv): Record<string, BindingValue> {
 	try {
-		const parsed = parseJsonc(fs.readFileSync(file, "utf8")) as { keybinds?: unknown };
+		let source = fs.readFileSync(file, "utf8").replace(/\{env:([^}]+)\}/g, (_, name: string) => env[name] ?? "");
+		source = source.replace(/\{file:([^}]+)\}/g, (token: string, reference: string, offset: number) => {
+			const lineStart = source.lastIndexOf("\n", offset - 1) + 1;
+			if (source.slice(lineStart, offset).trimStart().startsWith("//")) return token;
+			const referencedFile = reference.startsWith("~/")
+				? path.join(os.homedir(), reference.slice(2))
+				: path.resolve(path.dirname(file), reference);
+			try {
+				return JSON.stringify(fs.readFileSync(referencedFile, "utf8").trim()).slice(1, -1);
+			} catch {
+				return "";
+			}
+		});
+		const parsed = parseJsonc(source) as { keybinds?: unknown };
 		return parsed && typeof parsed.keybinds === "object" && parsed.keybinds
 			? parsed.keybinds as Record<string, BindingValue>
 			: {};
@@ -197,9 +241,14 @@ function configFiles(cwd: string, env: NodeJS.ProcessEnv): string[] {
 		if (parent === directory) break;
 		directory = parent;
 	}
-	for (const directory of ancestors) {
-		files.push(path.join(directory, "tui.json"), path.join(directory, "tui.jsonc"));
-		files.push(path.join(directory, ".opencode", "tui.json"), path.join(directory, ".opencode", "tui.jsonc"));
+	const projectConfigFlag = env.OPENCODE_DISABLE_PROJECT_CONFIG?.toLowerCase();
+	if (projectConfigFlag !== "true" && projectConfigFlag !== "1") {
+		for (const directory of ancestors) {
+			files.push(path.join(directory, "tui.json"), path.join(directory, "tui.jsonc"));
+		}
+		for (const directory of [...ancestors].reverse()) {
+			files.push(path.join(directory, ".opencode", "tui.json"), path.join(directory, ".opencode", "tui.jsonc"));
+		}
 	}
 	if (env.OPENCODE_CONFIG_DIR) {
 		files.push(path.join(env.OPENCODE_CONFIG_DIR, "tui.json"), path.join(env.OPENCODE_CONFIG_DIR, "tui.jsonc"));
@@ -209,6 +258,6 @@ function configFiles(cwd: string, env: NodeJS.ProcessEnv): string[] {
 
 export function loadOpenCodeHotkeys(cwd: string, env: NodeJS.ProcessEnv = process.env): ReadonlySet<string> {
 	const overrides: Record<string, BindingValue> = {};
-	for (const file of configFiles(cwd, env)) Object.assign(overrides, readOverrides(file));
+	for (const file of configFiles(cwd, env)) Object.assign(overrides, readOverrides(file, env));
 	return resolveOpenCodeHotkeys(overrides);
 }

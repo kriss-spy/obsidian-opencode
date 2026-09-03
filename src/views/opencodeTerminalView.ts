@@ -14,6 +14,7 @@ import { TerminalKeyRouter } from "../modules/terminalKeyRouter";
 import { CLEAR_PICKER_QUERY, isOpenCodePicker, pickerTargetAtRow } from "../modules/windowsTerminalMouse";
 import { LifecycleQueue } from "../modules/lifecycleQueue";
 import { loadOpenCodeHotkeys } from "../modules/openCodeKeymap";
+import { mergeEnvironmentVariables } from "../utils/environment";
 
 interface VaultWithConfig {
 	getConfig?(key: string): string;
@@ -51,6 +52,13 @@ export class OpencodeTerminalView extends ItemView {
 	}
 
 	async onOpen() {
+		const terminalCwd = this.plugin.sessionCwd
+			|| this.plugin.settings.defaultWorkingDirectory
+			|| this.plugin.vaultRoot;
+		const terminalEnvironment = mergeEnvironmentVariables(
+			process.env,
+			this.plugin.settings.environmentVariables,
+		);
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
 		container.addClass("opencode-terminal-container");
@@ -295,7 +303,7 @@ export class OpencodeTerminalView extends ItemView {
 			app: this.app,
 			terminal,
 			container,
-			reservedTerminalHotkeys: loadOpenCodeHotkeys(this.plugin.vaultRoot),
+			reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
 		});
 		this.register(() => this.keyRouter.dispose());
 

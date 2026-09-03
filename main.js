@@ -19965,9 +19965,12 @@ function bindingKeys(value, leader) {
     });
   }).filter(Boolean);
 }
-function resolveOpenCodeHotkeys(overrides = {}) {
+function resolveOpenCodeHotkeys(overrides = {}, platform = process.platform) {
   var _a;
   const bindings = { ...DEFAULT_BINDINGS, ...overrides };
+  if (platform === "win32" && !Object.prototype.hasOwnProperty.call(overrides, "terminal_suspend")) {
+    bindings.terminal_suspend = false;
+  }
   const leaderValue = bindings.leader;
   const leader = (_a = bindingKeys(leaderValue, "ctrl+x")[0]) != null ? _a : "ctrl+x";
   const result = /* @__PURE__ */ new Set([leader]);
@@ -19980,6 +19983,7 @@ function resolveOpenCodeHotkeys(overrides = {}) {
   return result;
 }
 function parseJsonc(text) {
+  var _a;
   let result = "";
   let inString = false;
   let escaped = false;
@@ -20016,17 +20020,62 @@ function parseJsonc(text) {
     }
     result += char;
   }
-  return JSON.parse(result.replace(/,\s*([}\]])/g, "$1"));
+  let withoutTrailingCommas = "";
+  inString = false;
+  escaped = false;
+  for (let index = 0; index < result.length; index += 1) {
+    const char = result[index];
+    if (inString) {
+      withoutTrailingCommas += char;
+      if (escaped)
+        escaped = false;
+      else if (char === "\\")
+        escaped = true;
+      else if (char === '"')
+        inString = false;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      withoutTrailingCommas += char;
+      continue;
+    }
+    if (char === ",") {
+      let following = index + 1;
+      while (/\s/.test((_a = result[following]) != null ? _a : ""))
+        following += 1;
+      if (result[following] === "}" || result[following] === "]")
+        continue;
+    }
+    withoutTrailingCommas += char;
+  }
+  return JSON.parse(withoutTrailingCommas);
 }
-function readOverrides(file) {
+function readOverrides(file, env) {
   try {
-    const parsed = parseJsonc(fs2.readFileSync(file, "utf8"));
+    let source = fs2.readFileSync(file, "utf8").replace(/\{env:([^}]+)\}/g, (_, name) => {
+      var _a;
+      return (_a = env[name]) != null ? _a : "";
+    });
+    source = source.replace(/\{file:([^}]+)\}/g, (token, reference, offset) => {
+      const lineStart = source.lastIndexOf("\n", offset - 1) + 1;
+      if (source.slice(lineStart, offset).trimStart().startsWith("//"))
+        return token;
+      const referencedFile = reference.startsWith("~/") ? path4.join(os3.homedir(), reference.slice(2)) : path4.resolve(path4.dirname(file), reference);
+      try {
+        return JSON.stringify(fs2.readFileSync(referencedFile, "utf8").trim()).slice(1, -1);
+      } catch (e) {
+        return "";
+      }
+    });
+    const parsed = parseJsonc(source);
     return parsed && typeof parsed.keybinds === "object" && parsed.keybinds ? parsed.keybinds : {};
   } catch (e) {
     return {};
   }
 }
 function configFiles(cwd, env) {
+  var _a;
   const configHome = env.XDG_CONFIG_HOME || path4.join(os3.homedir(), ".config");
   const files = [path4.join(configHome, "opencode", "tui.json"), path4.join(configHome, "opencode", "tui.jsonc")];
   if (env.OPENCODE_TUI_CONFIG)
@@ -20039,9 +20088,14 @@ function configFiles(cwd, env) {
       break;
     directory = parent;
   }
-  for (const directory of ancestors) {
-    files.push(path4.join(directory, "tui.json"), path4.join(directory, "tui.jsonc"));
-    files.push(path4.join(directory, ".opencode", "tui.json"), path4.join(directory, ".opencode", "tui.jsonc"));
+  const projectConfigFlag = (_a = env.OPENCODE_DISABLE_PROJECT_CONFIG) == null ? void 0 : _a.toLowerCase();
+  if (projectConfigFlag !== "true" && projectConfigFlag !== "1") {
+    for (const directory of ancestors) {
+      files.push(path4.join(directory, "tui.json"), path4.join(directory, "tui.jsonc"));
+    }
+    for (const directory of [...ancestors].reverse()) {
+      files.push(path4.join(directory, ".opencode", "tui.json"), path4.join(directory, ".opencode", "tui.jsonc"));
+    }
   }
   if (env.OPENCODE_CONFIG_DIR) {
     files.push(path4.join(env.OPENCODE_CONFIG_DIR, "tui.json"), path4.join(env.OPENCODE_CONFIG_DIR, "tui.jsonc"));
@@ -20051,7 +20105,7 @@ function configFiles(cwd, env) {
 function loadOpenCodeHotkeys(cwd, env = process.env) {
   const overrides = {};
   for (const file of configFiles(cwd, env))
-    Object.assign(overrides, readOverrides(file));
+    Object.assign(overrides, readOverrides(file, env));
   return resolveOpenCodeHotkeys(overrides);
 }
 
@@ -20210,6 +20264,11 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
   }
   async onOpen() {
     var _a, _b;
+    const terminalCwd = this.plugin.sessionCwd || this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
+    const terminalEnvironment = mergeEnvironmentVariables(
+      process.env,
+      this.plugin.settings.environmentVariables
+    );
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass("opencode-terminal-container");
@@ -20425,7 +20484,7 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
       app: this.app,
       terminal,
       container,
-      reservedTerminalHotkeys: loadOpenCodeHotkeys(this.plugin.vaultRoot)
+      reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment)
     });
     this.register(() => this.keyRouter.dispose());
     const dragOverHandler = (e) => {
