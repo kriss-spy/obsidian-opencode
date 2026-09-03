@@ -5,7 +5,7 @@ import * as os from "os";
 import * as path from "path";
 import { createChildEnvironment, EnvironmentVariables, flatpakEnvironmentArgs } from "./environment";
 
-const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.flatpak md.obsidian.Obsidian";
+const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian";
 
 export interface OpencodeSession {
 	id: string;

@@ -7,12 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.5.2] - 2026-08-28
+## [1.5.3] - 2026-09-03
 
 ### Fixed
 
 - **Korean IME input ordering on Windows** — Let xterm own keyboard encoding and composition so committed Hangul reaches OpenCode before a following Space. Paste, drop, and synthesized mouse input now use the same ordered xterm input stream. ([#44](https://github.com/kriss-spy/obsidian-opencode/issues/44))
 - **Shortcuts while the terminal is focused** — Load OpenCode's effective keymap and give it priority on conflicts while allowing every non-conflicting Obsidian shortcut to work normally. The router respects both applications' custom keybindings and suppresses Obsidian commands during IME composition. ([#45](https://github.com/kriss-spy/obsidian-opencode/issues/45))
+
+## [1.5.2] - 2026-08-31
+
+### Fixed
+
+- **Flatpak override command granted the wrong DBus name** — The permission notice instructed `--talk-name=org.freedesktop.flatpak` (lowercase), but DBus names are case-sensitive and `flatpak-spawn --host` requires access to `org.freedesktop.Flatpak`. The override therefore had no effect and every host command failed with `org.freedesktop.DBus.Error.ServiceUnknown`. ([#25](https://github.com/kriss-spy/obsidian-opencode/issues/25))
+- **OpenCode TUI layout broke on resize under Flatpak** — Across the `flatpak-spawn --host` portal boundary the kernel never delivers `SIGWINCH` to the host-side process (no controlling terminal), so the TUI started at a 0x0 PTY and never learned about terminal resizes, drawing at stale geometry. The PTY proxy now applies the terminal's initial size at startup, and a host-side supervisor polls the PTY winsize and forwards `SIGWINCH` to the TUI explicitly. ([#25](https://github.com/kriss-spy/obsidian-opencode/issues/25))
+- **Orphaned OpenCode processes after terminal close on Flatpak** — Killing the PTY proxy closed the PTY master, but the hangup could not cross the portal boundary, leaving host-side OpenCode processes behind on plugin reload or terminal close. The proxy now forwards termination to the session's host supervisor via a per-session kill token, which tears the TUI down cleanly. ([#25](https://github.com/kriss-spy/obsidian-opencode/issues/25))
 
 ## [1.5.1] - 2026-08-19
 
@@ -204,7 +212,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session manager with history browser, conversation preview, one-click restore, and Markdown export.
 - Settings for `opencode` binary path, default CLI arguments, and terminal styling.
 
-[Unreleased]: https://github.com/kriss-spy/obsidian-opencode/compare/1.5.0...HEAD
+[Unreleased]: https://github.com/kriss-spy/obsidian-opencode/compare/1.5.2...HEAD
+[1.5.2]: https://github.com/kriss-spy/obsidian-opencode/compare/1.5.1...1.5.2
 [1.5.0]: https://github.com/kriss-spy/obsidian-opencode/compare/1.4.1...1.5.0
 [1.4.1]: https://github.com/kriss-spy/obsidian-opencode/compare/1.4.0...1.4.1
 [1.4.0]: https://github.com/kriss-spy/obsidian-opencode/compare/1.3.13...1.4.0

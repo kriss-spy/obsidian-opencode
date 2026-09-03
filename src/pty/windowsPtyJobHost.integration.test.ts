@@ -175,7 +175,7 @@ describe("Windows PTY Job Object host", () => {
 		const directory = mkdtempSync(join(tmpdir(), "obsidian-opencode-ps1-test-"));
 		cleanupDirectories.add(directory);
 		const scriptPath = join(directory, "opencode.ps1");
-		writeFileSync(scriptPath, 'Write-Output "PS1_OK:$($args -join \",\")"');
+		writeFileSync(scriptPath, "Write-Output \"PS1_OK:$($args -join ',')\"");
 		const output: string[] = [];
 		const terminal = {
 			rows: 24,
