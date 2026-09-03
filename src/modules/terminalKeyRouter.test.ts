@@ -6,6 +6,7 @@ import { TerminalKeyRouter } from "./terminalKeyRouter";
 function registerRouter(
 	customKeys: Record<string, Array<{ modifiers: string[]; key: string }> | undefined> = {},
 	reservedTerminalHotkeys: ReadonlySet<string> = new Set(),
+	registeredCommandIds?: ReadonlySet<string>,
 ) {
 	const containerHandlers = new Map<string, (event: Event) => void>();
 
@@ -13,17 +14,25 @@ function registerRouter(
 	const executeCommandById = vi.fn(() => true);
 	const pushScope = vi.fn();
 	const popScope = vi.fn();
+	const defaultKeys = {
+		"opencode:new-session": [{ modifiers: ["Mod"], key: "n" }],
+		"app:open-settings": [{ modifiers: ["Mod"], key: "," }],
+	};
+	const activeCommandIds = registeredCommandIds ?? new Set([
+		...Object.keys(defaultKeys),
+		...Object.keys(customKeys),
+	]);
 	const context = {
 		app: {
 			vault: { adapter: {}, configDir: "test-config" },
 			hotkeyManager: {
-				defaultKeys: {
-					"opencode:new-session": [{ modifiers: ["Mod"], key: "n" }],
-					"app:open-settings": [{ modifiers: ["Mod"], key: "," }],
-				},
+				defaultKeys,
 				customKeys,
 			},
-			commands: { executeCommandById },
+			commands: {
+				executeCommandById,
+				listCommands: () => [...activeCommandIds].map((id) => ({ id })),
+			},
 			keymap: { pushScope, popScope },
 		},
 		terminal: { paste: terminalPaste },
@@ -129,6 +138,26 @@ describe("TerminalKeyRouter", () => {
 		dispatchContainerEvent("focusin");
 		const scope = pushScope.mock.calls[0][0] as Scope & { handlers: Array<{ key: string | null }> };
 		expect(scope.handlers.some(({ key }) => key === "P")).toBe(false);
+		router.dispose();
+	});
+
+	it("ignores stale hotkeys for commands that are no longer registered", () => {
+		const staleId = "opencode:toggle-opencode-terminal-sidebar";
+		const liveId = "opencode:toggle-terminal-sidebar";
+		const hotkey = [{ modifiers: ["Alt", "Mod"], key: "I" }];
+		const { dispatchContainerEvent, executeCommandById, pushScope, router } = registerRouter({
+			[staleId]: hotkey,
+			[liveId]: hotkey,
+		}, new Set(), new Set([liveId]));
+
+		dispatchContainerEvent("focusin");
+		const scope = pushScope.mock.calls[0][0] as Scope & {
+			handlers: Array<{ key: string | null; callback: (event: KeyboardEvent) => unknown }>;
+		};
+		const ctrlAltI = scope.handlers.filter(({ key }) => key === "I");
+		expect(ctrlAltI).toHaveLength(1);
+		ctrlAltI[0].callback({ isComposing: false } as KeyboardEvent);
+		expect(executeCommandById).toHaveBeenCalledWith(liveId);
 		router.dispose();
 	});
 

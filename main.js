@@ -20065,21 +20065,24 @@ var TerminalKeyRouter = class {
     this.registerPasteHandler(context);
   }
   registerShortcutScope(context) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const { app, container } = context;
     const scope = new import_obsidian2.Scope();
     const appInternals = app;
     const hotkeyManager = appInternals.hotkeyManager;
+    const registeredCommandIds = ((_a = appInternals.commands) == null ? void 0 : _a.listCommands) ? new Set(appInternals.commands.listCommands().map(({ id }) => id)) : void 0;
     const commandIds = /* @__PURE__ */ new Set([
-      ...Object.keys((_a = hotkeyManager == null ? void 0 : hotkeyManager.defaultKeys) != null ? _a : {}),
-      ...Object.keys((_b = hotkeyManager == null ? void 0 : hotkeyManager.customKeys) != null ? _b : {})
+      ...Object.keys((_b = hotkeyManager == null ? void 0 : hotkeyManager.defaultKeys) != null ? _b : {}),
+      ...Object.keys((_c = hotkeyManager == null ? void 0 : hotkeyManager.customKeys) != null ? _c : {})
     ]);
     for (const commandId of commandIds) {
+      if (registeredCommandIds && !registeredCommandIds.has(commandId))
+        continue;
       const hasCustomHotkeys = Object.prototype.hasOwnProperty.call(
-        (_c = hotkeyManager == null ? void 0 : hotkeyManager.customKeys) != null ? _c : {},
+        (_d = hotkeyManager == null ? void 0 : hotkeyManager.customKeys) != null ? _d : {},
         commandId
       );
-      const hotkeys = hasCustomHotkeys ? (_e = (_d = hotkeyManager == null ? void 0 : hotkeyManager.customKeys) == null ? void 0 : _d[commandId]) != null ? _e : [] : (_g = (_f = hotkeyManager == null ? void 0 : hotkeyManager.defaultKeys) == null ? void 0 : _f[commandId]) != null ? _g : [];
+      const hotkeys = hasCustomHotkeys ? (_f = (_e = hotkeyManager == null ? void 0 : hotkeyManager.customKeys) == null ? void 0 : _e[commandId]) != null ? _f : [] : (_h = (_g = hotkeyManager == null ? void 0 : hotkeyManager.defaultKeys) == null ? void 0 : _g[commandId]) != null ? _h : [];
       for (const hotkey of hotkeys) {
         if (context.reservedTerminalHotkeys.has(normalizeObsidianHotkey(hotkey)))
           continue;

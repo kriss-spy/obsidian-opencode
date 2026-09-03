@@ -9,6 +9,7 @@ interface HotkeyManagerInternals {
 
 interface CommandInternals {
 	executeCommandById(id: string): boolean;
+	listCommands?(): Array<{ id: string }>;
 }
 
 export interface KeyRouterContext {
@@ -34,12 +35,16 @@ export class TerminalKeyRouter {
 			commands?: CommandInternals;
 		};
 		const hotkeyManager = appInternals.hotkeyManager;
+		const registeredCommandIds = appInternals.commands?.listCommands
+			? new Set(appInternals.commands.listCommands().map(({ id }) => id))
+			: undefined;
 
 		const commandIds = new Set([
 			...Object.keys(hotkeyManager?.defaultKeys ?? {}),
 			...Object.keys(hotkeyManager?.customKeys ?? {}),
 		]);
 		for (const commandId of commandIds) {
+			if (registeredCommandIds && !registeredCommandIds.has(commandId)) continue;
 			const hasCustomHotkeys = Object.prototype.hasOwnProperty.call(
 				hotkeyManager?.customKeys ?? {},
 				commandId,
