@@ -126,4 +126,20 @@ describe('ViewCoordinator', () => {
 		expect(restartFn).toHaveBeenCalled();
 		expect(workspace.revealLeaf).toHaveBeenCalledWith(existingLeaf);
 	});
+
+	it('should close every terminal view', async () => {
+		const firstLeaf = { ...createMockLeaf('first'), type: 'opencode-terminal', detach: vi.fn() };
+		const secondLeaf = { ...createMockLeaf('second'), type: 'opencode-terminal', detach: vi.fn() };
+		const workspace = createMockWorkspace();
+		workspace._leaves.push(firstLeaf, secondLeaf);
+		const coordinator = new ViewCoordinator(workspace as unknown as Workspace, {
+			terminalViewType: 'opencode-terminal',
+			conversationViewType: 'opencode-conversations',
+		});
+
+		await coordinator.closeTerminalViews();
+
+		expect(firstLeaf.detach).toHaveBeenCalledOnce();
+		expect(secondLeaf.detach).toHaveBeenCalledOnce();
+	});
 });

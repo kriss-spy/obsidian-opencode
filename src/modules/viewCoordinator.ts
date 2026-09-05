@@ -76,4 +76,9 @@ export class ViewCoordinator {
 		}
 		return null;
 	}
+
+	async closeTerminalViews(): Promise<void> {
+		const leaves = [...this.workspace.getLeavesOfType(this.config.terminalViewType)];
+		await Promise.all(leaves.map((leaf) => leaf.detach()));
+	}
 }

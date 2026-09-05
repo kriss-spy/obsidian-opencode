@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Korean IME input ordering on Windows** — Let xterm own keyboard encoding and composition so committed Hangul reaches OpenCode before a following Space. Paste, drop, and synthesized mouse input now use the same ordered xterm input stream. ([#44](https://github.com/kriss-spy/obsidian-opencode/issues/44))
 - **Shortcuts while the terminal is focused** — Load OpenCode's effective keymap and give it priority on conflicts while allowing every non-conflicting Obsidian shortcut to work normally. The router follows OpenCode's config precedence and variable expansion, respects both applications' custom keybindings, leaves Ctrl+Z available to Obsidian on Windows unless OpenCode claims it, and suppresses Obsidian commands during IME composition. ([#45](https://github.com/kriss-spy/obsidian-opencode/issues/45))
 - **Plugin shortcuts shadowed by old command IDs** — Ignore hotkey entries for commands that are no longer registered, so stale assignments from older OpenCode plugin IDs cannot block the current command.
+- **Windows terminal mouse input** — Restore mouse-wheel scrolling, text selection, and reliable navigation in old and new OpenCode sessions. A dedicated scrollbar now supports direct track clicks and keeps its thumb under the pointer while dragging.
+
+### Added
+
+- **Close terminal shortcut** — Press Ctrl+Shift+W to close the OpenCode terminal, including while its input is focused.
 
 ## [1.5.2] - 2026-08-31
 

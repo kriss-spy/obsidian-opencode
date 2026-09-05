@@ -83,6 +83,18 @@ describe("OpenCode plugin in a fresh vault", function () {
 		]));
 	});
 
+	it("[smoke] closes the terminal with the Ctrl+Shift+W command", async function () {
+		await browser.executeObsidianCommand("opencode:open-terminal");
+		const hotkeys = await browser.execute(() => (
+			(window as any).app.hotkeyManager.defaultKeys["opencode:close-terminal"]
+		));
+		expect(hotkeys).toEqual([{ modifiers: ["Ctrl", "Shift"], key: "w" }]);
+		await browser.executeObsidianCommand("opencode:close-terminal");
+		await browser.waitUntil(() => browser.execute(() => (
+			(window as any).app.workspace.getLeavesOfType("opencode-terminal").length === 0
+		)), { timeoutMsg: "Close terminal command did not close the OpenCode terminal" });
+	});
+
 	it("[smoke] opens the conversations view", async function () {
 		await browser.executeObsidianCommand("opencode:open-conversations");
 
@@ -541,6 +553,19 @@ describe("OpenCode plugin in a fresh vault", function () {
 			await app.plugins.plugins.opencode.newSession();
 		});
 		await waitForTerminalText("Ask anything");
+		const idleWheelInput = await browser.execute(async () => {
+			const app = (window as any).app;
+			const terminal = app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+			const data: string[] = [];
+			const disposable = terminal.onData((input: string) => data.push(input));
+			const screen = document.querySelector(".opencode-terminal .xterm-screen");
+			if (!screen) throw new Error("Terminal screen not found");
+			screen.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 120 }));
+			await new Promise((resolve) => window.setTimeout(resolve, 50));
+			disposable.dispose();
+			return data;
+		});
+		expect(idleWheelInput).toContain("\x1b[6~");
 		await browser.execute(() => {
 			const app = (window as any).app;
 			app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.paste("/sessions");
@@ -584,6 +609,255 @@ describe("OpenCode plugin in a fresh vault", function () {
 				return true;
 			});
 		}, { timeout: 3_000, timeoutMsg: "Clicking a session did not activate it" });
+	});
+
+	it("[windows mouse] scrolls real OpenCode without breaking text selection", async function () {
+		if (process.platform !== "win32" || process.env.OPENCODE_REAL_E2E !== "1") this.skip();
+		await browser.execute(async () => {
+			const app = (window as any).app;
+			const plugin = app.plugins.plugins.opencode;
+			plugin.settings.opencodePath = "opencode";
+			await plugin.saveSettings();
+			const existing = app.workspace.getLeavesOfType("opencode-terminal")[0]?.view;
+			existing?.terminal.reset();
+			existing?.fitAddon.fit();
+			await plugin.newSession();
+		});
+		await waitForTerminalText("Ask anything");
+		await browser.execute(() => {
+			const app = (window as any).app;
+			const view = app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			const container = document.querySelector<HTMLElement>(".opencode-terminal");
+			if (!container) throw new Error("Terminal container not found");
+			(window as any).__mouseTestHeight = container.style.height;
+			container.style.height = "260px";
+			view.fitAddon.fit();
+			view.ptySession.sendResize(view.terminal);
+		});
+		await browser.pause(300);
+		for (let index = 0; index < 8; index++) {
+			const marker = `SCROLL_MARKER_${index}`;
+			await browser.execute((text) => {
+				const app = (window as any).app;
+				const terminal = app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+				terminal.paste(`!echo ${text}`);
+			}, marker);
+			await browser.keys("Enter");
+			await browser.waitUntil(async () => (await terminalBuffer()).split(marker).length >= 3, {
+				timeoutMsg: `OpenCode did not finish ${marker}`,
+			});
+			await browser.pause(150);
+		}
+		try {
+			await browser.waitUntil(() => browser.execute(() => {
+				const app = (window as any).app;
+				const terminal = app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+				const buffer = terminal.buffer.active;
+				return Array.from({ length: terminal.rows }, (_, row) =>
+					buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? ""
+				).some((line) => line.trimEnd().endsWith("█"));
+			}), { timeoutMsg: "OpenCode did not render its message scrollbar" });
+		} catch {
+			const state = await browser.execute(() => {
+				const app = (window as any).app;
+				const terminal = app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+				const buffer = terminal.buffer.active;
+				return { rows: terminal.rows, text: Array.from({ length: terminal.rows }, (_, row) =>
+					buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? "").join("\n") };
+			});
+			throw new Error(`OpenCode did not render its message scrollbar: ${JSON.stringify(state)}`);
+		}
+
+		const wheelTarget = await browser.execute(() => {
+			const app = (window as any).app;
+			const terminal = app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+			const buffer = terminal.buffer.active;
+			(window as any).__scrollBefore = Array.from({ length: terminal.rows }, (_, row) =>
+				buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? ""
+			);
+			const lines = (window as any).__scrollBefore as string[];
+			const trimmedLines = lines.map((line) => line.trimEnd());
+			const rightmostColumn = Math.max(...trimmedLines.filter((line) => line.endsWith("█")).map((line) => line.length - 1));
+			const thumbRow = trimmedLines.findIndex((line) => line.endsWith("█") && line.length - 1 === rightmostColumn);
+			return {
+				deltaY: thumbRow > terminal.rows / 2 ? -120 : 120,
+			};
+		});
+		await browser.execute((deltaY) => {
+			const screen = document.querySelector(".opencode-terminal .xterm-screen");
+			if (!screen) throw new Error("Terminal screen not found");
+			screen.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY }));
+		}, wheelTarget.deltaY);
+		const rowsChanged = () => browser.execute(() => {
+			const app = (window as any).app;
+			const terminal = app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+			const buffer = terminal.buffer.active;
+			const after = Array.from({ length: terminal.rows }, (_, row) =>
+				buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? ""
+			);
+			return JSON.stringify(after) !== JSON.stringify((window as any).__scrollBefore);
+		});
+		let firstWheelChanged = false;
+		try {
+			await browser.waitUntil(rowsChanged, { timeout: 2_000 });
+			firstWheelChanged = true;
+		} catch { /* try the other direction from a scroll boundary */ }
+		if (!firstWheelChanged) {
+			await browser.execute((deltaY) => {
+				const screen = document.querySelector(".opencode-terminal .xterm-screen");
+				if (!screen) throw new Error("Terminal screen not found");
+				screen.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY }));
+			}, -wheelTarget.deltaY);
+		}
+		try {
+			await browser.waitUntil(rowsChanged, { timeout: 2_000 });
+		} catch {
+			throw new Error("Mouse wheel did not scroll OpenCode messages");
+		}
+
+		const scrollbarTarget = await browser.execute(() => {
+			const app = (window as any).app;
+			const terminal = app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+			const buffer = terminal.buffer.active;
+			const screen = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
+			const rail = document.querySelector<HTMLElement>(".opencode-terminal-scrollbar");
+			if (!rail) throw new Error("Plugin scrollbar not found");
+			const railRect = rail.getBoundingClientRect();
+			const domThumb = rail.querySelector<HTMLElement>(".opencode-terminal-scrollbar-thumb");
+			if (!domThumb) throw new Error("Plugin scrollbar thumb not found");
+			const domThumbRect = domThumb.getBoundingClientRect();
+			const lines = Array.from({ length: terminal.rows }, (_, row) =>
+				buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? ""
+			);
+			(window as any).__scrollBefore = lines;
+			const trimmedLines = lines.map((line) => line.trimEnd());
+			const rightmostColumn = Math.max(...trimmedLines.filter((line) => line.endsWith("█")).map((line) => line.length - 1));
+			return {
+				x: Math.round(railRect.left + railRect.width / 2),
+				y: Math.round(domThumbRect.top + domThumbRect.height / 2 > railRect.top + railRect.height / 2
+					? railRect.top + 2
+					: railRect.bottom - 2),
+			};
+		});
+		await browser.action("pointer")
+			.move({ x: scrollbarTarget.x, y: scrollbarTarget.y, origin: "viewport" })
+			.down({ button: 0 })
+			.up({ button: 0 })
+			.perform();
+		await browser.waitUntil(() => browser.execute(() => {
+			const app = (window as any).app;
+			const terminal = app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+			const buffer = terminal.buffer.active;
+			const after = Array.from({ length: terminal.rows }, (_, row) =>
+				buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? ""
+			);
+			return JSON.stringify(after) !== JSON.stringify((window as any).__scrollBefore);
+		}), { timeoutMsg: "Clicking the OpenCode scrollbar did not page through messages" });
+
+		const dragTarget = await browser.execute(() => {
+			const app = (window as any).app;
+			const terminal = app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+			const buffer = terminal.buffer.active;
+			const screen = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
+			const rail = document.querySelector<HTMLElement>(".opencode-terminal-scrollbar");
+			if (!rail) throw new Error("Plugin scrollbar not found");
+			const railRect = rail.getBoundingClientRect();
+			const domThumb = rail.querySelector<HTMLElement>(".opencode-terminal-scrollbar-thumb");
+			if (!domThumb) throw new Error("Plugin scrollbar thumb not found");
+			const domThumbRect = domThumb.getBoundingClientRect();
+			const lines = Array.from({ length: terminal.rows }, (_, row) =>
+				buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? ""
+			);
+			(window as any).__scrollBefore = lines;
+			const trimmedLines = lines.map((line) => line.trimEnd());
+			const rightmostColumn = Math.max(...trimmedLines.filter((line) => line.endsWith("█")).map((line) => line.length - 1));
+			const thumbRows = trimmedLines.flatMap((line, row) =>
+				line.length - 1 === rightmostColumn && "█▄▀".includes(line.at(-1) ?? "") ? [row] : []
+			);
+			const dragUp = (thumbRows[0] + thumbRows.at(-1)!) / 2 > terminal.rows / 2;
+			const cellHeight = screen.height / terminal.rows;
+			const startY = domThumbRect.top + domThumbRect.height / 2;
+			return {
+				x: Math.round(railRect.left + railRect.width / 2),
+				startY: Math.round(startY),
+				endY: Math.round(Math.max(railRect.top + 1, Math.min(railRect.bottom - 1,
+					startY + (dragUp ? -3 : 3) * cellHeight))),
+				cellHeight,
+			};
+		});
+		const thumbPosition = await browser.execute(({ x, startY, endY }) => {
+			const thumb = document.querySelector<HTMLElement>(".opencode-terminal-scrollbar-thumb");
+			const rail = document.querySelector<HTMLElement>(".opencode-terminal-scrollbar");
+			if (!thumb) return null;
+			thumb.dispatchEvent(new MouseEvent("mousedown", {
+				bubbles: true, cancelable: true, button: 0, clientX: x, clientY: startY,
+			}));
+			document.dispatchEvent(new MouseEvent("mousemove", {
+				bubbles: true, cancelable: true, buttons: 1, clientX: x, clientY: endY,
+			}));
+			const rect = thumb.getBoundingClientRect();
+			const result = { pointerY: endY, centerY: rect.top + rect.height / 2, className: rail?.className };
+			document.dispatchEvent(new MouseEvent("mouseup", {
+				bubbles: true, cancelable: true, button: 0, clientX: x, clientY: endY,
+			}));
+			return result;
+		}, dragTarget);
+		expect(thumbPosition).not.toBeNull();
+		expect(thumbPosition!.className).toContain("is-dragging");
+		expect(Math.abs(thumbPosition!.centerY - thumbPosition!.pointerY)).toBeLessThanOrEqual(2);
+		try {
+			await browser.waitUntil(rowsChanged, { timeoutMsg: "Dragging the OpenCode scrollbar did not scroll messages" });
+		} catch {
+			throw new Error("Dragging the OpenCode scrollbar did not scroll messages");
+		}
+		await browser.pause(100);
+		const releasedThumbCenter = await browser.execute(() => {
+			const thumb = document.querySelector<HTMLElement>(".opencode-terminal-scrollbar-thumb");
+			if (!thumb) return null;
+			const rect = thumb.getBoundingClientRect();
+			return rect.top + rect.height / 2;
+		});
+		expect(releasedThumbCenter).not.toBeNull();
+		expect(Math.abs(releasedThumbCenter! - dragTarget.endY)).toBeLessThanOrEqual(2);
+
+		const selectionTarget = await browser.execute(() => {
+			const app = (window as any).app;
+			const terminal = app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+			const buffer = terminal.buffer.active;
+			const screen = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
+			const lines = Array.from({ length: terminal.rows }, (_, row) =>
+				buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? ""
+			);
+			const row = Math.max(0, lines.findIndex((line) => line.trim().length > 10));
+			const cellWidth = screen.width / terminal.cols;
+			const cellHeight = screen.height / terminal.rows;
+			terminal.clearSelection();
+			return {
+				startX: Math.round(screen.left + 2 * cellWidth),
+				endX: Math.round(screen.left + 18 * cellWidth),
+				y: Math.round(screen.top + (row + 0.5) * cellHeight),
+			};
+		});
+		await browser.action("pointer")
+			.move({ x: selectionTarget.startX, y: selectionTarget.y, origin: "viewport" })
+			.down({ button: 0 })
+			.move({ x: selectionTarget.endX, y: selectionTarget.y, origin: "viewport" })
+			.up({ button: 0 })
+			.perform();
+		expect(await browser.execute(() => {
+			const app = (window as any).app;
+			return app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.hasSelection();
+		})).toBe(true);
+		await browser.execute(() => {
+			const app = (window as any).app;
+			const view = app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			const container = document.querySelector<HTMLElement>(".opencode-terminal");
+			if (!container) return;
+			container.style.height = (window as any).__mouseTestHeight;
+			delete (window as any).__mouseTestHeight;
+			view.fitAddon.fit();
+			view.ptySession.sendResize(view.terminal);
+		});
 	});
 
 	it("[issue #22] selects a real OpenCode model with a click", async function () {

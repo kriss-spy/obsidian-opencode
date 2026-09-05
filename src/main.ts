@@ -110,6 +110,17 @@ export default class OpencodePlugin extends Plugin {
 			callback: () => { void this.openOrRestartTerminal(); },
 		});
 
+		this.addCommand({
+			id: "close-terminal",
+			name: "Close terminal",
+			hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: "w" }],
+			checkCallback: (checking) => {
+				const hasTerminal = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE).length > 0;
+				if (hasTerminal && !checking) void this.closeTerminalViews();
+				return hasTerminal;
+			},
+		});
+
 		this.addSettingTab(new OpencodeSettingTab(this.app, this));
 
 		this.registerEditorSuggest(new OpencodeEditorSuggest(this));
@@ -158,6 +169,10 @@ export default class OpencodePlugin extends Plugin {
 	async continueLastSession() {
 		this.sessionState.setContinueLastSession();
 		await this.openOrRestartTerminal();
+	}
+
+	async closeTerminalViews() {
+		await this.viewCoordinator.closeTerminalViews();
 	}
 
 	async openTerminalWithSession(sessionId: string, directory: string) {

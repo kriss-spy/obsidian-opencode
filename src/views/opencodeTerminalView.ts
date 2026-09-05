@@ -11,7 +11,17 @@ import { EditorServer } from "../editorServer";
 import { normalizeVaultPath } from "../utils/path";
 import { PtySession } from "../modules/ptySession";
 import { TerminalKeyRouter } from "../modules/terminalKeyRouter";
-import { CLEAR_PICKER_QUERY, isOpenCodePicker, pickerTargetAtRow } from "../modules/windowsTerminalMouse";
+import {
+	CLEAR_PICKER_QUERY,
+	findOpenCodeScrollRegionRows,
+	findOpenCodeScrollbarThumb,
+	isOpenCodePicker,
+	pickerTargetAtRow,
+	SCROLL_PAGE_DOWN,
+	SCROLL_PAGE_UP,
+	scrollbarDragInput,
+	scrollbarPageInput,
+} from "../modules/windowsTerminalMouse";
 import { LifecycleQueue } from "../modules/lifecycleQueue";
 import { loadOpenCodeHotkeys } from "../modules/openCodeKeymap";
 import { mergeEnvironmentVariables } from "../utils/environment";
@@ -117,6 +127,13 @@ export class OpencodeTerminalView extends ItemView {
 		terminal.loadAddon(new WebLinksAddon());
 
 		terminal.open(termContainer);
+		let scrollbarRail: HTMLElement | null = null;
+		let scrollbarThumb: HTMLElement | null = null;
+		if (process.platform === "win32") {
+			termContainer.addClass("is-windows");
+			scrollbarRail = termContainer.createDiv({ cls: "opencode-terminal-scrollbar" });
+			scrollbarThumb = scrollbarRail.createDiv({ cls: "opencode-terminal-scrollbar-thumb" });
+		}
 		if (process.platform === "win32") {
 			try {
 				const webglAddon = new WebglAddon();
@@ -224,6 +241,124 @@ export class OpencodeTerminalView extends ItemView {
 
 		terminal.onData((data: string) => {
 			this.ptySession.writeStdin(data);
+		});
+
+		const terminalCellAt = (event: MouseEvent | WheelEvent) => {
+			const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+			if (!screen) return null;
+			const rect = screen.getBoundingClientRect();
+			return {
+				column: Math.floor((event.clientX - rect.left) / (rect.width / terminal.cols)),
+				row: Math.max(0, Math.min(terminal.rows - 1,
+					Math.floor((event.clientY - rect.top) / (rect.height / terminal.rows)))),
+			};
+		};
+
+		let scrollbarDragRow: number | null = null;
+		let scrollbarDragOffset = 0;
+		let scrollbarDragTrackRows = terminal.rows;
+		let scrollbarDragThumbRows = terminal.rows;
+		const updateScrollbar = () => {
+			if (!scrollbarRail || !scrollbarThumb) return;
+			const thumb = findOpenCodeScrollbarThumb(terminal.buffer.active, terminal.rows);
+			scrollbarRail.toggleClass("is-active", Boolean(thumb));
+			if (!thumb || scrollbarRail.hasClass("is-dragging")) return;
+			const trackRows = findOpenCodeScrollRegionRows(terminal.buffer.active, terminal.rows);
+			scrollbarRail.style.height = `${trackRows / terminal.rows * 100}%`;
+			scrollbarThumb.style.top = `${thumb.startRow / trackRows * 100}%`;
+			scrollbarThumb.style.height = `${(thumb.endRow - thumb.startRow + 1) / trackRows * 100}%`;
+		};
+		const renderDisposable = terminal.onRender(updateScrollbar);
+		this.register(() => renderDisposable.dispose());
+
+		const handleMessageWheel = (event: WheelEvent) => {
+			if (process.platform !== "win32" || event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			terminal.input(event.deltaY < 0 ? SCROLL_PAGE_UP : SCROLL_PAGE_DOWN, true);
+		};
+		termContainer.addEventListener("wheel", handleMessageWheel, { capture: true, passive: false });
+		this.register(() => termContainer.removeEventListener("wheel", handleMessageWheel, true));
+
+		const handleScrollbarMouse = (event: MouseEvent) => {
+			if (process.platform !== "win32" || event.button !== 0) return;
+			if ((event.target as Element).closest(".opencode-terminal-scrollbar")) return;
+			const cell = terminalCellAt(event);
+			const thumb = findOpenCodeScrollbarThumb(terminal.buffer.active, terminal.rows);
+			if (!cell || !thumb) return;
+			if (Math.abs(cell.column - thumb.column) <= 3 && cell.row >= thumb.startRow && cell.row <= thumb.endRow) {
+				scrollbarDragRow = cell.row;
+				scrollbarDragTrackRows = findOpenCodeScrollRegionRows(terminal.buffer.active, terminal.rows);
+				scrollbarDragThumbRows = thumb.endRow - thumb.startRow + 1;
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				return;
+			}
+			const input = scrollbarPageInput(thumb, cell.column, cell.row);
+			if (!input) return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			terminal.input(input, true);
+		};
+		termContainer.addEventListener("mousedown", handleScrollbarMouse, true);
+		const handleScrollbarRailMouse = (event: MouseEvent) => {
+			if (event.button !== 0) return;
+			const cell = terminalCellAt(event);
+			const thumb = findOpenCodeScrollbarThumb(terminal.buffer.active, terminal.rows);
+			if (!cell || !thumb) return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			if ((event.target as Element).closest(".opencode-terminal-scrollbar-thumb")) {
+				scrollbarDragRow = cell.row;
+				scrollbarDragTrackRows = findOpenCodeScrollRegionRows(terminal.buffer.active, terminal.rows);
+				scrollbarDragThumbRows = thumb.endRow - thumb.startRow + 1;
+				const thumbRect = scrollbarThumb?.getBoundingClientRect();
+				scrollbarDragOffset = thumbRect ? event.clientY - thumbRect.top : 0;
+				scrollbarRail?.addClass("is-dragging");
+				return;
+			}
+			terminal.input(cell.row < thumb.startRow ? SCROLL_PAGE_UP : SCROLL_PAGE_DOWN, true);
+		};
+		scrollbarRail?.addEventListener("mousedown", handleScrollbarRailMouse);
+		const handleScrollbarDrag = (event: MouseEvent) => {
+			if (scrollbarDragRow === null) return;
+			const cell = terminalCellAt(event);
+			if (!cell) return;
+			if (scrollbarRail?.hasClass("is-dragging") && scrollbarThumb) {
+				const railRect = scrollbarRail.getBoundingClientRect();
+				const maximumTop = Math.max(0, railRect.height - scrollbarThumb.offsetHeight);
+				const top = Math.max(0, Math.min(maximumTop,
+					event.clientY - railRect.top - scrollbarDragOffset));
+				scrollbarThumb.style.top = `${top}px`;
+			}
+			const input = scrollbarDragInput(
+				scrollbarDragRow,
+				cell.row,
+				scrollbarDragTrackRows,
+				scrollbarDragThumbRows,
+			);
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			if (!input) return;
+			scrollbarDragRow = cell.row;
+			terminal.input(input, true);
+		};
+		const stopScrollbarDrag = (event: MouseEvent) => {
+			if (scrollbarDragRow === null) return;
+			scrollbarDragRow = null;
+			scrollbarRail?.removeClass("is-dragging");
+			window.setTimeout(updateScrollbar, 50);
+			event.preventDefault();
+			event.stopImmediatePropagation();
+		};
+		const ownerDocument = termContainer.ownerDocument;
+		ownerDocument.addEventListener("mousemove", handleScrollbarDrag, true);
+		ownerDocument.addEventListener("mouseup", stopScrollbarDrag, true);
+		this.register(() => {
+			termContainer.removeEventListener("mousedown", handleScrollbarMouse, true);
+			scrollbarRail?.removeEventListener("mousedown", handleScrollbarRailMouse);
+			ownerDocument.removeEventListener("mousemove", handleScrollbarDrag, true);
+			ownerDocument.removeEventListener("mouseup", stopScrollbarDrag, true);
 		});
 
 		const isMouseClickableTui = (): boolean => {

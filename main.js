@@ -20212,6 +20212,74 @@ var TerminalKeyRouter = class {
 
 // src/modules/windowsTerminalMouse.ts
 var CLEAR_PICKER_QUERY = "\x7F".repeat(200);
+var SCROLL_PAGE_UP = "\x1B[5~";
+var SCROLL_PAGE_DOWN = "\x1B[6~";
+var SCROLL_LINE_UP = "\x1B";
+var SCROLL_LINE_DOWN = "\x1B";
+var SCROLLBAR_COLUMN_TOLERANCE = 3;
+function findOpenCodeScrollbarThumb(buffer, visibleRows) {
+  var _a;
+  const lines = Array.from(
+    { length: visibleRows },
+    (_, row) => {
+      var _a2, _b;
+      return ((_b = (_a2 = buffer.getLine(buffer.viewportY + row)) == null ? void 0 : _a2.translateToString(true)) != null ? _b : "").trimEnd();
+    }
+  );
+  const runs = [];
+  for (let row = 0; row < lines.length; row++) {
+    const line = lines[row];
+    const character = (_a = line.at(-1)) != null ? _a : "";
+    if (!"\u2588\u2584\u2580".includes(character))
+      continue;
+    const cell = { row, column: line.length - 1, character };
+    const previousRun = runs.at(-1);
+    const previousCell = previousRun == null ? void 0 : previousRun.at(-1);
+    if (previousCell && previousCell.row === row - 1 && previousCell.column === cell.column)
+      previousRun.push(cell);
+    else
+      runs.push([cell]);
+  }
+  const thumb = runs.filter((run) => run.some(({ character }) => character === "\u2588") || run.length === 1 && !lines[run[0].row].slice(0, -1).includes(run[0].character)).sort((left, right) => right[0].column - left[0].column || right.length - left.length)[0];
+  return thumb ? { column: thumb[0].column, startRow: thumb[0].row, endRow: thumb[thumb.length - 1].row } : null;
+}
+function findOpenCodeScrollRegionRows(buffer, visibleRows) {
+  const lines = Array.from(
+    { length: visibleRows },
+    (_, row) => {
+      var _a, _b;
+      return (_b = (_a = buffer.getLine(buffer.viewportY + row)) == null ? void 0 : _a.translateToString(true)) != null ? _b : "";
+    }
+  );
+  const promptBorder = lines.findLastIndex((line) => /^\s*╹▀/.test(line));
+  if (promptBorder < 0)
+    return visibleRows;
+  let promptStart = promptBorder;
+  while (promptStart > 0 && /^\s*┃/.test(lines[promptStart - 1]))
+    promptStart -= 1;
+  return promptStart > 0 ? promptStart : visibleRows;
+}
+function scrollbarPageInput(thumb, clickedColumn, clickedRow) {
+  if (Math.abs(clickedColumn - thumb.column) > SCROLLBAR_COLUMN_TOLERANCE)
+    return null;
+  if (clickedRow < thumb.startRow)
+    return SCROLL_PAGE_UP;
+  if (clickedRow > thumb.endRow)
+    return SCROLL_PAGE_DOWN;
+  return null;
+}
+function scrollbarDragInput(previousRow, currentRow, trackRows = 1, thumbRows = trackRows) {
+  if (currentRow === previousRow)
+    return null;
+  const lineCount = Math.max(1, Math.round(
+    Math.abs(currentRow - previousRow) * trackRows / Math.max(1, thumbRows)
+  ));
+  if (currentRow < previousRow)
+    return SCROLL_LINE_UP.repeat(lineCount);
+  if (currentRow > previousRow)
+    return SCROLL_LINE_DOWN.repeat(lineCount);
+  return null;
+}
 function isOpenCodePicker(buffer) {
   var _a, _b;
   for (let index = 0; index < buffer.length; index++) {
@@ -20314,6 +20382,13 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(new import_addon_web_links.WebLinksAddon());
     terminal.open(termContainer);
+    let scrollbarRail = null;
+    let scrollbarThumb = null;
+    if (process.platform === "win32") {
+      termContainer.addClass("is-windows");
+      scrollbarRail = termContainer.createDiv({ cls: "opencode-terminal-scrollbar" });
+      scrollbarThumb = scrollbarRail.createDiv({ cls: "opencode-terminal-scrollbar-thumb" });
+    }
     if (process.platform === "win32") {
       try {
         const webglAddon = new import_addon_webgl.WebglAddon();
@@ -20405,6 +20480,139 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
     this.register(() => window.removeEventListener("resize", doFit));
     terminal.onData((data) => {
       this.ptySession.writeStdin(data);
+    });
+    const terminalCellAt = (event) => {
+      var _a2;
+      const screen = (_a2 = terminal.element) == null ? void 0 : _a2.querySelector(".xterm-screen");
+      if (!screen)
+        return null;
+      const rect = screen.getBoundingClientRect();
+      return {
+        column: Math.floor((event.clientX - rect.left) / (rect.width / terminal.cols)),
+        row: Math.max(0, Math.min(
+          terminal.rows - 1,
+          Math.floor((event.clientY - rect.top) / (rect.height / terminal.rows))
+        ))
+      };
+    };
+    let scrollbarDragRow = null;
+    let scrollbarDragOffset = 0;
+    let scrollbarDragTrackRows = terminal.rows;
+    let scrollbarDragThumbRows = terminal.rows;
+    const updateScrollbar = () => {
+      if (!scrollbarRail || !scrollbarThumb)
+        return;
+      const thumb = findOpenCodeScrollbarThumb(terminal.buffer.active, terminal.rows);
+      scrollbarRail.toggleClass("is-active", Boolean(thumb));
+      if (!thumb || scrollbarRail.hasClass("is-dragging"))
+        return;
+      const trackRows = findOpenCodeScrollRegionRows(terminal.buffer.active, terminal.rows);
+      scrollbarRail.style.height = `${trackRows / terminal.rows * 100}%`;
+      scrollbarThumb.style.top = `${thumb.startRow / trackRows * 100}%`;
+      scrollbarThumb.style.height = `${(thumb.endRow - thumb.startRow + 1) / trackRows * 100}%`;
+    };
+    const renderDisposable = terminal.onRender(updateScrollbar);
+    this.register(() => renderDisposable.dispose());
+    const handleMessageWheel = (event) => {
+      if (process.platform !== "win32" || event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY))
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      terminal.input(event.deltaY < 0 ? SCROLL_PAGE_UP : SCROLL_PAGE_DOWN, true);
+    };
+    termContainer.addEventListener("wheel", handleMessageWheel, { capture: true, passive: false });
+    this.register(() => termContainer.removeEventListener("wheel", handleMessageWheel, true));
+    const handleScrollbarMouse = (event) => {
+      if (process.platform !== "win32" || event.button !== 0)
+        return;
+      if (event.target.closest(".opencode-terminal-scrollbar"))
+        return;
+      const cell = terminalCellAt(event);
+      const thumb = findOpenCodeScrollbarThumb(terminal.buffer.active, terminal.rows);
+      if (!cell || !thumb)
+        return;
+      if (Math.abs(cell.column - thumb.column) <= 3 && cell.row >= thumb.startRow && cell.row <= thumb.endRow) {
+        scrollbarDragRow = cell.row;
+        scrollbarDragTrackRows = findOpenCodeScrollRegionRows(terminal.buffer.active, terminal.rows);
+        scrollbarDragThumbRows = thumb.endRow - thumb.startRow + 1;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      const input = scrollbarPageInput(thumb, cell.column, cell.row);
+      if (!input)
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      terminal.input(input, true);
+    };
+    termContainer.addEventListener("mousedown", handleScrollbarMouse, true);
+    const handleScrollbarRailMouse = (event) => {
+      if (event.button !== 0)
+        return;
+      const cell = terminalCellAt(event);
+      const thumb = findOpenCodeScrollbarThumb(terminal.buffer.active, terminal.rows);
+      if (!cell || !thumb)
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (event.target.closest(".opencode-terminal-scrollbar-thumb")) {
+        scrollbarDragRow = cell.row;
+        scrollbarDragTrackRows = findOpenCodeScrollRegionRows(terminal.buffer.active, terminal.rows);
+        scrollbarDragThumbRows = thumb.endRow - thumb.startRow + 1;
+        const thumbRect = scrollbarThumb == null ? void 0 : scrollbarThumb.getBoundingClientRect();
+        scrollbarDragOffset = thumbRect ? event.clientY - thumbRect.top : 0;
+        scrollbarRail == null ? void 0 : scrollbarRail.addClass("is-dragging");
+        return;
+      }
+      terminal.input(cell.row < thumb.startRow ? SCROLL_PAGE_UP : SCROLL_PAGE_DOWN, true);
+    };
+    scrollbarRail == null ? void 0 : scrollbarRail.addEventListener("mousedown", handleScrollbarRailMouse);
+    const handleScrollbarDrag = (event) => {
+      if (scrollbarDragRow === null)
+        return;
+      const cell = terminalCellAt(event);
+      if (!cell)
+        return;
+      if ((scrollbarRail == null ? void 0 : scrollbarRail.hasClass("is-dragging")) && scrollbarThumb) {
+        const railRect = scrollbarRail.getBoundingClientRect();
+        const maximumTop = Math.max(0, railRect.height - scrollbarThumb.offsetHeight);
+        const top = Math.max(0, Math.min(
+          maximumTop,
+          event.clientY - railRect.top - scrollbarDragOffset
+        ));
+        scrollbarThumb.style.top = `${top}px`;
+      }
+      const input = scrollbarDragInput(
+        scrollbarDragRow,
+        cell.row,
+        scrollbarDragTrackRows,
+        scrollbarDragThumbRows
+      );
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!input)
+        return;
+      scrollbarDragRow = cell.row;
+      terminal.input(input, true);
+    };
+    const stopScrollbarDrag = (event) => {
+      if (scrollbarDragRow === null)
+        return;
+      scrollbarDragRow = null;
+      scrollbarRail == null ? void 0 : scrollbarRail.removeClass("is-dragging");
+      window.setTimeout(updateScrollbar, 50);
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const ownerDocument = termContainer.ownerDocument;
+    ownerDocument.addEventListener("mousemove", handleScrollbarDrag, true);
+    ownerDocument.addEventListener("mouseup", stopScrollbarDrag, true);
+    this.register(() => {
+      termContainer.removeEventListener("mousedown", handleScrollbarMouse, true);
+      scrollbarRail == null ? void 0 : scrollbarRail.removeEventListener("mousedown", handleScrollbarRailMouse);
+      ownerDocument.removeEventListener("mousemove", handleScrollbarDrag, true);
+      ownerDocument.removeEventListener("mouseup", stopScrollbarDrag, true);
     });
     const isMouseClickableTui = () => {
       return process.platform === "win32" && isOpenCodePicker(terminal.buffer.active);
@@ -21345,6 +21553,10 @@ var ViewCoordinator = class {
     }
     return null;
   }
+  async closeTerminalViews() {
+    const leaves = [...this.workspace.getLeavesOfType(this.config.terminalViewType)];
+    await Promise.all(leaves.map((leaf) => leaf.detach()));
+  }
 };
 
 // src/modules/ptySession.ts
@@ -22041,6 +22253,17 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
         void this.openOrRestartTerminal();
       }
     });
+    this.addCommand({
+      id: "close-terminal",
+      name: "Close terminal",
+      hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: "w" }],
+      checkCallback: (checking) => {
+        const hasTerminal = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE).length > 0;
+        if (hasTerminal && !checking)
+          void this.closeTerminalViews();
+        return hasTerminal;
+      }
+    });
     this.addSettingTab(new OpencodeSettingTab(this.app, this));
     this.registerEditorSuggest(new OpencodeEditorSuggest(this));
   }
@@ -22078,6 +22301,9 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
   async continueLastSession() {
     this.sessionState.setContinueLastSession();
     await this.openOrRestartTerminal();
+  }
+  async closeTerminalViews() {
+    await this.viewCoordinator.closeTerminalViews();
   }
   async openTerminalWithSession(sessionId, directory) {
     this.sessionState.setOpenSession(sessionId, directory);
