@@ -20386,18 +20386,22 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown" || !event.ctrlKey || event.key.toLowerCase() !== "c" || !terminal.hasSelection())
         return true;
-      if (process.platform !== "linux" || !process.env.WSL_INTEROP)
+      if (process.platform !== "linux")
         return true;
-      const text = terminal.getSelection();
-      const textBase64 = Buffer.from(text, "utf8").toString("base64");
-      const command = `$b=[Convert]::FromBase64String("${textBase64}"); $t=[Text.Encoding]::UTF8.GetString($b); Set-Clipboard -Value $t`;
-      const commandBase64 = Buffer.from(command, "utf16le").toString("base64");
-      const child = (0, import_node_child_process.spawn)("powershell.exe", ["-NoProfile", "-EncodedCommand", commandBase64], {
-        stdio: "ignore"
-      });
-      child.once("error", () => void 0);
-      terminal.clearSelection();
-      return false;
+      try {
+        const text = terminal.getSelection();
+        const textBase64 = Buffer.from(text, "utf8").toString("base64");
+        const command = `$b=[Convert]::FromBase64String("${textBase64}"); $t=[Text.Encoding]::UTF8.GetString($b); Set-Clipboard -Value $t`;
+        const commandBase64 = Buffer.from(command, "utf16le").toString("base64");
+        const child = (0, import_node_child_process.spawn)("powershell.exe", ["-NoProfile", "-EncodedCommand", commandBase64], {
+          stdio: "ignore"
+        });
+        child.once("error", () => void 0);
+        terminal.clearSelection();
+        return false;
+      } catch (e) {
+        return true;
+      }
     });
     let scrollbarRail = null;
     let scrollbarThumb = null;
