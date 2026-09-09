@@ -129,6 +129,23 @@ describe("TerminalKeyRouter", () => {
 		router.dispose();
 	});
 
+	it("routes the configurable close-terminal shortcut while the terminal is focused", () => {
+		const commandId = "opencode:close-terminal";
+		const { dispatchContainerEvent, executeCommandById, pushScope, router } = registerRouter({
+			[commandId]: [{ modifiers: ["Mod", "Shift"], key: "W" }],
+		});
+
+		dispatchContainerEvent("focusin");
+		const scope = pushScope.mock.calls[0][0] as Scope & {
+			handlers: Array<{ key: string | null; callback: (event: KeyboardEvent) => unknown }>;
+		};
+		const closeTerminal = scope.handlers.find(({ key }) => key === "W");
+		expect(closeTerminal).toBeDefined();
+		closeTerminal!.callback({ isComposing: false } as KeyboardEvent);
+		expect(executeCommandById).toHaveBeenCalledWith(commandId);
+		router.dispose();
+	});
+
 	it("leaves a shortcut with OpenCode when OpenCode owns it", () => {
 		const commandId = "darlal-switcher-plus:switcher-plus:open-commands";
 		const { dispatchContainerEvent, pushScope, router } = registerRouter({

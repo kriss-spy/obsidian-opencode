@@ -21569,6 +21569,10 @@ var ViewCoordinator = class {
       return leaf;
     }
   }
+  async closeTerminal() {
+    const leaves = [...this.workspace.getLeavesOfType(this.config.terminalViewType)];
+    await Promise.all(leaves.map((leaf) => leaf.detach()));
+  }
   async openOrRestartTerminal(restartFn) {
     let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
     if (leaf) {
@@ -22216,6 +22220,14 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
       name: "Continue last session",
       callback: () => {
         void this.continueLastSession();
+      }
+    });
+    this.addCommand({
+      id: "close-terminal",
+      name: "Close terminal",
+      hotkeys: [{ modifiers: ["Mod", "Shift"], key: "w" }],
+      callback: () => {
+        void this.viewCoordinator.closeTerminal();
       }
     });
     this.addCommand({

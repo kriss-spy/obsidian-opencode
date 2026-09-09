@@ -80,7 +80,15 @@ describe("OpenCode plugin in a fresh vault", function () {
 			"opencode:open-terminal",
 			"opencode:open-conversations",
 			"opencode:new-session",
+			"opencode:close-terminal",
 		]));
+
+		const closeTerminalHotkeys = await browser.execute(() => (
+			(window as any).app.hotkeyManager.defaultKeys["opencode:close-terminal"]
+		));
+		expect(closeTerminalHotkeys).toEqual([
+			{ modifiers: ["Mod", "Shift"], key: "w" },
+		]);
 	});
 
 	it("[smoke] opens the conversations view", async function () {
@@ -796,5 +804,17 @@ describe("OpenCode plugin in a fresh vault", function () {
 		});
 		expect(serverState.port).toBeGreaterThan(0);
 		expect(serverState.lockFilePath).toBe("");
+	});
+
+	it("[smoke] closes the terminal through its configurable Obsidian command", async function () {
+		await browser.executeObsidianCommand("opencode:open-terminal");
+		await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
+		expect(await browser.execute(() => (
+			(window as any).app.workspace.getLeavesOfType("opencode-terminal").length
+		))).toBe(1);
+		await browser.executeObsidianCommand("opencode:close-terminal");
+		await browser.waitUntil(() => browser.execute(() => (
+			(window as any).app.workspace.getLeavesOfType("opencode-terminal").length === 0
+		)), { timeoutMsg: "OpenCode terminal did not close" });
 	});
 });

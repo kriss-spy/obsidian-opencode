@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Close terminal shortcut** — Add a dedicated `OpenCode: Close terminal` command with an editable `Ctrl/Cmd+Shift+W` default, including routing while the terminal is focused.
+
 ## [1.5.3] - 2026-09-03
 
 ### Fixed

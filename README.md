@@ -38,7 +38,8 @@ A plugin that embeds the OpenCode CLI directly into Obsidian. Browse conversatio
 
 - **Terminal:** Use the command palette (`Ctrl/Cmd + P`) and select **"OpenCode: Open Terminal"** to launch the CLI.
 - **Sessions View:** Use the command palette to select **"OpenCode: Open conversations"** to browse, restore, or export past conversations, or start a new session from the panel header.
-- **Settings:** Configure the **full absolute path** to your `opencode` executable, default CLI arguments, per-vault environment variables, and terminal styling preferences (font size/family) in the Obsidian settings under the "OpenCode" tab. Environment values are passed literally. Do not rely on a command name from your shell `PATH`, because desktop-launched Obsidian may not inherit your shell environment.
+- **Close terminal:** Use `Ctrl/Cmd + Shift + W` or run **"OpenCode: Close terminal"**. The shortcut can be changed or removed in Obsidian's Hotkeys settings.
+- **Settings:** Leave the OpenCode path empty to auto-detect a compatible installation, or configure its full absolute path. Default CLI arguments, per-vault environment variables, and terminal styling preferences are available in the Obsidian settings under the "OpenCode" tab.
 
 ## Development
 
