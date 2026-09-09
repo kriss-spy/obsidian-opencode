@@ -2,6 +2,7 @@ import { ItemView, WorkspaceLeaf, Notice, moment as obsidianMoment, Modal, App, 
 import OpencodePlugin from "../main";
 import { OpencodeClient, OpencodeSession, OpencodeExport, ExportTooLargeError } from "../utils/opencode";
 import { SessionExporter } from "../modules/sessionExporter";
+import { sessionListErrorMessage } from "./conversationErrors";
 
 const moment: (input: number) => { format: (fmt: string) => string } = obsidianMoment;
 
@@ -132,7 +133,14 @@ export class OpencodeConversationView extends ItemView {
 		this.listContainer.empty();
 		this.listContainer.createEl("div", { cls: "opencode-loading", text: "Loading sessions..." });
 
-		this.sessions = await this.createClient().listSessions();
+		try {
+			this.sessions = await this.createClient().listSessions();
+		} catch (error) {
+			console.error("Unable to load OpenCode sessions", error);
+			this.sessions = [];
+			this.renderSessionListError(error);
+			return;
+		}
 
 		this.listContainer.empty();
 
@@ -157,6 +165,18 @@ export class OpencodeConversationView extends ItemView {
 				void this.showSessionDetail(session);
 			});
 		}
+	}
+
+	private renderSessionListError(error: unknown): void {
+		if (!this.listContainer) return;
+		this.listContainer.empty();
+		const errorContainer = this.listContainer.createEl("div", { cls: "opencode-session-error" });
+		errorContainer.createEl("div", { cls: "opencode-error", text: sessionListErrorMessage(error) });
+		const actions = errorContainer.createEl("div", { cls: "opencode-session-error-actions" });
+		const retryButton = actions.createEl("button", { text: "Retry", cls: "mod-cta" });
+		retryButton.addEventListener("click", () => { void this.loadSessions(); });
+		const settingsButton = actions.createEl("button", { text: "Open settings" });
+		settingsButton.addEventListener("click", () => this.plugin.openSettings());
 	}
 
 	async showSessionDetail(session: OpencodeSession) {

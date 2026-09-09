@@ -8,6 +8,7 @@ import { WINDOWS_PTY_NATIVE_X64_BASE64 } from "../pty/windowsPtyNativeX64";
 import { WINDOWS_PTY_NATIVE_ARM64_BASE64 } from "../pty/windowsPtyNativeArm64";
 import { WINDOWS_PTY_JOB_HOST_BASE64 } from "../pty/windowsPtyJobHost";
 import { createChildEnvironment, EnvironmentVariables, flatpakEnvironmentArgs } from "../utils/environment";
+import { resolveOpencodeExecutable } from "../utils/opencodeExecutable";
 
 const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian";
 const WINDOWS_CONPTY_PROBE_ARTIFACT = "+q4d73Gi=31337,s=1,v=1,a=q,t=d,f=24;AAAA";
@@ -139,12 +140,6 @@ if __name__ == "__main__":
     main()
 `;
 
-const COMMON_BIN_DIRS = [
-	".opencode/bin",
-	".local/bin",
-	"bin",
-] as const;
-
 const WINDOWS_PTY_HOST_JS = String.raw`
 const fs = require("fs");
 const [nativePath, colsText, rowsText, file, ...args] = process.argv.slice(1);
@@ -193,59 +188,6 @@ process.on("SIGTERM", () => {
   else process.exit(0);
 });
 `;
-
-function executableNames(executable: string): string[] {
-	if (process.platform !== "win32" || path.extname(executable)) {
-		return [executable];
-	}
-	const extensions = (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
-	return extensions.map((extension) => `${executable}${extension}`);
-}
-
-export function isAbsoluteExecutablePath(executable: string, platform: NodeJS.Platform = process.platform): boolean {
-	return (platform === "win32" ? path.win32 : path.posix).isAbsolute(executable);
-}
-
-function resolveExecutablePath(executable: string, platform: NodeJS.Platform = process.platform): string {
-	const pathApi = platform === "win32" ? path.win32 : path.posix;
-	if (isAbsoluteExecutablePath(executable, platform)) {
-		for (const candidate of executableNames(executable)) {
-			try {
-				fs.accessSync(candidate, fs.constants.X_OK);
-				return candidate;
-			} catch {
-				continue;
-			}
-		}
-		return executable;
-	}
-	const pathDirs = (process.env.PATH || "").split(pathApi.delimiter);
-	for (const dir of pathDirs) {
-		if (!dir) continue;
-		for (const candidate of executableNames(executable)) {
-			const fullPath = pathApi.join(dir, candidate);
-			try {
-				fs.accessSync(fullPath, fs.constants.X_OK);
-				return fullPath;
-			} catch {
-				continue;
-			}
-		}
-	}
-	const homeDir = os.homedir();
-	for (const sub of COMMON_BIN_DIRS) {
-		for (const candidate of executableNames(executable)) {
-			const fullPath = pathApi.join(homeDir, sub, candidate);
-			try {
-				fs.accessSync(fullPath, fs.constants.X_OK);
-				return fullPath;
-			} catch {
-				continue;
-			}
-		}
-	}
-	return executable;
-}
 
 const materializedWindowsPty = new Map<string, string>();
 let materializedWindowsPtyJobHost: string | null = null;
@@ -336,11 +278,11 @@ export class PtySession {
 		// Resolve executable path, searching common user-local bin directories
 		// that may not be in process.env.PATH (desktop-launched Electron apps
 		// don't read shell init files like .bashrc / .zshrc).
-		let executable = resolveExecutablePath(options.opencodePath);
+		let executable = resolveOpencodeExecutable(options.opencodePath);
 		let args = [...options.args];
 		if (process.platform === "win32" && /\.ps1$/i.test(executable)) {
 			args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", executable, ...args];
-			executable = resolveExecutablePath("powershell.exe");
+			executable = resolveOpencodeExecutable("powershell.exe");
 		}
 
 		const isFlatpak = process.platform !== "win32" && (fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID);
@@ -377,7 +319,7 @@ export class PtySession {
 		if (process.platform === "win32") {
 			this.backend = PtyBackend.WindowsConPty;
 			let windowsPtyProcess: ChildProcess | null = null;
-			const nodeExecutable = resolveExecutablePath("node.exe");
+			const nodeExecutable = resolveOpencodeExecutable("node.exe");
 			let nodeArchitecture: string;
 			try {
 				nodeArchitecture = execFileSync(nodeExecutable, ["-p", "process.arch"], {
@@ -445,7 +387,7 @@ export class PtySession {
 			}
 		} else {
 			this.backend = PtyBackend.Unix;
-			ptyProcess = spawn(resolveExecutablePath("python3"), ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
+			ptyProcess = spawn(resolveOpencodeExecutable("python3"), ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
 				cwd: options.cwd,
 				env,
 				stdio: ["pipe", "pipe", "pipe", "pipe"],

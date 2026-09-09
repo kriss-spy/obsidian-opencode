@@ -478,6 +478,12 @@
 	color: var(--text-error);
 }
 
+.opencode-session-error-actions {
+	display: flex;
+	gap: 8px;
+	padding: 0 20px 20px;
+}
+
 .opencode-suggest-title {
 	font-weight: 600;
 	color: var(--text-accent);

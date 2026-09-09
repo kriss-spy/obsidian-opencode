@@ -124,6 +124,14 @@ export default class OpencodePlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+	openSettings(): void {
+		const settings = (this.app as typeof this.app & {
+			setting?: { open(): void; openTabById(id: string): void };
+		}).setting;
+		settings?.open();
+		settings?.openTabById(this.manifest.id);
+	}
+
 	createPtySession(): PtySession {
 		return this.ptySessions.register(new PtySession());
 	}

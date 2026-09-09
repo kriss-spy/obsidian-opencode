@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { spawn, ChildProcess, execFileSync } from "child_process";
-import { writeFileSync } from "fs";
+import { accessSync, writeFileSync } from "fs";
+import * as os from "os";
+import * as path from "path";
 import { EventEmitter } from "events";
 import type { Terminal } from "@xterm/xterm";
-import { isAbsoluteExecutablePath, PtySession, stripWindowsConPtyProbeArtifact } from "./ptySession";
+import { PtySession, stripWindowsConPtyProbeArtifact } from "./ptySession";
+import { isAbsoluteExecutablePath } from "../utils/opencodeExecutable";
 
 /* eslint-disable obsidianmd/prefer-window-timers -- This Node-only window mock must use Vitest's dynamically patched timers. */
 
@@ -50,6 +53,7 @@ describe("PtySession", () => {
 	});
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.mocked(accessSync).mockImplementation(() => undefined);
 		vi.stubGlobal("window", {
 			setTimeout: (callback: () => void, delay?: number) => setTimeout(callback, delay),
 			clearTimeout: (timeout: ReturnType<typeof setTimeout>) => clearTimeout(timeout),
@@ -139,6 +143,31 @@ describe("PtySession", () => {
 			expect(vi.mocked(spawn).mock.calls[0][2]?.env).toMatchObject({
 				OPENCODE_EDITOR_SSE_PORT: "43210",
 			});
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it("uses user-local auto-detection when the configured path is empty", () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+		const child = createProcess();
+		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+		const detected = path.join(os.homedir(), ".opencode/bin/opencode");
+		vi.mocked(accessSync).mockImplementation((candidate) => {
+			if (candidate !== detected) throw new Error("not found");
+		});
+
+		try {
+			new PtySession().spawn(
+				{ rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() } as unknown as Terminal,
+				{ opencodePath: "", cwd: "/vault", args: [] }
+			);
+
+			expect(vi.mocked(spawn).mock.calls[0][1]).toEqual([
+				"-c",
+				expect.any(String),
+				detected,
+			]);
 		} finally {
 			platform.mockRestore();
 		}

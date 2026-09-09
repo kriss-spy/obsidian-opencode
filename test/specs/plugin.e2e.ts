@@ -64,7 +64,7 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await browser.execute(async (stubPath: string) => {
 			const plugin = (window as any).app.plugins.plugins.opencode;
 			plugin.settings.opencodePath = stubPath;
-			plugin.settings.defaultWorkingDirectory = plugin.vaultRoot;
+			plugin.settings.defaultWorkingDirectory = "";
 			await plugin.saveSettings();
 		}, opencodeStub);
 	});
