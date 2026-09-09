@@ -128,9 +128,9 @@ export class OpencodeTerminalView extends ItemView {
 		terminal.loadAddon(new WebLinksAddon());
 
 		terminal.open(termContainer);
-		terminal.attachCustomKeyEventHandler((event) => {
-			if (event.type !== "keydown" || !event.ctrlKey || event.key.toLowerCase() !== "c" || !terminal.hasSelection()) return true;
-			if (process.platform !== "linux") return true;
+		const copySelectionToWindows = (event: KeyboardEvent): boolean => {
+			if (!event.ctrlKey || event.key.toLowerCase() !== "c" || !terminal.hasSelection()) return false;
+			if (process.platform !== "linux") return false;
 
 			try {
 				const text = terminal.getSelection();
@@ -142,11 +142,18 @@ export class OpencodeTerminalView extends ItemView {
 				});
 				child.once("error", () => undefined);
 				terminal.clearSelection();
-				return false;
-			} catch {
 				return true;
+			} catch {
+				return false;
 			}
-		});
+		};
+		const copyKeyHandler = (event: KeyboardEvent) => {
+			if (!copySelectionToWindows(event)) return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+		};
+		termContainer.addEventListener("keydown", copyKeyHandler, true);
+		this.register(() => termContainer.removeEventListener("keydown", copyKeyHandler, true));
 		let scrollbarRail: HTMLElement | null = null;
 		let scrollbarThumb: HTMLElement | null = null;
 		if (process.platform === "win32") {

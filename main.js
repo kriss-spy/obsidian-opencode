@@ -20383,11 +20383,11 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(new import_addon_web_links.WebLinksAddon());
     terminal.open(termContainer);
-    terminal.attachCustomKeyEventHandler((event) => {
-      if (event.type !== "keydown" || !event.ctrlKey || event.key.toLowerCase() !== "c" || !terminal.hasSelection())
-        return true;
+    const copySelectionToWindows = (event) => {
+      if (!event.ctrlKey || event.key.toLowerCase() !== "c" || !terminal.hasSelection())
+        return false;
       if (process.platform !== "linux")
-        return true;
+        return false;
       try {
         const text = terminal.getSelection();
         const textBase64 = Buffer.from(text, "utf8").toString("base64");
@@ -20398,11 +20398,19 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
         });
         child.once("error", () => void 0);
         terminal.clearSelection();
-        return false;
-      } catch (e) {
         return true;
+      } catch (e) {
+        return false;
       }
-    });
+    };
+    const copyKeyHandler = (event) => {
+      if (!copySelectionToWindows(event))
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    termContainer.addEventListener("keydown", copyKeyHandler, true);
+    this.register(() => termContainer.removeEventListener("keydown", copyKeyHandler, true));
     let scrollbarRail = null;
     let scrollbarThumb = null;
     if (process.platform === "win32") {
