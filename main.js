@@ -20308,6 +20308,15 @@ var LifecycleQueue = class {
 };
 
 // src/views/opencodeTerminalView.ts
+function copyTextToWindowsClipboard(text) {
+  const textBase64 = Buffer.from(text, "utf8").toString("base64");
+  const command = `$b=[Convert]::FromBase64String("${textBase64}"); $t=[Text.Encoding]::UTF8.GetString($b); Set-Clipboard -Value $t`;
+  const commandBase64 = Buffer.from(command, "utf16le").toString("base64");
+  const child = (0, import_node_child_process.spawn)("powershell.exe", ["-NoProfile", "-EncodedCommand", commandBase64], {
+    stdio: "ignore"
+  });
+  child.once("error", () => void 0);
+}
 var OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
 var OpencodeTerminalView = class extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
@@ -20383,34 +20392,41 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(new import_addon_web_links.WebLinksAddon());
     terminal.open(termContainer);
-    const copySelectionToWindows = (event) => {
-      if (!event.ctrlKey || event.key.toLowerCase() !== "c" || !terminal.hasSelection())
+    const copySelection = () => {
+      if (process.platform !== "linux" || !terminal.hasSelection())
         return false;
-      if (process.platform !== "linux")
-        return false;
-      try {
-        const text = terminal.getSelection();
-        const textBase64 = Buffer.from(text, "utf8").toString("base64");
-        const command = `$b=[Convert]::FromBase64String("${textBase64}"); $t=[Text.Encoding]::UTF8.GetString($b); Set-Clipboard -Value $t`;
-        const commandBase64 = Buffer.from(command, "utf16le").toString("base64");
-        const child = (0, import_node_child_process.spawn)("powershell.exe", ["-NoProfile", "-EncodedCommand", commandBase64], {
-          stdio: "ignore"
-        });
-        child.once("error", () => void 0);
-        terminal.clearSelection();
-        return true;
-      } catch (e) {
-        return false;
-      }
+      copyTextToWindowsClipboard(terminal.getSelection());
+      terminal.clearSelection();
+      return true;
     };
     const copyKeyHandler = (event) => {
-      if (!copySelectionToWindows(event))
+      if (!event.ctrlKey || event.key.toLowerCase() !== "c" || !copySelection())
         return;
       event.preventDefault();
       event.stopImmediatePropagation();
     };
     termContainer.addEventListener("keydown", copyKeyHandler, true);
     this.register(() => termContainer.removeEventListener("keydown", copyKeyHandler, true));
+    const copyEventHandler = (event) => {
+      if (process.platform !== "linux" || !terminal.hasSelection())
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      copySelection();
+    };
+    termContainer.addEventListener("copy", copyEventHandler, true);
+    this.register(() => termContainer.removeEventListener("copy", copyEventHandler, true));
+    terminal.parser.registerOscHandler(52, (data) => {
+      try {
+        const separator = data.indexOf(";");
+        const encoded = separator < 0 ? "" : data.slice(separator + 1);
+        if (process.platform === "linux" && encoded && encoded !== "?") {
+          copyTextToWindowsClipboard(Buffer.from(encoded, "base64").toString("utf8"));
+        }
+      } catch (e) {
+      }
+      return true;
+    });
     let scrollbarRail = null;
     let scrollbarThumb = null;
     if (process.platform === "win32") {

@@ -27,6 +27,16 @@ import { LifecycleQueue } from "../modules/lifecycleQueue";
 import { loadOpenCodeHotkeys } from "../modules/openCodeKeymap";
 import { mergeEnvironmentVariables } from "../utils/environment";
 
+function copyTextToWindowsClipboard(text: string): void {
+	const textBase64 = Buffer.from(text, "utf8").toString("base64");
+	const command = `$b=[Convert]::FromBase64String("${textBase64}"); $t=[Text.Encoding]::UTF8.GetString($b); Set-Clipboard -Value $t`;
+	const commandBase64 = Buffer.from(command, "utf16le").toString("base64");
+	const child = spawn("powershell.exe", ["-NoProfile", "-EncodedCommand", commandBase64], {
+		stdio: "ignore",
+	});
+	child.once("error", () => undefined);
+}
+
 interface VaultWithConfig {
 	getConfig?(key: string): string;
 }
@@ -128,32 +138,39 @@ export class OpencodeTerminalView extends ItemView {
 		terminal.loadAddon(new WebLinksAddon());
 
 		terminal.open(termContainer);
-		const copySelectionToWindows = (event: KeyboardEvent): boolean => {
-			if (!event.ctrlKey || event.key.toLowerCase() !== "c" || !terminal.hasSelection()) return false;
-			if (process.platform !== "linux") return false;
-
-			try {
-				const text = terminal.getSelection();
-				const textBase64 = Buffer.from(text, "utf8").toString("base64");
-				const command = `$b=[Convert]::FromBase64String("${textBase64}"); $t=[Text.Encoding]::UTF8.GetString($b); Set-Clipboard -Value $t`;
-				const commandBase64 = Buffer.from(command, "utf16le").toString("base64");
-				const child = spawn("powershell.exe", ["-NoProfile", "-EncodedCommand", commandBase64], {
-					stdio: "ignore",
-				});
-				child.once("error", () => undefined);
-				terminal.clearSelection();
-				return true;
-			} catch {
-				return false;
-			}
+		const copySelection = () => {
+			if (process.platform !== "linux" || !terminal.hasSelection()) return false;
+			copyTextToWindowsClipboard(terminal.getSelection());
+			terminal.clearSelection();
+			return true;
 		};
 		const copyKeyHandler = (event: KeyboardEvent) => {
-			if (!copySelectionToWindows(event)) return;
+			if (!event.ctrlKey || event.key.toLowerCase() !== "c" || !copySelection()) return;
 			event.preventDefault();
 			event.stopImmediatePropagation();
 		};
 		termContainer.addEventListener("keydown", copyKeyHandler, true);
 		this.register(() => termContainer.removeEventListener("keydown", copyKeyHandler, true));
+		const copyEventHandler = (event: ClipboardEvent) => {
+			if (process.platform !== "linux" || !terminal.hasSelection()) return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			copySelection();
+		};
+		termContainer.addEventListener("copy", copyEventHandler, true);
+		this.register(() => termContainer.removeEventListener("copy", copyEventHandler, true));
+		terminal.parser.registerOscHandler(52, (data) => {
+			try {
+				const separator = data.indexOf(";");
+				const encoded = separator < 0 ? "" : data.slice(separator + 1);
+				if (process.platform === "linux" && encoded && encoded !== "?") {
+					copyTextToWindowsClipboard(Buffer.from(encoded, "base64").toString("utf8"));
+				}
+			} catch {
+				// Ignore unsupported or malformed clipboard sequences.
+			}
+			return true;
+		});
 		let scrollbarRail: HTMLElement | null = null;
 		let scrollbarThumb: HTMLElement | null = null;
 		if (process.platform === "win32") {
