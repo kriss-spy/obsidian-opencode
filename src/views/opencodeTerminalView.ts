@@ -15,6 +15,7 @@ import { CLEAR_PICKER_QUERY, isOpenCodePicker, pickerTargetAtRow } from "../modu
 import { LifecycleQueue } from "../modules/lifecycleQueue";
 import { loadOpenCodeHotkeys } from "../modules/openCodeKeymap";
 import { mergeEnvironmentVariables } from "../utils/environment";
+import { OpencodeClient, OpencodeError } from "../utils/opencode";
 
 interface VaultWithConfig {
 	getConfig?(key: string): string;
@@ -291,7 +292,7 @@ export class OpencodeTerminalView extends ItemView {
 				} catch (e) {
 					console.warn("Initial fit failed:", e);
 				}
-				this.spawnPty(terminal);
+				void this.lifecycle.enqueue(() => this.spawnPty(terminal));
 			} else {
 				window.setTimeout(spawnWithCorrectSize, 50);
 			}
@@ -358,16 +359,32 @@ export class OpencodeTerminalView extends ItemView {
 				} catch (error) {
 					console.warn("Restart fit failed:", error);
 				}
-				this.spawnPty(this.terminal);
+				await this.spawnPty(this.terminal);
 				this.ptySession.sendResize(this.terminal);
 			}
 		});
 	}
 
-	private spawnPty(terminal: Terminal) {
+	private async spawnPty(terminal: Terminal): Promise<void> {
 		const defaultCwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
 		const cwd = this.plugin.sessionCwd || defaultCwd;
-		const opencodePath = this.plugin.settings.opencodePath || "opencode";
+		const configuredPath = this.plugin.settings.opencodePath || "opencode";
+		let opencodePath: string;
+		try {
+			const compatibility = await new OpencodeClient(
+				configuredPath,
+				cwd,
+				this.plugin.settings.environmentVariables
+			).checkCompatibility();
+			opencodePath = compatibility.executable;
+		} catch (error) {
+			const message = error instanceof OpencodeError
+				? error.message
+				: "Unable to verify the configured OpenCode executable.";
+			terminal.writeln(`\r\n${message}\r\n`);
+			return;
+		}
+		if (this.closing) return;
 
 		let args: string[] = [];
 		if (this.plugin.sessionArgs) {

@@ -2,11 +2,13 @@ import {
 	CliCommandError,
 	CliNotFoundError,
 	CliPermissionError,
+	IncompatibleCliError,
 	MalformedCliOutputError,
 	UnsupportedCliError,
 } from "../utils/opencode";
 
 export function sessionListErrorMessage(error: unknown): string {
+	if (error instanceof IncompatibleCliError) return error.message;
 	if (error instanceof CliNotFoundError) {
 		return "OpenCode could not be found. Set the executable path in plugin settings, then retry.";
 	}

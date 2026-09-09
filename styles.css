@@ -480,8 +480,25 @@
 
 .opencode-session-error-actions {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 8px;
 	padding: 0 20px 20px;
+}
+
+.opencode-conversation-main.is-error .opencode-session-list {
+	width: auto !important;
+	min-width: 0;
+	flex: 1;
+}
+
+.opencode-conversation-main.is-error .opencode-session-splitter,
+.opencode-conversation-main.is-error .opencode-session-detail {
+	display: none;
+}
+
+.opencode-session-error {
+	max-width: 520px;
+	margin: 0 auto;
 }
 
 .opencode-suggest-title {

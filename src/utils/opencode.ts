@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { createChildEnvironment, EnvironmentVariables, flatpakEnvironmentArgs } from "./environment";
-import { resolveOpencodeExecutable } from "./opencodeExecutable";
+import { identifyOpenCodeCli, OpenCodeCliGeneration, resolveOpencodeExecutable } from "./opencodeExecutable";
 
 export interface OpencodeSession {
 	id: string;
@@ -232,6 +232,12 @@ export class UnsupportedCliError extends OpencodeError {
 	}
 }
 
+export class IncompatibleCliError extends OpencodeError {
+	constructor(readonly detectedCli: string, cause?: unknown) {
+		super(`The configured executable is ${detectedCli}. This plugin requires OpenCode.`, cause);
+	}
+}
+
 export class CliCommandError extends OpencodeError {
 	constructor(message: string, cause?: unknown) {
 		super(message, cause);
@@ -257,7 +263,14 @@ function errorDetails(error: unknown): string {
 	return `${message}\n${stderr}`.trim();
 }
 
-function classifyCommandError(error: unknown, executable: string): OpencodeError {
+type OpenCodeOperation = "session-list" | "compatibility-check";
+
+const OPERATION_LABELS: Record<OpenCodeOperation, string> = {
+	"session-list": "session listing",
+	"compatibility-check": "compatibility check",
+};
+
+function classifyOperationError(error: unknown, executable: string, operation: OpenCodeOperation): OpencodeError {
 	const code = errorCode(error);
 	const details = errorDetails(error);
 	if (code === "ENOENT" || /\bENOENT\b|(?:command |executable )?not found/i.test(details)) {
@@ -267,9 +280,16 @@ function classifyCommandError(error: unknown, executable: string): OpencodeError
 		return new CliPermissionError(executable, error);
 	}
 	if (/unrecognized flag|unknown (?:option|command)|no such command/i.test(details)) {
-		return new UnsupportedCliError(error);
+		return operation === "session-list"
+			? new UnsupportedCliError(error)
+			: new IncompatibleCliError("an unsupported CLI", error);
 	}
-	return new CliCommandError(`OpenCode session listing failed: ${details || "unknown command error"}`, error);
+	return new CliCommandError(`OpenCode ${OPERATION_LABELS[operation]} failed: ${details || "unknown command error"}`, error);
+}
+
+export interface OpenCodeCompatibility {
+	generation: OpenCodeCliGeneration;
+	executable: string;
 }
 
 export class ExportTooLargeError extends Error {
@@ -288,6 +308,30 @@ export class OpencodeClient {
 
 	private resolvePath(environment: NodeJS.ProcessEnv = process.env): string {
 		return resolveOpencodeExecutable(this.opencodePath, { environment });
+	}
+
+	async checkCompatibility(): Promise<OpenCodeCompatibility> {
+		const isFlatpak = fs.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
+		const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
+		const executable = this.resolvePath(env);
+		let command = executable;
+		let args = ["--help"];
+		if (isFlatpak) {
+			command = "flatpak-spawn";
+			args = ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), executable, ...args];
+		}
+
+		let result: ExecResult;
+		try {
+			result = await runExecFile(command, args, { cwd: this.cwd, env });
+		} catch (error) {
+			throw classifyOperationError(error, executable, "compatibility-check");
+		}
+		const output = `${result.stdout}\n${result.stderr}`;
+		const generation = identifyOpenCodeCli(output);
+		if (generation) return { generation, executable };
+		const detectedCli = /\bCodex CLI\b/i.test(output) ? "Codex CLI" : "an unsupported CLI";
+		throw new IncompatibleCliError(detectedCli);
 	}
 
 	async listSessions(): Promise<OpencodeSession[]> {
@@ -325,12 +369,12 @@ export class OpencodeClient {
 
 		} catch (error) {
 			console.error("Failed to list sessions:", error);
-			throw classifyCommandError(error, executable);
+			throw classifyOperationError(error, executable, "session-list");
 		}
 
 		const trimmed = raw.trim();
 		if (!trimmed) {
-			if (stderrText.trim()) throw classifyCommandError(new Error(stderrText.trim()), executable);
+			if (stderrText.trim()) throw classifyOperationError(new Error(stderrText.trim()), executable, "session-list");
 			throw new MalformedCliOutputError(new Error("OpenCode returned no JSON output"));
 		}
 		try {

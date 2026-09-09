@@ -19544,7 +19544,7 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
 };
 
 // src/views/opencodeTerminalView.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 var import_xterm = __toESM(require_xterm());
 var import_addon_fit = __toESM(require_addon_fit());
 var import_addon_web_links = __toESM(require_addon_web_links());
@@ -20238,9 +20238,448 @@ var LifecycleQueue = class {
   }
 };
 
+// src/utils/opencode.ts
+var import_obsidian3 = require("obsidian");
+var import_child_process = require("child_process");
+var fs4 = __toESM(require("fs"));
+var os5 = __toESM(require("os"));
+var path6 = __toESM(require("path"));
+
+// src/utils/opencodeExecutable.ts
+var fs3 = __toESM(require("fs"));
+var os4 = __toESM(require("os"));
+var path5 = __toESM(require("path"));
+var DEFAULT_EXECUTABLE = "opencode";
+var COMMON_BIN_DIRS2 = [".opencode/bin", ".local/bin", "bin"];
+function identifyOpenCodeCli(helpOutput) {
+  if (/OpenCode 2\.0 preview command line interface/i.test(helpOutput))
+    return "v2";
+  if (/start opencode tui/i.test(helpOutput))
+    return "stable";
+  return null;
+}
+function isAbsoluteExecutablePath(executable, platform = process.platform) {
+  return (platform === "win32" ? path5.win32 : path5.posix).isAbsolute(executable);
+}
+function executableNames(executable, platform, environment) {
+  if (platform !== "win32" || path5.win32.extname(executable))
+    return [executable];
+  const extensions = (environment.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
+  return extensions.map((extension2) => `${executable}${extension2}`);
+}
+function firstExecutable(candidates) {
+  for (const candidate of candidates) {
+    try {
+      fs3.accessSync(candidate, fs3.constants.X_OK);
+      return candidate;
+    } catch (e) {
+      continue;
+    }
+  }
+  return null;
+}
+function resolveOpencodeExecutable(configuredPath, options = {}) {
+  var _a, _b, _c, _d, _e;
+  const platform = (_a = options.platform) != null ? _a : process.platform;
+  const environment = (_b = options.environment) != null ? _b : process.env;
+  const pathApi = platform === "win32" ? path5.win32 : path5.posix;
+  const executable = configuredPath.trim() || DEFAULT_EXECUTABLE;
+  const names = executableNames(executable, platform, environment);
+  if (isAbsoluteExecutablePath(executable, platform)) {
+    return (_c = firstExecutable(names)) != null ? _c : executable;
+  }
+  const environmentPath = environment.PATH || (platform === "win32" ? environment.Path : void 0) || "";
+  const pathCandidates = environmentPath.split(pathApi.delimiter).filter(Boolean).flatMap((directory) => names.map((name) => pathApi.join(directory, name)));
+  const fromPath = firstExecutable(pathCandidates);
+  if (fromPath)
+    return fromPath;
+  const homeDirectory = (_d = options.homeDirectory) != null ? _d : os4.homedir();
+  const localCandidates = COMMON_BIN_DIRS2.flatMap(
+    (directory) => names.map((name) => pathApi.join(homeDirectory, directory, name))
+  );
+  return (_e = firstExecutable(localCandidates)) != null ? _e : executable;
+}
+
+// src/utils/opencode.ts
+var SAFE_ID_RE = /^[a-zA-Z0-9._:-]+$/;
+function safeUnlinkSync(filePath) {
+  try {
+    fs4.unlinkSync(filePath);
+  } catch (e) {
+  }
+}
+function quoteShell(token) {
+  return `'${String(token).replace(/'/g, `'\\''`)}'`;
+}
+function looksLikeJson(text) {
+  const ch = text.trimStart().charCodeAt(0);
+  return ch === 91 || ch === 123;
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null;
+}
+function parseSession(value) {
+  var _a, _b, _c, _d;
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.directory !== "string" || typeof value.updated !== "number") {
+    throw new Error("Session entries require string id/directory fields and a numeric updated field");
+  }
+  if (value.title !== void 0 && typeof value.title !== "string")
+    throw new Error("Session title must be a string");
+  if (value.created !== void 0 && typeof value.created !== "number")
+    throw new Error("Session created must be a number");
+  const projectId = (_b = (_a = value.projectId) != null ? _a : value.projectID) != null ? _b : "";
+  if (typeof projectId !== "string")
+    throw new Error("Session projectId must be a string");
+  return {
+    id: value.id,
+    title: (_c = value.title) != null ? _c : "",
+    updated: value.updated,
+    created: (_d = value.created) != null ? _d : value.updated,
+    projectId,
+    directory: value.directory
+  };
+}
+var WINDOWS_EXEC_HOST_JS = String.raw`
+const { spawn } = require("child_process");
+let [cwd, file, ...args] = process.argv.slice(1);
+let options = { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true };
+if (/\.ps1$/i.test(file)) {
+  args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file, ...args];
+  file = "powershell.exe";
+} else if (/\.(cmd|bat)$/i.test(file)) {
+  const env = { ...process.env };
+  const tokens = [file, ...args];
+  const references = tokens.map((token, index) => {
+    const name = "OPENCODE_PLUGIN_CMD_" + index;
+    env[name] = token;
+    return '"%' + name + '%"';
+  });
+  file = process.env.ComSpec || "cmd.exe";
+  args = ["/d", "/s", "/c", '"' + references.join(" ") + '"'];
+  options = { ...options, env, windowsVerbatimArguments: true };
+}
+const child = spawn(file, args, options);
+child.stdout.pipe(process.stdout);
+child.stderr.pipe(process.stderr);
+child.on("error", (error) => {
+  console.error(error && error.message ? error.message : String(error));
+  process.exitCode = 1;
+});
+child.on("close", (code) => { process.exitCode = code == null ? 1 : code; });
+`;
+function windowsCommandReferences(tokens, env) {
+  const commandEnv = { ...env };
+  const references = tokens.map((token, index) => {
+    const name = `OPENCODE_PLUGIN_CMD_${index}`;
+    commandEnv[name] = token;
+    return `"%${name}%"`;
+  });
+  return { env: commandEnv, references };
+}
+function resolveWindowsExecutable(executable, env) {
+  if (path6.win32.isAbsolute(executable))
+    return executable;
+  const extensions = (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
+  const names = path6.win32.extname(executable) ? [executable] : extensions.map((extension2) => `${executable}${extension2}`);
+  for (const directory of (env.PATH || "").split(path6.win32.delimiter)) {
+    if (!directory)
+      continue;
+    for (const name of names) {
+      const candidate = path6.win32.join(directory, name);
+      try {
+        fs4.accessSync(candidate, fs4.constants.X_OK);
+        return candidate;
+      } catch (e) {
+        continue;
+      }
+    }
+  }
+  return executable;
+}
+function runExecFile(executable, args, opts) {
+  return new Promise((resolve2, reject) => {
+    let file = process.platform === "win32" ? resolveWindowsExecutable(executable, opts.env) : executable;
+    let fileArgs = args;
+    let execOptions = opts;
+    if (process.platform === "win32") {
+      const target = file;
+      file = resolveWindowsExecutable("node.exe", opts.env);
+      fileArgs = ["-e", WINDOWS_EXEC_HOST_JS, opts.cwd, target, ...args];
+      execOptions = { ...opts, windowsHide: true };
+    }
+    (0, import_child_process.execFile)(file, fileArgs, execOptions, (err, stdout, stderr) => {
+      var _a, _b;
+      if (err) {
+        const failure = err instanceof Error ? err : new Error(typeof err === "string" ? err : "exec failed");
+        if (stderr)
+          failure.stderr = stderr.toString();
+        reject(failure);
+      } else {
+        resolve2({ stdout: (_a = stdout == null ? void 0 : stdout.toString()) != null ? _a : "", stderr: (_b = stderr == null ? void 0 : stderr.toString()) != null ? _b : "" });
+      }
+    });
+  });
+}
+var OpencodeError = class extends Error {
+  constructor(message, cause) {
+    super(message);
+    this.name = new.target.name;
+    this.cause = cause;
+  }
+};
+var CliNotFoundError = class extends OpencodeError {
+  constructor(executable, cause) {
+    super(`OpenCode executable was not found: ${executable}`, cause);
+  }
+};
+var CliPermissionError = class extends OpencodeError {
+  constructor(executable, cause) {
+    super(`OpenCode executable could not be run due to a permission error: ${executable}`, cause);
+  }
+};
+var UnsupportedCliError = class extends OpencodeError {
+  constructor(cause) {
+    super("This OpenCode CLI does not support session listing.", cause);
+  }
+};
+var IncompatibleCliError = class extends OpencodeError {
+  constructor(detectedCli, cause) {
+    super(`The configured executable is ${detectedCli}. This plugin requires OpenCode.`, cause);
+    this.detectedCli = detectedCli;
+  }
+};
+var CliCommandError = class extends OpencodeError {
+  constructor(message, cause) {
+    super(message, cause);
+  }
+};
+var MalformedCliOutputError = class extends OpencodeError {
+  constructor(cause) {
+    super("OpenCode returned malformed session data.", cause);
+  }
+};
+function errorCode(error) {
+  return typeof error === "object" && error !== null && "code" in error ? String(error.code) : void 0;
+}
+function errorDetails(error) {
+  var _a;
+  if (typeof error !== "object" || error === null)
+    return String(error);
+  const stderr = "stderr" in error ? String((_a = error.stderr) != null ? _a : "") : "";
+  const message = error instanceof Error ? error.message : String(error);
+  return `${message}
+${stderr}`.trim();
+}
+var OPERATION_LABELS = {
+  "session-list": "session listing",
+  "compatibility-check": "compatibility check"
+};
+function classifyOperationError(error, executable, operation) {
+  const code = errorCode(error);
+  const details = errorDetails(error);
+  if (code === "ENOENT" || /\bENOENT\b|(?:command |executable )?not found/i.test(details)) {
+    return new CliNotFoundError(executable, error);
+  }
+  if (code === "EACCES" || code === "EPERM" || /\bEACCES\b|\bEPERM\b|permission denied/i.test(details) || details.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
+    return new CliPermissionError(executable, error);
+  }
+  if (/unrecognized flag|unknown (?:option|command)|no such command/i.test(details)) {
+    return operation === "session-list" ? new UnsupportedCliError(error) : new IncompatibleCliError("an unsupported CLI", error);
+  }
+  return new CliCommandError(`OpenCode ${OPERATION_LABELS[operation]} failed: ${details || "unknown command error"}`, error);
+}
+var ExportTooLargeError = class extends Error {
+  constructor(sessionId) {
+    super(`Session ${sessionId} is too large to export`);
+    this.name = "ExportTooLargeError";
+  }
+};
+var OpencodeClient = class {
+  constructor(opencodePath, cwd, environmentVariables = {}) {
+    this.opencodePath = opencodePath;
+    this.cwd = cwd;
+    this.environmentVariables = environmentVariables;
+  }
+  resolvePath(environment = process.env) {
+    return resolveOpencodeExecutable(this.opencodePath, { environment });
+  }
+  async checkCompatibility() {
+    const isFlatpak = fs4.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
+    const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
+    const executable = this.resolvePath(env);
+    let command = executable;
+    let args = ["--help"];
+    if (isFlatpak) {
+      command = "flatpak-spawn";
+      args = ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), executable, ...args];
+    }
+    let result;
+    try {
+      result = await runExecFile(command, args, { cwd: this.cwd, env });
+    } catch (error) {
+      throw classifyOperationError(error, executable, "compatibility-check");
+    }
+    const output = `${result.stdout}
+${result.stderr}`;
+    const generation = identifyOpenCodeCli(output);
+    if (generation)
+      return { generation, executable };
+    const detectedCli = /\bCodex CLI\b/i.test(output) ? "Codex CLI" : "an unsupported CLI";
+    throw new IncompatibleCliError(detectedCli);
+  }
+  async listSessions() {
+    const isFlatpak = fs4.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
+    const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
+    const executable = this.resolvePath(env);
+    let raw = "";
+    let stderrText = "";
+    try {
+      if (isFlatpak) {
+        const tmpFile = path6.join(os5.tmpdir(), `opencode-sessions-${Date.now()}.json`);
+        const shellCmd = `${quoteShell(executable)} session list --format json > ${quoteShell(tmpFile)}`;
+        const result = await runExecFile("flatpak-spawn", ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), "sh", "-c", shellCmd], { cwd: this.cwd, env });
+        stderrText = result.stderr;
+        try {
+          raw = fs4.readFileSync(tmpFile, "utf-8");
+        } finally {
+          safeUnlinkSync(tmpFile);
+        }
+      } else {
+        const result = await runExecFile(executable, ["session", "list", "--format", "json"], { cwd: this.cwd, env });
+        raw = result.stdout || "";
+        stderrText = result.stderr || "";
+        if (!raw.trim() && looksLikeJson(stderrText)) {
+          raw = stderrText;
+          stderrText = "";
+        }
+      }
+    } catch (error) {
+      console.error("Failed to list sessions:", error);
+      throw classifyOperationError(error, executable, "session-list");
+    }
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      if (stderrText.trim())
+        throw classifyOperationError(new Error(stderrText.trim()), executable, "session-list");
+      throw new MalformedCliOutputError(new Error("OpenCode returned no JSON output"));
+    }
+    try {
+      const sessions = JSON.parse(trimmed);
+      if (!Array.isArray(sessions))
+        throw new Error("Expected a JSON array");
+      return sessions.map(parseSession);
+    } catch (error) {
+      throw new MalformedCliOutputError(error);
+    }
+  }
+  async exportSession(sessionId) {
+    try {
+      return await this.exportSessionStreamed(sessionId);
+    } catch (error) {
+      if (error instanceof ExportTooLargeError) {
+        console.warn("Session too large to preview:", sessionId);
+        throw error;
+      }
+      console.error("Failed to export session:", error);
+      new import_obsidian3.Notice(`Failed to export session ${sessionId}`);
+      return null;
+    }
+  }
+  exportSessionStreamed(sessionId, maxBytes = 200 * 1024 * 1024) {
+    return new Promise((resolve2, reject) => {
+      if (!SAFE_ID_RE.test(sessionId)) {
+        reject(new Error(`Invalid session ID: ${sessionId}`));
+        return;
+      }
+      const tmpFile = path6.join(os5.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
+      let cleanedUp = false;
+      const cleanup = () => {
+        if (cleanedUp)
+          return;
+        cleanedUp = true;
+        safeUnlinkSync(tmpFile);
+      };
+      const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+      const exportEnv = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
+      let command = `${quoteShell(this.resolvePath(exportEnv))} export ${quoteShell(sessionId)} > ${quoteShell(tmpFile)} 2>/dev/null`;
+      if (isFlatpak) {
+        const environmentArgs = flatpakEnvironmentArgs(this.environmentVariables).map(quoteShell).join(" ");
+        command = `flatpak-spawn --host${environmentArgs ? ` ${environmentArgs}` : ""} ${command}`;
+      }
+      let child;
+      if (process.platform === "win32") {
+        const configuredExecutable = this.resolvePath(exportEnv);
+        const commandTokens = /\.ps1$/i.test(configuredExecutable) ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", configuredExecutable, "export", sessionId] : [configuredExecutable, "export", sessionId];
+        const windowsCommand = windowsCommandReferences([...commandTokens, tmpFile], exportEnv);
+        const tmpFileRef = windowsCommand.references.at(-1);
+        const commandLine = `${windowsCommand.references.slice(0, -1).join(" ")} > ${tmpFileRef} 2>NUL`;
+        child = (0, import_child_process.spawn)(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", `"${commandLine}"`], {
+          cwd: this.cwd,
+          env: windowsCommand.env,
+          windowsHide: true,
+          windowsVerbatimArguments: true
+        });
+      } else {
+        child = (0, import_child_process.spawn)(command, [], {
+          cwd: this.cwd,
+          env: exportEnv,
+          shell: true
+        });
+      }
+      child.on("error", (err) => {
+        cleanup();
+        reject(err);
+      });
+      child.on("close", (code) => {
+        if (code !== 0) {
+          cleanup();
+          reject(new Error(`Export exited with code ${code}`));
+          return;
+        }
+        try {
+          const stats = fs4.statSync(tmpFile);
+          if (stats.size > maxBytes) {
+            cleanup();
+            reject(new ExportTooLargeError(sessionId));
+            return;
+          }
+          const stdout = fs4.readFileSync(tmpFile, "utf-8");
+          cleanup();
+          const data = JSON.parse(stdout);
+          resolve2(data);
+        } catch (parseError) {
+          cleanup();
+          reject(parseError instanceof Error ? parseError : new Error(String(parseError)));
+        }
+      });
+    });
+  }
+  async deleteSession(sessionId) {
+    if (!SAFE_ID_RE.test(sessionId)) {
+      console.error("Refusing to delete invalid session ID:", sessionId);
+      return false;
+    }
+    try {
+      const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+      const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
+      let executable = this.resolvePath(env);
+      let args = ["session", "delete", sessionId];
+      if (isFlatpak) {
+        args = ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), executable, ...args];
+        executable = "flatpak-spawn";
+      }
+      await runExecFile(executable, args, { cwd: this.cwd, env });
+      return true;
+    } catch (error) {
+      console.error("Failed to delete session:", error);
+      return false;
+    }
+  }
+};
+
 // src/views/opencodeTerminalView.ts
 var OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
-var OpencodeTerminalView = class extends import_obsidian3.ItemView {
+var OpencodeTerminalView = class extends import_obsidian4.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -20474,7 +20913,7 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
         } catch (e) {
           console.warn("Initial fit failed:", e);
         }
-        this.spawnPty(terminal);
+        void this.lifecycle.enqueue(() => this.spawnPty(terminal));
       } else {
         window.setTimeout(spawnWithCorrectSize, 50);
       }
@@ -20535,15 +20974,32 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
         } catch (error) {
           console.warn("Restart fit failed:", error);
         }
-        this.spawnPty(this.terminal);
+        await this.spawnPty(this.terminal);
         this.ptySession.sendResize(this.terminal);
       }
     });
   }
-  spawnPty(terminal) {
+  async spawnPty(terminal) {
     const defaultCwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
     const cwd = this.plugin.sessionCwd || defaultCwd;
-    const opencodePath = this.plugin.settings.opencodePath || "opencode";
+    const configuredPath = this.plugin.settings.opencodePath || "opencode";
+    let opencodePath;
+    try {
+      const compatibility = await new OpencodeClient(
+        configuredPath,
+        cwd,
+        this.plugin.settings.environmentVariables
+      ).checkCompatibility();
+      opencodePath = compatibility.executable;
+    } catch (error) {
+      const message = error instanceof OpencodeError ? error.message : "Unable to verify the configured OpenCode executable.";
+      terminal.writeln(`\r
+${message}\r
+`);
+      return;
+    }
+    if (this.closing)
+      return;
     let args = [];
     if (this.plugin.sessionArgs) {
       args = [...this.plugin.sessionArgs];
@@ -20592,404 +21048,6 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
 
 // src/views/conversationView.ts
 var import_obsidian6 = require("obsidian");
-
-// src/utils/opencode.ts
-var import_obsidian4 = require("obsidian");
-var import_child_process = require("child_process");
-var fs4 = __toESM(require("fs"));
-var os5 = __toESM(require("os"));
-var path6 = __toESM(require("path"));
-
-// src/utils/opencodeExecutable.ts
-var fs3 = __toESM(require("fs"));
-var os4 = __toESM(require("os"));
-var path5 = __toESM(require("path"));
-var DEFAULT_EXECUTABLE = "opencode";
-var COMMON_BIN_DIRS2 = [".opencode/bin", ".local/bin", "bin"];
-function isAbsoluteExecutablePath(executable, platform = process.platform) {
-  return (platform === "win32" ? path5.win32 : path5.posix).isAbsolute(executable);
-}
-function executableNames(executable, platform, environment) {
-  if (platform !== "win32" || path5.win32.extname(executable))
-    return [executable];
-  const extensions = (environment.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
-  return extensions.map((extension2) => `${executable}${extension2}`);
-}
-function firstExecutable(candidates) {
-  for (const candidate of candidates) {
-    try {
-      fs3.accessSync(candidate, fs3.constants.X_OK);
-      return candidate;
-    } catch (e) {
-      continue;
-    }
-  }
-  return null;
-}
-function resolveOpencodeExecutable(configuredPath, options = {}) {
-  var _a, _b, _c, _d, _e;
-  const platform = (_a = options.platform) != null ? _a : process.platform;
-  const environment = (_b = options.environment) != null ? _b : process.env;
-  const pathApi = platform === "win32" ? path5.win32 : path5.posix;
-  const executable = configuredPath.trim() || DEFAULT_EXECUTABLE;
-  const names = executableNames(executable, platform, environment);
-  if (isAbsoluteExecutablePath(executable, platform)) {
-    return (_c = firstExecutable(names)) != null ? _c : executable;
-  }
-  const environmentPath = environment.PATH || (platform === "win32" ? environment.Path : void 0) || "";
-  const pathCandidates = environmentPath.split(pathApi.delimiter).filter(Boolean).flatMap((directory) => names.map((name) => pathApi.join(directory, name)));
-  const fromPath = firstExecutable(pathCandidates);
-  if (fromPath)
-    return fromPath;
-  const homeDirectory = (_d = options.homeDirectory) != null ? _d : os4.homedir();
-  const localCandidates = COMMON_BIN_DIRS2.flatMap(
-    (directory) => names.map((name) => pathApi.join(homeDirectory, directory, name))
-  );
-  return (_e = firstExecutable(localCandidates)) != null ? _e : executable;
-}
-
-// src/utils/opencode.ts
-var SAFE_ID_RE = /^[a-zA-Z0-9._:-]+$/;
-function safeUnlinkSync(filePath) {
-  try {
-    fs4.unlinkSync(filePath);
-  } catch (e) {
-  }
-}
-function quoteShell(token) {
-  return `'${String(token).replace(/'/g, `'\\''`)}'`;
-}
-function looksLikeJson(text) {
-  const ch = text.trimStart().charCodeAt(0);
-  return ch === 91 || ch === 123;
-}
-function isRecord(value) {
-  return typeof value === "object" && value !== null;
-}
-function parseSession(value) {
-  var _a, _b, _c, _d;
-  if (!isRecord(value) || typeof value.id !== "string" || typeof value.directory !== "string" || typeof value.updated !== "number") {
-    throw new Error("Session entries require string id/directory fields and a numeric updated field");
-  }
-  if (value.title !== void 0 && typeof value.title !== "string")
-    throw new Error("Session title must be a string");
-  if (value.created !== void 0 && typeof value.created !== "number")
-    throw new Error("Session created must be a number");
-  const projectId = (_b = (_a = value.projectId) != null ? _a : value.projectID) != null ? _b : "";
-  if (typeof projectId !== "string")
-    throw new Error("Session projectId must be a string");
-  return {
-    id: value.id,
-    title: (_c = value.title) != null ? _c : "",
-    updated: value.updated,
-    created: (_d = value.created) != null ? _d : value.updated,
-    projectId,
-    directory: value.directory
-  };
-}
-var WINDOWS_EXEC_HOST_JS = String.raw`
-const { spawn } = require("child_process");
-let [cwd, file, ...args] = process.argv.slice(1);
-let options = { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true };
-if (/\.ps1$/i.test(file)) {
-  args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file, ...args];
-  file = "powershell.exe";
-} else if (/\.(cmd|bat)$/i.test(file)) {
-  const env = { ...process.env };
-  const tokens = [file, ...args];
-  const references = tokens.map((token, index) => {
-    const name = "OPENCODE_PLUGIN_CMD_" + index;
-    env[name] = token;
-    return '"%' + name + '%"';
-  });
-  file = process.env.ComSpec || "cmd.exe";
-  args = ["/d", "/s", "/c", '"' + references.join(" ") + '"'];
-  options = { ...options, env, windowsVerbatimArguments: true };
-}
-const child = spawn(file, args, options);
-child.stdout.pipe(process.stdout);
-child.stderr.pipe(process.stderr);
-child.on("error", (error) => {
-  console.error(error && error.message ? error.message : String(error));
-  process.exitCode = 1;
-});
-child.on("close", (code) => { process.exitCode = code == null ? 1 : code; });
-`;
-function windowsCommandReferences(tokens, env) {
-  const commandEnv = { ...env };
-  const references = tokens.map((token, index) => {
-    const name = `OPENCODE_PLUGIN_CMD_${index}`;
-    commandEnv[name] = token;
-    return `"%${name}%"`;
-  });
-  return { env: commandEnv, references };
-}
-function resolveWindowsExecutable(executable, env) {
-  if (path6.win32.isAbsolute(executable))
-    return executable;
-  const extensions = (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
-  const names = path6.win32.extname(executable) ? [executable] : extensions.map((extension2) => `${executable}${extension2}`);
-  for (const directory of (env.PATH || "").split(path6.win32.delimiter)) {
-    if (!directory)
-      continue;
-    for (const name of names) {
-      const candidate = path6.win32.join(directory, name);
-      try {
-        fs4.accessSync(candidate, fs4.constants.X_OK);
-        return candidate;
-      } catch (e) {
-        continue;
-      }
-    }
-  }
-  return executable;
-}
-function runExecFile(executable, args, opts) {
-  return new Promise((resolve2, reject) => {
-    let file = process.platform === "win32" ? resolveWindowsExecutable(executable, opts.env) : executable;
-    let fileArgs = args;
-    let execOptions = opts;
-    if (process.platform === "win32") {
-      const target = file;
-      file = resolveWindowsExecutable("node.exe", opts.env);
-      fileArgs = ["-e", WINDOWS_EXEC_HOST_JS, opts.cwd, target, ...args];
-      execOptions = { ...opts, windowsHide: true };
-    }
-    (0, import_child_process.execFile)(file, fileArgs, execOptions, (err, stdout, stderr) => {
-      var _a, _b;
-      if (err) {
-        const failure = err instanceof Error ? err : new Error(typeof err === "string" ? err : "exec failed");
-        if (stderr)
-          failure.stderr = stderr.toString();
-        reject(failure);
-      } else {
-        resolve2({ stdout: (_a = stdout == null ? void 0 : stdout.toString()) != null ? _a : "", stderr: (_b = stderr == null ? void 0 : stderr.toString()) != null ? _b : "" });
-      }
-    });
-  });
-}
-var OpencodeError = class extends Error {
-  constructor(message, cause) {
-    super(message);
-    this.name = new.target.name;
-    this.cause = cause;
-  }
-};
-var CliNotFoundError = class extends OpencodeError {
-  constructor(executable, cause) {
-    super(`OpenCode executable was not found: ${executable}`, cause);
-  }
-};
-var CliPermissionError = class extends OpencodeError {
-  constructor(executable, cause) {
-    super(`OpenCode executable could not be run due to a permission error: ${executable}`, cause);
-  }
-};
-var UnsupportedCliError = class extends OpencodeError {
-  constructor(cause) {
-    super("This OpenCode CLI does not support session listing.", cause);
-  }
-};
-var CliCommandError = class extends OpencodeError {
-  constructor(message, cause) {
-    super(message, cause);
-  }
-};
-var MalformedCliOutputError = class extends OpencodeError {
-  constructor(cause) {
-    super("OpenCode returned malformed session data.", cause);
-  }
-};
-function errorCode(error) {
-  return typeof error === "object" && error !== null && "code" in error ? String(error.code) : void 0;
-}
-function errorDetails(error) {
-  var _a;
-  if (typeof error !== "object" || error === null)
-    return String(error);
-  const stderr = "stderr" in error ? String((_a = error.stderr) != null ? _a : "") : "";
-  const message = error instanceof Error ? error.message : String(error);
-  return `${message}
-${stderr}`.trim();
-}
-function classifyCommandError(error, executable) {
-  const code = errorCode(error);
-  const details = errorDetails(error);
-  if (code === "ENOENT" || /\bENOENT\b|(?:command |executable )?not found/i.test(details)) {
-    return new CliNotFoundError(executable, error);
-  }
-  if (code === "EACCES" || code === "EPERM" || /\bEACCES\b|\bEPERM\b|permission denied/i.test(details) || details.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-    return new CliPermissionError(executable, error);
-  }
-  if (/unrecognized flag|unknown (?:option|command)|no such command/i.test(details)) {
-    return new UnsupportedCliError(error);
-  }
-  return new CliCommandError(`OpenCode session listing failed: ${details || "unknown command error"}`, error);
-}
-var ExportTooLargeError = class extends Error {
-  constructor(sessionId) {
-    super(`Session ${sessionId} is too large to export`);
-    this.name = "ExportTooLargeError";
-  }
-};
-var OpencodeClient = class {
-  constructor(opencodePath, cwd, environmentVariables = {}) {
-    this.opencodePath = opencodePath;
-    this.cwd = cwd;
-    this.environmentVariables = environmentVariables;
-  }
-  resolvePath(environment = process.env) {
-    return resolveOpencodeExecutable(this.opencodePath, { environment });
-  }
-  async listSessions() {
-    const isFlatpak = fs4.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
-    const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
-    const executable = this.resolvePath(env);
-    let raw = "";
-    let stderrText = "";
-    try {
-      if (isFlatpak) {
-        const tmpFile = path6.join(os5.tmpdir(), `opencode-sessions-${Date.now()}.json`);
-        const shellCmd = `${quoteShell(executable)} session list --format json > ${quoteShell(tmpFile)}`;
-        const result = await runExecFile("flatpak-spawn", ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), "sh", "-c", shellCmd], { cwd: this.cwd, env });
-        stderrText = result.stderr;
-        try {
-          raw = fs4.readFileSync(tmpFile, "utf-8");
-        } finally {
-          safeUnlinkSync(tmpFile);
-        }
-      } else {
-        const result = await runExecFile(executable, ["session", "list", "--format", "json"], { cwd: this.cwd, env });
-        raw = result.stdout || "";
-        stderrText = result.stderr || "";
-        if (!raw.trim() && looksLikeJson(stderrText)) {
-          raw = stderrText;
-          stderrText = "";
-        }
-      }
-    } catch (error) {
-      console.error("Failed to list sessions:", error);
-      throw classifyCommandError(error, executable);
-    }
-    const trimmed = raw.trim();
-    if (!trimmed) {
-      if (stderrText.trim())
-        throw classifyCommandError(new Error(stderrText.trim()), executable);
-      throw new MalformedCliOutputError(new Error("OpenCode returned no JSON output"));
-    }
-    try {
-      const sessions = JSON.parse(trimmed);
-      if (!Array.isArray(sessions))
-        throw new Error("Expected a JSON array");
-      return sessions.map(parseSession);
-    } catch (error) {
-      throw new MalformedCliOutputError(error);
-    }
-  }
-  async exportSession(sessionId) {
-    try {
-      return await this.exportSessionStreamed(sessionId);
-    } catch (error) {
-      if (error instanceof ExportTooLargeError) {
-        console.warn("Session too large to preview:", sessionId);
-        throw error;
-      }
-      console.error("Failed to export session:", error);
-      new import_obsidian4.Notice(`Failed to export session ${sessionId}`);
-      return null;
-    }
-  }
-  exportSessionStreamed(sessionId, maxBytes = 200 * 1024 * 1024) {
-    return new Promise((resolve2, reject) => {
-      if (!SAFE_ID_RE.test(sessionId)) {
-        reject(new Error(`Invalid session ID: ${sessionId}`));
-        return;
-      }
-      const tmpFile = path6.join(os5.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
-      let cleanedUp = false;
-      const cleanup = () => {
-        if (cleanedUp)
-          return;
-        cleanedUp = true;
-        safeUnlinkSync(tmpFile);
-      };
-      const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
-      const exportEnv = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
-      let command = `${quoteShell(this.resolvePath(exportEnv))} export ${quoteShell(sessionId)} > ${quoteShell(tmpFile)} 2>/dev/null`;
-      if (isFlatpak) {
-        const environmentArgs = flatpakEnvironmentArgs(this.environmentVariables).map(quoteShell).join(" ");
-        command = `flatpak-spawn --host${environmentArgs ? ` ${environmentArgs}` : ""} ${command}`;
-      }
-      let child;
-      if (process.platform === "win32") {
-        const configuredExecutable = this.resolvePath(exportEnv);
-        const commandTokens = /\.ps1$/i.test(configuredExecutable) ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", configuredExecutable, "export", sessionId] : [configuredExecutable, "export", sessionId];
-        const windowsCommand = windowsCommandReferences([...commandTokens, tmpFile], exportEnv);
-        const tmpFileRef = windowsCommand.references.at(-1);
-        const commandLine = `${windowsCommand.references.slice(0, -1).join(" ")} > ${tmpFileRef} 2>NUL`;
-        child = (0, import_child_process.spawn)(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", `"${commandLine}"`], {
-          cwd: this.cwd,
-          env: windowsCommand.env,
-          windowsHide: true,
-          windowsVerbatimArguments: true
-        });
-      } else {
-        child = (0, import_child_process.spawn)(command, [], {
-          cwd: this.cwd,
-          env: exportEnv,
-          shell: true
-        });
-      }
-      child.on("error", (err) => {
-        cleanup();
-        reject(err);
-      });
-      child.on("close", (code) => {
-        if (code !== 0) {
-          cleanup();
-          reject(new Error(`Export exited with code ${code}`));
-          return;
-        }
-        try {
-          const stats = fs4.statSync(tmpFile);
-          if (stats.size > maxBytes) {
-            cleanup();
-            reject(new ExportTooLargeError(sessionId));
-            return;
-          }
-          const stdout = fs4.readFileSync(tmpFile, "utf-8");
-          cleanup();
-          const data = JSON.parse(stdout);
-          resolve2(data);
-        } catch (parseError) {
-          cleanup();
-          reject(parseError instanceof Error ? parseError : new Error(String(parseError)));
-        }
-      });
-    });
-  }
-  async deleteSession(sessionId) {
-    if (!SAFE_ID_RE.test(sessionId)) {
-      console.error("Refusing to delete invalid session ID:", sessionId);
-      return false;
-    }
-    try {
-      const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
-      const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
-      let executable = this.resolvePath(env);
-      let args = ["session", "delete", sessionId];
-      if (isFlatpak) {
-        args = ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), executable, ...args];
-        executable = "flatpak-spawn";
-      }
-      await runExecFile(executable, args, { cwd: this.cwd, env });
-      return true;
-    } catch (error) {
-      console.error("Failed to delete session:", error);
-      return false;
-    }
-  }
-};
 
 // src/modules/sessionExporter.ts
 var import_obsidian5 = require("obsidian");
@@ -21069,6 +21127,8 @@ var SessionExporter = class {
 
 // src/views/conversationErrors.ts
 function sessionListErrorMessage(error) {
+  if (error instanceof IncompatibleCliError)
+    return error.message;
   if (error instanceof CliNotFoundError) {
     return "OpenCode could not be found. Set the executable path in plugin settings, then retry.";
   }
@@ -21097,6 +21157,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     this.sessions = [];
     this.listContainer = null;
     this.detailContainer = null;
+    this.mainContainer = null;
     this.exporter = new SessionExporter(this.app);
   }
   createClient() {
@@ -21134,6 +21195,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
       void this.loadSessions();
     });
     const main = container.createEl("div", { cls: "opencode-conversation-main" });
+    this.mainContainer = main;
     this.listContainer = main.createEl("div", { cls: "opencode-session-list" });
     const splitter = main.createEl("div", {
       cls: "opencode-session-splitter",
@@ -21209,12 +21271,16 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     await this.loadSessions();
   }
   async loadSessions() {
+    var _a;
     if (!this.listContainer)
       return;
     this.listContainer.empty();
+    (_a = this.mainContainer) == null ? void 0 : _a.removeClass("is-error");
     this.listContainer.createEl("div", { cls: "opencode-loading", text: "Loading sessions..." });
     try {
-      this.sessions = await this.createClient().listSessions();
+      const client = this.createClient();
+      await client.checkCompatibility();
+      this.sessions = await client.listSessions();
     } catch (error) {
       console.error("Unable to load OpenCode sessions", error);
       this.sessions = [];
@@ -21233,16 +21299,18 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
       const meta = item.createEl("div", { cls: "opencode-session-meta" });
       meta.createEl("span", { text: moment2(session.updated).format("YYYY-MM-DD HH:mm") });
       item.addEventListener("click", () => {
-        var _a;
-        (_a = this.listContainer) == null ? void 0 : _a.querySelectorAll(".opencode-session-item").forEach((el) => el.removeClass("is-active"));
+        var _a2;
+        (_a2 = this.listContainer) == null ? void 0 : _a2.querySelectorAll(".opencode-session-item").forEach((el) => el.removeClass("is-active"));
         item.addClass("is-active");
         void this.showSessionDetail(session);
       });
     }
   }
   renderSessionListError(error) {
+    var _a;
     if (!this.listContainer)
       return;
+    (_a = this.mainContainer) == null ? void 0 : _a.addClass("is-error");
     this.listContainer.empty();
     const errorContainer = this.listContainer.createEl("div", { cls: "opencode-session-error" });
     errorContainer.createEl("div", { cls: "opencode-error", text: sessionListErrorMessage(error) });

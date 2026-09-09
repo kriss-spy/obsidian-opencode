@@ -3,7 +3,9 @@
 const { createHash } = require("node:crypto");
 const args = process.argv.slice(2);
 
-if (args.slice(0, 2).join(" ") === "session list") {
+if (args[0] === "--help") {
+	console.log("opencode [project]  start opencode tui");
+} else if (args.slice(0, 2).join(" ") === "session list") {
 	console.log(JSON.stringify(process.env.OBSIDIAN_OPENCODE_EMPTY_SESSIONS ? [] : [{
 		id: "fixture-session",
 		title: "Fixture session",

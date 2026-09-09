@@ -12,6 +12,7 @@ export class OpencodeConversationView extends ItemView {
 	sessions: OpencodeSession[] = [];
 	listContainer: HTMLElement | null = null;
 	detailContainer: HTMLElement | null = null;
+	private mainContainer: HTMLElement | null = null;
 	private exporter: SessionExporter;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
@@ -56,6 +57,7 @@ export class OpencodeConversationView extends ItemView {
 		refreshBtn.addEventListener("click", () => { void this.loadSessions(); });
 
 		const main = container.createEl("div", { cls: "opencode-conversation-main" });
+		this.mainContainer = main;
 		this.listContainer = main.createEl("div", { cls: "opencode-session-list" });
 		const splitter = main.createEl("div", {
 			cls: "opencode-session-splitter",
@@ -131,10 +133,13 @@ export class OpencodeConversationView extends ItemView {
 	async loadSessions() {
 		if (!this.listContainer) return;
 		this.listContainer.empty();
+		this.mainContainer?.removeClass("is-error");
 		this.listContainer.createEl("div", { cls: "opencode-loading", text: "Loading sessions..." });
 
 		try {
-			this.sessions = await this.createClient().listSessions();
+			const client = this.createClient();
+			await client.checkCompatibility();
+			this.sessions = await client.listSessions();
 		} catch (error) {
 			console.error("Unable to load OpenCode sessions", error);
 			this.sessions = [];
@@ -169,6 +174,7 @@ export class OpencodeConversationView extends ItemView {
 
 	private renderSessionListError(error: unknown): void {
 		if (!this.listContainer) return;
+		this.mainContainer?.addClass("is-error");
 		this.listContainer.empty();
 		const errorContainer = this.listContainer.createEl("div", { cls: "opencode-session-error" });
 		errorContainer.createEl("div", { cls: "opencode-error", text: sessionListErrorMessage(error) });

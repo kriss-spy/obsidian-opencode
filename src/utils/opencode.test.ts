@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { CliNotFoundError, CliPermissionError, MalformedCliOutputError, OpencodeClient, ExportTooLargeError, UnsupportedCliError } from './opencode';
+import { CliNotFoundError, CliPermissionError, IncompatibleCliError, MalformedCliOutputError, OpencodeClient, ExportTooLargeError, UnsupportedCliError } from './opencode';
 import { ChildProcess, execFile, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -419,6 +419,72 @@ describe('OpencodeClient listSessions', () => {
 			const launcherPath = (env as Record<string, unknown>).PATH;
 			if (typeof launcherPath !== 'string') throw new Error('Expected Flatpak launcher PATH');
 			expect(launcherPath).not.toContain('/host/configured/bin');
+		} finally {
+			platform.mockRestore();
+		}
+	});
+});
+
+describe('OpencodeClient compatibility', () => {
+	const mockExecFile = vi.mocked(execFile);
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(fs.accessSync).mockImplementation(() => { throw new Error('not found'); });
+		vi.mocked(fs.existsSync).mockReturnValue(false);
+	});
+
+	it('rejects Codex even though it can run inside the terminal PTY', async () => {
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(null, 'Codex CLI\nUsage: codex [OPTIONS]', '');
+			return {} as unknown as ChildProcess;
+		});
+
+		await expect(new OpencodeClient('/usr/bin/codex', '/vault').checkCompatibility())
+			.rejects.toBeInstanceOf(IncompatibleCliError);
+	});
+
+	it('reports an unsupported help command as an incompatible executable', async () => {
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			const error = Object.assign(new Error('unknown option --help'), { code: 1 });
+			(callback as unknown as (error: Error, stdout: string, stderr: string) => void)(error, '', 'unknown option --help');
+			return {} as unknown as ChildProcess;
+		});
+
+		await expect(new OpencodeClient('/usr/bin/other-agent', '/vault').checkCompatibility())
+			.rejects.toBeInstanceOf(IncompatibleCliError);
+	});
+
+	it.each([
+		['stable', 'opencode [project]  start opencode tui'],
+		['v2', 'OpenCode 2.0 preview command line interface'],
+	] as const)('accepts %s OpenCode help output', async (generation, output) => {
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(null, output, '');
+			return {} as unknown as ChildProcess;
+		});
+
+		await expect(new OpencodeClient('opencode', '/vault').checkCompatibility())
+			.resolves.toMatchObject({ generation });
+	});
+
+	it('probes configured PowerShell wrappers through the Windows command host', async () => {
+		const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(null, 'start opencode tui', '');
+			return {} as unknown as ChildProcess;
+		});
+		const wrapper = 'C:\\tools\\opencode-wrapper.ps1';
+
+		try {
+			await expect(new OpencodeClient(wrapper, 'C:\\vault').checkCompatibility())
+				.resolves.toEqual({ generation: 'stable', executable: wrapper });
+			expect(mockExecFile).toHaveBeenCalledWith(
+				'node.exe',
+				['-e', expect.stringMatching(/\.ps1[\s\S]*powershell\.exe/), 'C:\\vault', wrapper, '--help'],
+				expect.objectContaining({ windowsHide: true }),
+				expect.any(Function)
+			);
 		} finally {
 			platform.mockRestore();
 		}

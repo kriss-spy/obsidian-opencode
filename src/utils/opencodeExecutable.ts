@@ -11,6 +11,14 @@ export interface ExecutableResolutionOptions {
 	homeDirectory?: string;
 }
 
+export type OpenCodeCliGeneration = "stable" | "v2";
+
+export function identifyOpenCodeCli(helpOutput: string): OpenCodeCliGeneration | null {
+	if (/OpenCode 2\.0 preview command line interface/i.test(helpOutput)) return "v2";
+	if (/start opencode tui/i.test(helpOutput)) return "stable";
+	return null;
+}
+
 export function isAbsoluteExecutablePath(executable: string, platform: NodeJS.Platform = process.platform): boolean {
 	return (platform === "win32" ? path.win32 : path.posix).isAbsolute(executable);
 }
