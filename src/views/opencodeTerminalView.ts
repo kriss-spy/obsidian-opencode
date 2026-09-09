@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { spawn } from "node:child_process";
 import { release } from "node:os";
 import OpencodePlugin from "../main";
 import { handleTerminalDrop } from "../terminalDrop";
@@ -127,6 +128,21 @@ export class OpencodeTerminalView extends ItemView {
 		terminal.loadAddon(new WebLinksAddon());
 
 		terminal.open(termContainer);
+		terminal.attachCustomKeyEventHandler((event) => {
+			if (event.type !== "keydown" || !event.ctrlKey || event.key.toLowerCase() !== "c" || !terminal.hasSelection()) return true;
+			if (process.platform !== "linux" || !process.env.WSL_INTEROP) return true;
+
+			const text = terminal.getSelection();
+			const textBase64 = Buffer.from(text, "utf8").toString("base64");
+			const command = `$b=[Convert]::FromBase64String("${textBase64}"); $t=[Text.Encoding]::UTF8.GetString($b); Set-Clipboard -Value $t`;
+			const commandBase64 = Buffer.from(command, "utf16le").toString("base64");
+			const child = spawn("powershell.exe", ["-NoProfile", "-EncodedCommand", commandBase64], {
+				stdio: "ignore",
+			});
+			child.once("error", () => undefined);
+			terminal.clearSelection();
+			return false;
+		});
 		let scrollbarRail: HTMLElement | null = null;
 		let scrollbarThumb: HTMLElement | null = null;
 		if (process.platform === "win32") {
