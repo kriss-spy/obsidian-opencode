@@ -109,6 +109,37 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await browser.saveScreenshot(path.join(artifactsDir, "conversations.png"));
 	});
 
+	it("[issue #36] lists OpenCode v2 sessions through its API", async function () {
+		await browser.executeObsidianCommand("opencode:open-conversations");
+		const previousEnvironmentVariables = await browser.execute(() => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			return { ...plugin.settings.environmentVariables };
+		});
+
+		try {
+			await browser.execute(async () => {
+				const app = (window as any).app;
+				const plugin = app.plugins.plugins.opencode;
+				plugin.settings.environmentVariables = {
+					...plugin.settings.environmentVariables,
+					OBSIDIAN_OPENCODE_V2: "1",
+				};
+				await plugin.saveSettings();
+				await app.workspace.getLeavesOfType("opencode-conversations")[0].view.loadSessions();
+			});
+
+			await expect(browser.$(".opencode-session-title")).toHaveText("Fixture v2 session");
+		} finally {
+			await browser.execute(async (serializedEnvironmentVariables: string) => {
+				const app = (window as any).app;
+				const plugin = app.plugins.plugins.opencode;
+				plugin.settings.environmentVariables = JSON.parse(serializedEnvironmentVariables);
+				await plugin.saveSettings();
+				await app.workspace.getLeavesOfType("opencode-conversations")[0].view.loadSessions();
+			}, JSON.stringify(previousEnvironmentVariables));
+		}
+	});
+
 	it("[smoke] previews and exports a session", async function () {
 		const view = browser.$(".opencode-conversation-container");
 		await view.$(".opencode-session-item").click();

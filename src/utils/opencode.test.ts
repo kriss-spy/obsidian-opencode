@@ -175,6 +175,75 @@ describe('OpencodeClient listSessions', () => {
 		await expect(client.listSessions()).resolves.toEqual(sessions);
 	});
 
+	it('lists OpenCode v2 sessions through the directory-scoped API', async () => {
+		const pages = [{
+			data: [{
+				id: 'ses_v2',
+				title: 'V2 session',
+				projectID: 'project-v2',
+				location: { directory: '/vault notes' },
+				time: { created: 10, updated: 20 },
+			}],
+			cursor: { next: 'next/page' },
+		}, {
+			data: [{
+				id: 'ses_v2_older',
+				title: 'Older v2 session',
+				projectID: 'project-v2',
+				location: { directory: '/vault notes' },
+				time: { created: 5, updated: 8 },
+			}],
+			cursor: {},
+		}];
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			const page = pages.shift();
+			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(
+				null,
+				JSON.stringify(page),
+				'',
+			);
+			return {} as unknown as ChildProcess;
+		});
+		const client = new OpencodeClient('opencode2', '/vault notes');
+
+		await expect(client.listSessions('v2')).resolves.toEqual([{
+			id: 'ses_v2',
+			title: 'V2 session',
+			projectId: 'project-v2',
+			directory: '/vault notes',
+			created: 10,
+			updated: 20,
+		}, {
+			id: 'ses_v2_older',
+			title: 'Older v2 session',
+			projectId: 'project-v2',
+			directory: '/vault notes',
+			created: 5,
+			updated: 8,
+		}]);
+		expect(mockExecFile).toHaveBeenNthCalledWith(
+			1,
+			'opencode2',
+			['api', 'get', '/api/session?directory=%2Fvault%20notes&roots=true'],
+			expect.objectContaining({ cwd: '/vault notes' }),
+			expect.any(Function),
+		);
+		expect(mockExecFile).toHaveBeenNthCalledWith(
+			2,
+			'opencode2',
+			['api', 'get', '/api/session?directory=%2Fvault%20notes&roots=true&cursor=next%2Fpage'],
+			expect.objectContaining({ cwd: '/vault notes' }),
+			expect.any(Function),
+		);
+	});
+
+	it('rejects malformed OpenCode v2 API envelopes', async () => {
+		mockExecResult(JSON.stringify({ sessions: [] }), '');
+
+		await expect(new OpencodeClient('opencode2', '/vault').listSessions('v2'))
+			.rejects.toBeInstanceOf(MalformedCliOutputError);
+	});
+
 	it('uses the shared user-local executable detection when the configured path is empty', async () => {
 		const detected = path.join(os.homedir(), '.opencode/bin/opencode');
 		vi.mocked(fs.accessSync).mockImplementation((candidate) => {
@@ -375,6 +444,17 @@ describe('OpencodeClient listSessions', () => {
 		const client = new OpencodeClient('opencode', '/tmp');
 		await expect(client.listSessions()).resolves.toEqual(sessions);
 		expect(fs.unlinkSync).toHaveBeenCalled();
+	});
+
+	it('uses the OpenCode v2 API through the Flatpak host bridge', async () => {
+		vi.mocked(fs.existsSync).mockReturnValue(true);
+		mockExecResult('', '');
+		vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ data: [], cursor: {} }));
+
+		await expect(new OpencodeClient('/host/bin/opencode2', '/vault notes').listSessions('v2'))
+			.resolves.toEqual([]);
+		const shellCommand = mockExecFile.mock.calls[0]?.[1]?.at(-1);
+		expect(shellCommand).toContain("'/host/bin/opencode2' 'api' 'get' '/api/session?directory=%2Fvault%20notes&roots=true'");
 	});
 
 	it('classifies a missing executable reported by the Flatpak host shell', async () => {

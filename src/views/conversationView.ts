@@ -138,8 +138,8 @@ export class OpencodeConversationView extends ItemView {
 
 		try {
 			const client = this.createClient();
-			await client.checkCompatibility();
-			this.sessions = await client.listSessions();
+			const compatibility = await client.checkCompatibility();
+			this.sessions = await client.listSessions(compatibility.generation);
 		} catch (error) {
 			console.error("Unable to load OpenCode sessions", error);
 			this.sessions = [];

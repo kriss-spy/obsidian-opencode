@@ -115,6 +115,41 @@ function parseSession(value: unknown): OpencodeSession {
 	};
 }
 
+function parseV2Session(value: unknown): OpencodeSession {
+	if (!isRecord(value) || !isRecord(value.location) || !isRecord(value.time)) {
+		throw new Error("OpenCode v2 session entries require location and time fields");
+	}
+	return parseSession({
+		id: value.id,
+		title: value.title,
+		projectID: value.projectID,
+		directory: value.location.directory,
+		created: value.time.created,
+		updated: value.time.updated,
+	});
+}
+
+function parseStableSessionList(raw: string): OpencodeSession[] {
+	const payload: unknown = JSON.parse(raw);
+	if (!Array.isArray(payload)) throw new Error("Expected a JSON array");
+	return payload.map(parseSession);
+}
+
+function parseV2SessionPage(raw: string): { sessions: OpencodeSession[]; nextCursor?: string } {
+	const payload: unknown = JSON.parse(raw);
+	if (!isRecord(payload) || !Array.isArray(payload.data)) {
+		throw new Error("Expected an OpenCode v2 API response with a data array");
+	}
+	if (payload.cursor !== undefined && !isRecord(payload.cursor)) {
+		throw new Error("Expected OpenCode v2 cursor metadata to be an object");
+	}
+	const nextCursor = isRecord(payload.cursor) ? payload.cursor.next : undefined;
+	if (nextCursor !== undefined && typeof nextCursor !== "string") {
+		throw new Error("Expected the OpenCode v2 next cursor to be a string");
+	}
+	return { sessions: payload.data.map(parseV2Session), nextCursor };
+}
+
 interface ExecResult {
 	stdout: string;
 	stderr: string;
@@ -334,56 +369,79 @@ export class OpencodeClient {
 		throw new IncompatibleCliError(detectedCli);
 	}
 
-	async listSessions(): Promise<OpencodeSession[]> {
+	async listSessions(generation: OpenCodeCliGeneration = "stable"): Promise<OpencodeSession[]> {
 		const isFlatpak = fs.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
 		const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
 		const executable = this.resolvePath(env);
 
-		let raw = "";
-		let stderrText = "";
-		try {
-			if (isFlatpak) {
-				// flatpak-spawn's stdout forwarding can drop/truncate the captured
-				// output (see issue #25: empty stdout -> JSON.parse("") crash).
-				// Route through a host-side temp file, matching the export path.
-				const tmpFile = path.join(os.tmpdir(), `opencode-sessions-${Date.now()}.json`);
-				const shellCmd = `${quoteShell(executable)} session list --format json > ${quoteShell(tmpFile)}`;
-				const result = await runExecFile("flatpak-spawn", ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), "sh", "-c", shellCmd], { cwd: this.cwd, env });
-				stderrText = result.stderr;
-				try {
-					raw = fs.readFileSync(tmpFile, "utf-8");
-				} finally {
-					safeUnlinkSync(tmpFile);
+		const runSessionList = async (args: string[]): Promise<string> => {
+			let raw = "";
+			let stderrText = "";
+			try {
+				if (isFlatpak) {
+					// flatpak-spawn's stdout forwarding can drop/truncate the captured
+					// output (see issue #25: empty stdout -> JSON.parse("") crash).
+					// Route through a host-side temp file, matching the export path.
+					const tmpFile = path.join(os.tmpdir(), `opencode-sessions-${Date.now()}.json`);
+					const shellCmd = `${[executable, ...args].map(quoteShell).join(" ")} > ${quoteShell(tmpFile)}`;
+					const result = await runExecFile("flatpak-spawn", ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), "sh", "-c", shellCmd], { cwd: this.cwd, env });
+					stderrText = result.stderr;
+					try {
+						raw = fs.readFileSync(tmpFile, "utf-8");
+					} finally {
+						safeUnlinkSync(tmpFile);
+					}
+				} else {
+					const result = await runExecFile(executable, args, { cwd: this.cwd, env });
+					raw = result.stdout || "";
+					stderrText = result.stderr || "";
+					// Some setups route the JSON payload to stderr; fall back to it
+					// only when it actually looks like JSON to avoid parsing log noise.
+					if (!raw.trim() && looksLikeJson(stderrText)) {
+						raw = stderrText;
+						stderrText = "";
+					}
 				}
-			} else {
-				const result = await runExecFile(executable, ["session", "list", "--format", "json"], { cwd: this.cwd, env });
-				raw = result.stdout || "";
-				stderrText = result.stderr || "";
-				// Some setups route the JSON payload to stderr; fall back to it
-				// only when it actually looks like JSON to avoid parsing log noise.
-				if (!raw.trim() && looksLikeJson(stderrText)) {
-					raw = stderrText;
-					stderrText = "";
-				}
+			} catch (error) {
+				console.error("Failed to list sessions:", error);
+				throw classifyOperationError(error, executable, "session-list");
 			}
 
-		} catch (error) {
-			console.error("Failed to list sessions:", error);
-			throw classifyOperationError(error, executable, "session-list");
-		}
-
-		const trimmed = raw.trim();
-		if (!trimmed) {
+			const trimmed = raw.trim();
+			if (trimmed) return trimmed;
 			if (stderrText.trim()) throw classifyOperationError(new Error(stderrText.trim()), executable, "session-list");
 			throw new MalformedCliOutputError(new Error("OpenCode returned no JSON output"));
+		};
+
+		if (generation === "stable") {
+			try {
+				return parseStableSessionList(await runSessionList(["session", "list", "--format", "json"]));
+			} catch (error) {
+				if (error instanceof OpencodeError) throw error;
+				throw new MalformedCliOutputError(error);
+			}
 		}
-		try {
-			const sessions: unknown = JSON.parse(trimmed);
-			if (!Array.isArray(sessions)) throw new Error("Expected a JSON array");
-			return sessions.map(parseSession);
-		} catch (error) {
-			throw new MalformedCliOutputError(error);
-		}
+
+		const sessions: OpencodeSession[] = [];
+		const seenCursors = new Set<string>();
+		let cursor: string | undefined;
+		do {
+			const query = `/api/session?directory=${encodeURIComponent(this.cwd)}&roots=true${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+			let page: ReturnType<typeof parseV2SessionPage>;
+			try {
+				page = parseV2SessionPage(await runSessionList(["api", "get", query]));
+			} catch (error) {
+				if (error instanceof OpencodeError) throw error;
+				throw new MalformedCliOutputError(error);
+			}
+			sessions.push(...page.sessions);
+			cursor = page.nextCursor;
+			if (cursor && seenCursors.has(cursor)) {
+				throw new MalformedCliOutputError(new Error("OpenCode v2 returned a repeated session cursor"));
+			}
+			if (cursor) seenCursors.add(cursor);
+		} while (cursor);
+		return sessions;
 	}
 
 	async exportSession(sessionId: string): Promise<OpencodeExport | null> {

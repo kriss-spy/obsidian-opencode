@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Close terminal shortcut** — Add a dedicated `OpenCode: Close terminal` command with an editable `Ctrl/Cmd+Shift+W` default, including routing while the terminal is focused.
+- **OpenCode 2 session browsing** — Detect the v2 preview CLI and load its directory-scoped sessions through the v2 API instead of the removed `session list --format json` command. ([#36](https://github.com/kriss-spy/obsidian-opencode/issues/36))
 
 ## [1.5.3] - 2026-09-03
 
