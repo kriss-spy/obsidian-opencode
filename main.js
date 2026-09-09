@@ -19487,7 +19487,12 @@ function flatpakEnvironmentArgs(variables) {
 
 // src/settingsTab.ts
 var environmentVariableFormat = "NAME=value";
-var environmentVariableExample = "OPENCODE_CONFIG_DIR=/home/user/.config/opencode-vault";
+var environmentVariableExample = [
+  "EDITOR=/usr/bin/nvim",
+  "VISUAL=/usr/bin/nvim",
+  "GIT_EDITOR=/usr/bin/nvim",
+  "OPENCODE_DISABLE_TERMINAL_TITLE=1"
+].join("\n");
 var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);

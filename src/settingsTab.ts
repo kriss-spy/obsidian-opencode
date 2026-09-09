@@ -3,7 +3,12 @@ import OpencodePlugin from "./main";
 import { parseEnvironmentVariables, serializeEnvironmentVariables } from "./utils/environment";
 
 const environmentVariableFormat = "NAME=value";
-const environmentVariableExample = "OPENCODE_CONFIG_DIR=/home/user/.config/opencode-vault";
+const environmentVariableExample = [
+	"EDITOR=/usr/bin/nvim",
+	"VISUAL=/usr/bin/nvim",
+	"GIT_EDITOR=/usr/bin/nvim",
+	"OPENCODE_DISABLE_TERMINAL_TITLE=1",
+].join("\n");
 
 export class OpencodeSettingTab extends PluginSettingTab {
 	plugin: OpencodePlugin;
