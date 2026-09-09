@@ -19550,6 +19550,7 @@ var import_addon_fit = __toESM(require_addon_fit());
 var import_addon_web_links = __toESM(require_addon_web_links());
 var import_addon_canvas = __toESM(require_addon_canvas());
 var import_addon_webgl = __toESM(require_addon_webgl());
+var import_node_child_process = require("child_process");
 var import_node_os = require("os");
 
 // src/terminalDrop.ts
@@ -20382,6 +20383,22 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(new import_addon_web_links.WebLinksAddon());
     terminal.open(termContainer);
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type !== "keydown" || !event.ctrlKey || event.key.toLowerCase() !== "c" || !terminal.hasSelection())
+        return true;
+      if (process.platform !== "linux" || !process.env.WSL_INTEROP)
+        return true;
+      const text = terminal.getSelection();
+      const textBase64 = Buffer.from(text, "utf8").toString("base64");
+      const command = `$b=[Convert]::FromBase64String("${textBase64}"); $t=[Text.Encoding]::UTF8.GetString($b); Set-Clipboard -Value $t`;
+      const commandBase64 = Buffer.from(command, "utf16le").toString("base64");
+      const child = (0, import_node_child_process.spawn)("powershell.exe", ["-NoProfile", "-EncodedCommand", commandBase64], {
+        stdio: "ignore"
+      });
+      child.once("error", () => void 0);
+      terminal.clearSelection();
+      return false;
+    });
     let scrollbarRail = null;
     let scrollbarThumb = null;
     if (process.platform === "win32") {
