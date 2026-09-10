@@ -2,6 +2,16 @@
 
 A plugin that embeds the OpenCode CLI directly into Obsidian. Browse conversation history and resume work without leaving your vault.
 
+## Demo
+
+Work with vault notes and OpenCode side by side:
+
+![A waterfall-model note open beside an OpenCode conversation in Obsidian](docs/assets/obsidian-opencode-side-by-side.png)
+
+Use OpenCode 2's multi-session interface in a full Obsidian editor tab:
+
+![OpenCode 2 showing vertical session tabs inside Obsidian](docs/assets/obsidian-opencode-v2-sessions.png)
+
 ## Features
 
 - **Native OpenCode Execution:** Runs the OpenCode CLI directly inside Obsidian using an integrated terminal, ensuring smooth performance for long sessions.
