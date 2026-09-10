@@ -56,12 +56,13 @@ from os import execvp, read, write, waitpid, waitstatus_to_exitcode
 from fcntl import ioctl
 from pty import fork
 from termios import TIOCSWINSZ
-from struct import pack
+from struct import pack, error as StructError
 from selectors import DefaultSelector, EVENT_READ
 
 _CHUNK_SIZE = 1024
 _CMDIO = 3
 _KILL_TOKEN = os.environ.get("OPENCODE_PTY_KILL_TOKEN", "")
+_resize_buffer = b""
 
 def forward_termination(signum, frame):
     # Killing the proxy closes the PTY master, but the kernel cannot carry a
@@ -88,8 +89,8 @@ def main():
     initial_size = os.environ.get("OPENCODE_PTY_INITIAL_SIZE", "")
     if initial_size:
         try:
-            rows, columns = (int(s) for s in initial_size.split("x", 2))
-            ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, 0, 0))
+            rows, columns, pixel_width, pixel_height = (int(s) for s in initial_size.split("x"))
+            ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, pixel_width, pixel_height))
         except (ValueError, OSError):
             pass
 
@@ -126,15 +127,23 @@ def forward_stdin(pty_fd):
     write_all(pty_fd, data)
 
 def handle_resize(pty_fd):
+    global _resize_buffer
     try:
         data = read(_CMDIO, _CHUNK_SIZE)
     except OSError:
         data = b""
     if not data:
         return
-    for line in data.decode("UTF-8", "strict").splitlines():
-        rows, columns = (int(s.strip()) for s in line.split("x", 2))
-        ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, 0, 0))
+    _resize_buffer += data
+    while b"\\n" in _resize_buffer:
+        line, _resize_buffer = _resize_buffer.split(b"\\n", 1)
+        try:
+            rows, columns, pixel_width, pixel_height = (
+                int(s.strip()) for s in line.decode("UTF-8", "strict").split("x")
+            )
+            ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, pixel_width, pixel_height))
+        except (UnicodeDecodeError, ValueError, StructError, OSError):
+            pass
 
 if __name__ == "__main__":
     main()
@@ -218,6 +227,19 @@ export interface PtySessionOptions {
 	args: string[];
 	environmentVariables?: EnvironmentVariables;
 	editorPort?: number;
+}
+
+function unixTerminalSize(terminal: Terminal): string {
+	const clamp = (value: number, minimum: number) => {
+		const integer = Number.isFinite(value) ? Math.round(value) : minimum;
+		return Math.min(65535, Math.max(minimum, integer));
+	};
+	return [
+		clamp(terminal.rows, 1),
+		clamp(terminal.cols, 1),
+		clamp(terminal.element?.clientWidth ?? 0, 0),
+		clamp(terminal.element?.clientHeight ?? 0, 0),
+	].join("x");
 }
 
 enum PtyBackend {
@@ -308,9 +330,10 @@ export class PtySession {
 		if (options.editorPort) {
 			env.OPENCODE_EDITOR_SSE_PORT = String(options.editorPort);
 		}
-		// pty.fork() starts at 0x0, which the TUI cannot use. Apply the
-		// terminal's current size to the PTY before the app starts.
-		env.OPENCODE_PTY_INITIAL_SIZE = `${Math.min(65535, Math.max(1, terminal.rows))}x${Math.min(65535, Math.max(1, terminal.cols))}`;
+		// pty.fork() starts at 0x0, which the TUI cannot use. Apply both
+		// the cell grid and DOM pixel dimensions before the app starts so
+		// terminal image renderers can preserve their aspect ratio.
+		env.OPENCODE_PTY_INITIAL_SIZE = unixTerminalSize(terminal);
 		if (isFlatpak) {
 			env.OPENCODE_PTY_KILL_TOKEN = killToken;
 		}
@@ -540,7 +563,7 @@ export class PtySession {
 		}
 		const cmdio = this.ptyProcess.stdio?.[3] as import("stream").Writable | undefined;
 		if (cmdio && typeof cmdio.write === "function") {
-			cmdio.write(`${rows}x${cols}\n`);
+			cmdio.write(`${unixTerminalSize(terminal)}\n`);
 		}
 	}
 

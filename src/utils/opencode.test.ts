@@ -237,6 +237,17 @@ describe('OpencodeClient listSessions', () => {
 		);
 	});
 
+	it('treats a null OpenCode v2 next cursor as the end of pagination', async () => {
+		mockExecResult(JSON.stringify({
+			data: [],
+			cursor: { next: null, previous: null },
+		}), '');
+
+		await expect(new OpencodeClient('opencode2', '/vault').listSessions('v2'))
+			.resolves.toEqual([]);
+		expect(mockExecFile).toHaveBeenCalledTimes(1);
+	});
+
 	it('rejects malformed OpenCode v2 API envelopes', async () => {
 		mockExecResult(JSON.stringify({ sessions: [] }), '');
 

@@ -12,7 +12,7 @@ export interface DropContext {
     dragManager?: { draggable?: unknown };
     dataTransfer?: DataTransfer | null;
     terminalInput?: (data: string) => void;
-    onFileDrop?: (filePath: string) => void;
+    onFileDrop?: (filePath: string) => boolean;
 }
 
 function isDragManagerDraggable(val: unknown): val is DragManagerDraggable {
@@ -46,11 +46,35 @@ export function handleTerminalDrop(context: DropContext): void {
 
     if (filesToProcess.length === 0) return;
 
+    const processTerminalDrop = (index: number) => {
+        if (index >= filesToProcess.length || !context.terminalInput) return;
+
+        const filePath = filesToProcess[index];
+        context.terminalInput(`@${filePath}`);
+
+        window.setTimeout(() => {
+            // If there is a next file, insert a space so they don't stick together.
+            // We DO NOT inject a space (or Enter/Tab) after the LAST file.
+            // This guarantees the TUI mention menu stays OPEN for the user to manually confirm.
+            if (index < filesToProcess.length - 1) {
+                context.terminalInput?.(' ');
+            }
+
+            window.setTimeout(() => {
+                processTerminalDrop(index + 1);
+            }, 50);
+        }, 100);
+    };
+
     // New WebSocket-based path: stagger messages so the TUI can render each mention
     if (context.onFileDrop) {
         const sendNext = (index: number) => {
             if (index >= filesToProcess.length) return;
-            context.onFileDrop!(filesToProcess[index]);
+            const queued = context.onFileDrop?.(filesToProcess[index]) ?? false;
+            if (!queued) {
+                processTerminalDrop(index);
+                return;
+            }
             if (index < filesToProcess.length - 1) {
                 window.setTimeout(() => sendNext(index + 1), 75);
             }
@@ -61,26 +85,5 @@ export function handleTerminalDrop(context: DropContext): void {
 
     // Legacy terminal keystroke injection path
     if (!context.terminalInput) return;
-
-    const processNext = (index: number) => {
-        if (index >= filesToProcess.length) return;
-        
-        const filePath = filesToProcess[index];
-        context.terminalInput!(`@${filePath}`);
-        
-        window.setTimeout(() => {
-            // If there is a next file, insert a space so they don't stick together.
-            // We DO NOT inject a space (or Enter/Tab) after the LAST file.
-            // This guarantees the TUI mention menu stays OPEN for the user to manually confirm.
-            if (index < filesToProcess.length - 1) {
-                context.terminalInput!(' ');
-            }
-            
-            window.setTimeout(() => {
-                processNext(index + 1);
-            }, 50);
-        }, 100);
-    };
-    
-    processNext(0);
+    processTerminalDrop(0);
 }

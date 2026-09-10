@@ -148,6 +148,120 @@ describe("PtySession", () => {
 		}
 	});
 
+	it("passes the xterm pixel dimensions to the initial Unix PTY size", () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+		const child = createProcess();
+		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+		const terminal = {
+			rows: 24,
+			cols: 80,
+			element: { clientWidth: 960, clientHeight: 480 },
+			write: vi.fn(),
+			writeln: vi.fn(),
+		};
+
+		try {
+			new PtySession().spawn(terminal as unknown as Terminal, {
+				opencodePath: "opencode",
+				cwd: "/tmp",
+				args: [],
+			});
+
+			expect(vi.mocked(spawn).mock.calls[0][2]?.env?.OPENCODE_PTY_INITIAL_SIZE).toBe("24x80x960x480");
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it("passes updated xterm pixel dimensions when resizing a Unix PTY", () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+		const child = createProcess();
+		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+		const terminal = {
+			rows: 24,
+			cols: 80,
+			element: { clientWidth: 960, clientHeight: 480 },
+			write: vi.fn(),
+			writeln: vi.fn(),
+		};
+
+		try {
+			const session = new PtySession();
+			session.spawn(terminal as unknown as Terminal, { opencodePath: "opencode", cwd: "/tmp", args: [] });
+			terminal.rows = 30;
+			terminal.cols = 100;
+			terminal.element.clientWidth = 1200;
+			terminal.element.clientHeight = 600;
+			session.sendResize(terminal as unknown as Terminal);
+
+			expect((child.stdio[3] as { write: ReturnType<typeof vi.fn> }).write).toHaveBeenLastCalledWith("30x100x1200x600\n");
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it("buffers incomplete Unix resize records and ignores malformed complete records", async () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+		const child = createProcess();
+		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+
+		try {
+			new PtySession().spawn(
+				{ rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() } as unknown as Terminal,
+				{ opencodePath: "opencode", cwd: "/tmp", args: [] }
+			);
+			const proxy = vi.mocked(spawn).mock.calls[0][1][1];
+			const actualChildProcess = await vi.importActual<typeof import("child_process")>("child_process");
+			const harness = `
+import json, sys
+namespace = {"__name__": "proxy_test"}
+exec(sys.argv[1], namespace)
+chunks = iter([b"24x80x9", b"60x480\\nmalformed\\n30x100x1200x600\\n"])
+resizes = []
+namespace["read"] = lambda _fd, _size: next(chunks)
+namespace["pack"] = lambda _format, *values: values
+namespace["ioctl"] = lambda _fd, _request, payload: resizes.append(list(payload))
+namespace["handle_resize"](99)
+after_partial = list(resizes)
+namespace["handle_resize"](99)
+print(json.dumps({"after_partial": after_partial, "after_complete": resizes}))
+`;
+			const output = actualChildProcess.execFileSync("python3", ["-c", harness, proxy], { encoding: "utf8" });
+
+			expect(JSON.parse(output)).toEqual({
+				after_partial: [],
+				after_complete: [[24, 80, 960, 480], [30, 100, 1200, 600]],
+			});
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it("keeps Unix PTY dimensions within uint16 winsize bounds", () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
+		const child = createProcess();
+		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+		const terminal = {
+			rows: 100_000,
+			cols: 100_000,
+			element: { clientWidth: 100_000, clientHeight: 100_000 },
+			write: vi.fn(),
+			writeln: vi.fn(),
+		};
+
+		try {
+			const session = new PtySession();
+			session.spawn(terminal as unknown as Terminal, { opencodePath: "opencode", cwd: "/tmp", args: [] });
+			expect(vi.mocked(spawn).mock.calls[0][2]?.env?.OPENCODE_PTY_INITIAL_SIZE).toBe("65535x65535x65535x65535");
+
+			delete (terminal as { element?: unknown }).element;
+			session.sendResize(terminal as unknown as Terminal);
+			expect((child.stdio[3] as { write: ReturnType<typeof vi.fn> }).write).toHaveBeenLastCalledWith("65535x65535x0x0\n");
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
 	it("uses user-local auto-detection when the configured path is empty", () => {
 		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
 		const child = createProcess();

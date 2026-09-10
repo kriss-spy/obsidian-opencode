@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+
+const sixel = Buffer.from(
+	"G1AwOzE7MHEiMTsxOzMyOzE2IzA7MjsxMDA7MDswIzE7Mjs5MzswOzcjMjsyOzg3OzA7MTMjMzsyOzgwOzA7MjAjNDsyOzczOzA7MjcjNTsyOzY3OzA7MzMjNjsyOzYwOzA7NDAjNzsyOzUzOzA7NDcjODsyOzQ3OzA7NTMjOTsyOzQwOzA7NjAjMTA7MjszMzswOzY3IzExOzI7Mjc7MDs3MyMxMjsyOzIwOzA7ODAjMTM7MjsxMzswOzg3IzE0OzI7NzswOzkzIzE1OzI7MDswOzEwMCMwITMyQCQjMSEzMkEkIzIhMzJDJCMzITMyRyQjNCEzMk8kIzUhMzJfLSM2ITMyQCQjNyEzMkEkIzghMzJDJCM5ITMyRyQjMTAhMzJPJCMxMSEzMl8tIzEyITMyQCQjMTMhMzJBJCMxNCEzMkMkIzE1ITMyRy0bXA==",
+	"base64",
+);
+
+if (process.argv.includes("--help")) {
+	process.stdout.write("start opencode tui\n");
+	process.exit(0);
+}
+
+process.stdin.setRawMode?.(true);
+process.stdin.resume();
+let input = "";
+let rendered = false;
+
+process.stdin.on("data", (chunk) => {
+	input += chunk.toString("latin1");
+	if (rendered || !input.includes("\x1b[?62;4;9;22c")) return;
+	rendered = true;
+	process.stdout.write(sixel);
+	process.stdout.write("\r\nSIXEL_READY\r\n");
+});
+
+process.stdout.write("\x1b[c");

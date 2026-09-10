@@ -41,6 +41,31 @@ function firstExecutable(candidates: string[]): string | null {
 	return null;
 }
 
+function nvmBinDirectories(homeDirectory: string, pathApi: typeof path.posix | typeof path.win32): string[] {
+	const versionsDirectory = pathApi.join(homeDirectory, ".nvm", "versions", "node");
+	try {
+		const versions = fs.readdirSync(versionsDirectory, { withFileTypes: true, encoding: "utf8" });
+		return versions
+			.filter((entry) => entry.isDirectory())
+			.sort((left, right) => right.name.localeCompare(left.name, undefined, { numeric: true }))
+			.map((entry) => pathApi.join(versionsDirectory, entry.name, "bin"));
+	} catch {
+		return [];
+	}
+}
+
+function nvmWindowsVersionDirectories(nvmHome: string, pathApi: typeof path.win32): string[] {
+	try {
+		const versions = fs.readdirSync(nvmHome, { withFileTypes: true, encoding: "utf8" });
+		return versions
+			.filter((entry) => entry.isDirectory())
+			.sort((left, right) => right.name.localeCompare(left.name, undefined, { numeric: true }))
+			.map((entry) => pathApi.join(nvmHome, entry.name));
+	} catch {
+		return [];
+	}
+}
+
 export function resolveOpencodeExecutable(
 	configuredPath: string,
 	options: ExecutableResolutionOptions = {}
@@ -48,7 +73,13 @@ export function resolveOpencodeExecutable(
 	const platform = options.platform ?? process.platform;
 	const environment = options.environment ?? process.env;
 	const pathApi = platform === "win32" ? path.win32 : path.posix;
-	const executable = configuredPath.trim() || DEFAULT_EXECUTABLE;
+	const homeDirectory = options.homeDirectory ?? os.homedir();
+	const configuredExecutable = configuredPath.trim();
+	const executable = configuredExecutable === "~"
+		? homeDirectory
+		: configuredExecutable.startsWith("~/") || configuredExecutable.startsWith("~\\")
+			? pathApi.join(homeDirectory, configuredExecutable.slice(2))
+			: configuredExecutable || DEFAULT_EXECUTABLE;
 	const names = executableNames(executable, platform, environment);
 
 	if (isAbsoluteExecutablePath(executable, platform)) {
@@ -63,9 +94,17 @@ export function resolveOpencodeExecutable(
 	const fromPath = firstExecutable(pathCandidates);
 	if (fromPath) return fromPath;
 
-	const homeDirectory = options.homeDirectory ?? os.homedir();
-	const localCandidates = COMMON_BIN_DIRS.flatMap((directory) =>
-		names.map((name) => pathApi.join(homeDirectory, directory, name))
+	const localDirectories = [
+		...COMMON_BIN_DIRS.map((directory) => pathApi.join(homeDirectory, directory)),
+		...(platform === "win32" && environment.NVM_SYMLINK ? [environment.NVM_SYMLINK] : []),
+		...(platform === "win32"
+			? environment.NVM_HOME
+				? nvmWindowsVersionDirectories(environment.NVM_HOME, path.win32)
+				: []
+			: nvmBinDirectories(homeDirectory, path.posix)),
+	];
+	const localCandidates = localDirectories.flatMap((directory) =>
+		names.map((name) => pathApi.join(directory, name))
 	);
 	return firstExecutable(localCandidates) ?? executable;
 }

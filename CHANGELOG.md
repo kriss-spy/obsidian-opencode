@@ -9,8 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Close terminal shortcut** — Add a dedicated `OpenCode: Close terminal` command with an editable `Ctrl/Cmd+Shift+W` default, including routing while the terminal is focused.
+- **Close terminal command** — Add a dedicated `OpenCode: Close terminal` command that users can bind in Obsidian's Hotkeys settings, including routing while the terminal is focused. It has no default shortcut, avoiding conflicts with Obsidian's tab commands.
 - **OpenCode 2 session browsing** — Detect the v2 preview CLI and load its directory-scoped sessions through the v2 API instead of the removed `session list --format json` command. ([#36](https://github.com/kriss-spy/obsidian-opencode/issues/36))
+- **OpenCode 2 pagination** — Treat a null next-page cursor as the end of the v2 session list instead of reporting valid session data as malformed. ([#36](https://github.com/kriss-spy/obsidian-opencode/issues/36))
+- **OpenCode 2 file drops** — Fall back to terminal mention input when the embedded editor WebSocket cannot queue a drop because it has no open client. ([#36](https://github.com/kriss-spy/obsidian-opencode/issues/36))
+- **OpenCode 2 image previews** — Add SIXEL rendering and advertise it to OpenTUI, answer terminal pixel-geometry queries, and preserve attachment aspect ratios instead of falling back to coarse colored blocks. ([#36](https://github.com/kriss-spy/obsidian-opencode/issues/36))
+- **Executable path forms** — Expand `~/…` executable paths and discover bare executable names in versioned NVM installations when desktop-launched Obsidian does not inherit NVM's `PATH`.
 
 ## [1.5.3] - 2026-09-03
 

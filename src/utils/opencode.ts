@@ -143,10 +143,11 @@ function parseV2SessionPage(raw: string): { sessions: OpencodeSession[]; nextCur
 	if (payload.cursor !== undefined && !isRecord(payload.cursor)) {
 		throw new Error("Expected OpenCode v2 cursor metadata to be an object");
 	}
-	const nextCursor = isRecord(payload.cursor) ? payload.cursor.next : undefined;
-	if (nextCursor !== undefined && typeof nextCursor !== "string") {
+	const rawNextCursor = isRecord(payload.cursor) ? payload.cursor.next : undefined;
+	if (rawNextCursor !== undefined && rawNextCursor !== null && typeof rawNextCursor !== "string") {
 		throw new Error("Expected the OpenCode v2 next cursor to be a string");
 	}
+	const nextCursor = typeof rawNextCursor === "string" ? rawNextCursor : undefined;
 	return { sessions: payload.data.map(parseV2Session), nextCursor };
 }
 

@@ -24,7 +24,7 @@ export class OpencodeSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Opencode path")
-			.setDesc("Leave empty to auto-detect OpenCode, or enter the full executable path.")
+			.setDesc("Leave empty to auto-detect OpenCode, or enter an executable name, ~/ path, or full path.")
 			.addText((text) =>
 				text
 					.setPlaceholder("Opencode")

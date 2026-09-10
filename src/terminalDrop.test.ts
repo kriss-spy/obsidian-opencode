@@ -65,7 +65,7 @@ describe('TerminalDropHandler', () => {
     });
 
     it('should call onFileDrop immediately for a single file', () => {
-        const onFileDropMock = vi.fn();
+        const onFileDropMock = vi.fn(() => true);
         
         handleTerminalDrop({
             dragManager: { draggable: { type: 'file', file: { path: 'folder/note.md' } } },
@@ -78,7 +78,7 @@ describe('TerminalDropHandler', () => {
 
     it('should stagger onFileDrop calls with ~75ms delay between multi-file drops', async () => {
         vi.useFakeTimers();
-        const onFileDropMock = vi.fn();
+        const onFileDropMock = vi.fn(() => true);
         
         handleTerminalDrop({
             dragManager: { draggable: { type: 'files', files: [{ path: 'a.md' }, { path: 'b.md' }, { path: 'c.md' }] } },
@@ -107,7 +107,7 @@ describe('TerminalDropHandler', () => {
     });
 
     it('should prefer onFileDrop over terminalInput when both are provided', () => {
-        const onFileDropMock = vi.fn();
+        const onFileDropMock = vi.fn(() => true);
         const terminalInputMock = vi.fn();
         
         handleTerminalDrop({
@@ -121,9 +121,58 @@ describe('TerminalDropHandler', () => {
         expect(terminalInputMock).not.toHaveBeenCalled();
     });
 
+    it('should fall back to terminal input when WebSocket queueing is unavailable', () => {
+        const onFileDropMock = vi.fn(() => false);
+        const terminalInputMock = vi.fn();
+
+        handleTerminalDrop({
+            dragManager: { draggable: { type: 'file', file: { path: 'note.md' } } },
+            onFileDrop: onFileDropMock,
+            terminalInput: terminalInputMock
+        });
+
+        expect(onFileDropMock).toHaveBeenCalledWith('note.md');
+        expect(terminalInputMock).toHaveBeenCalledWith('@note.md');
+    });
+
+    it('should fall back for the current and remaining files when the client disconnects mid-drop', async () => {
+        vi.useFakeTimers();
+        const onFileDropMock = vi.fn()
+            .mockReturnValueOnce(true)
+            .mockReturnValueOnce(false);
+        const terminalInputMock = vi.fn();
+
+        handleTerminalDrop({
+            dragManager: {
+                draggable: {
+                    type: 'files',
+                    files: [{ path: 'a.md' }, { path: 'b.md' }, { path: 'c.md' }]
+                }
+            },
+            onFileDrop: onFileDropMock,
+            terminalInput: terminalInputMock
+        });
+
+        expect(onFileDropMock).toHaveBeenCalledWith('a.md');
+        expect(terminalInputMock).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(75);
+        expect(onFileDropMock).toHaveBeenNthCalledWith(2, 'b.md');
+        expect(terminalInputMock).toHaveBeenNthCalledWith(1, '@b.md');
+
+        await vi.advanceTimersByTimeAsync(100);
+        expect(terminalInputMock).toHaveBeenNthCalledWith(2, ' ');
+
+        await vi.advanceTimersByTimeAsync(50);
+        expect(terminalInputMock).toHaveBeenNthCalledWith(3, '@c.md');
+        expect(onFileDropMock).toHaveBeenCalledTimes(2);
+
+        vi.useRealTimers();
+    });
+
     it('should fall back to dataTransfer.files when dragManager has no draggable', async () => {
         vi.useFakeTimers();
-        const onFileDropMock = vi.fn();
+        const onFileDropMock = vi.fn(() => true);
         
         handleTerminalDrop({
             dragManager: {},
@@ -171,7 +220,7 @@ describe('TerminalDropHandler', () => {
 
     it('should ignore dataTransfer files that lack a path property', async () => {
         vi.useFakeTimers();
-        const onFileDropMock = vi.fn();
+        const onFileDropMock = vi.fn(() => true);
         
         handleTerminalDrop({
             dragManager: {},

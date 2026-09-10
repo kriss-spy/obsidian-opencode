@@ -38,8 +38,8 @@ A plugin that embeds the OpenCode CLI directly into Obsidian. Browse conversatio
 
 - **Terminal:** Use the command palette (`Ctrl/Cmd + P`) and select **"OpenCode: Open Terminal"** to launch the CLI.
 - **Sessions View:** Use the command palette to select **"OpenCode: Open conversations"** to browse, restore, or export past conversations, or start a new session from the panel header.
-- **Close terminal:** Use `Ctrl/Cmd + Shift + W` or run **"OpenCode: Close terminal"**. The shortcut can be changed or removed in Obsidian's Hotkeys settings.
-- **Settings:** Leave the OpenCode path empty to auto-detect a compatible stable installation, or configure the full absolute path to `opencode` or the OpenCode 2 preview's `opencode2`. Default CLI arguments, per-vault environment variables, and terminal styling preferences are available in the Obsidian settings under the "OpenCode" tab.
+- **Close terminal:** Run **"OpenCode: Close terminal"**, or assign it a shortcut in Obsidian's Hotkeys settings. No default shortcut is installed, avoiding conflicts with Obsidian's tab commands.
+- **Settings:** Leave the OpenCode path empty to auto-detect a compatible stable installation, or configure `opencode`, `opencode2`, a `~/…` path, or a full executable path. Bare executable names are resolved from `PATH`, common user-local directories, and NVM installations: nvm-sh version directories on Unix, or the active `NVM_SYMLINK` and installed versions under `NVM_HOME` on Windows. Shell aliases are not executable paths and cannot be launched directly. Default CLI arguments, per-vault environment variables, and terminal styling preferences are available in the Obsidian settings under the "OpenCode" tab.
 
 ## Development
 
@@ -60,6 +60,8 @@ Use `npm run test:obsidian:smoke` for the smaller baseline suite. Windows contri
 See [Testing in Obsidian](docs/testing-obsidian.md) for setup, coverage, evidence, and limitations.
 
 ## Known Issues
+
+- **Empty external-editor prompts are not applied:** In both stable OpenCode and the OpenCode 2 preview, opening the prompt in an external editor, deleting all content, and saving leaves the previous prompt in place. This also reproduces when OpenCode runs outside Obsidian, so it must be fixed upstream.
 
 - **large session preview:** While the buffer size for exporting sessions has been increased (up to 100MB), exceptionally large or deeply complex OpenCode sessions with massive token counts may still occasionally fail to preview or load properly.
 

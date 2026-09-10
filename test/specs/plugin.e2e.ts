@@ -7,6 +7,7 @@ import { WebSocket, RawData } from "ws";
 
 const artifactsDir = path.resolve("test-results/obsidian");
 const opencodeStub = path.resolve(`test/fixtures/opencode-stub${process.platform === "win32" ? ".cmd" : ""}`);
+const opentuiImageStub = path.resolve("test/fixtures/opentui-image-stub");
 
 function nextMessage(socket: WebSocket): Promise<string> {
 	return new Promise((resolve, reject) => {
@@ -86,9 +87,8 @@ describe("OpenCode plugin in a fresh vault", function () {
 		const closeTerminalHotkeys = await browser.execute(() => (
 			(window as any).app.hotkeyManager.defaultKeys["opencode:close-terminal"]
 		));
-		expect(closeTerminalHotkeys).toEqual([
-			{ modifiers: ["Mod", "Shift"], key: "w" },
-		]);
+		// WebDriver serializes an undefined browser result as null.
+		expect(closeTerminalHotkeys).toBeNull();
 	});
 
 	it("[smoke] opens the conversations view", async function () {
@@ -751,6 +751,82 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await browser.waitUntil(() => browser.execute(() => !(window as any).app.workspace.rightSplit.collapsed), {
 			timeoutMsg: "Terminal sidebar did not reveal",
 		});
+	});
+
+	it("[issue #36] reports terminal and cell pixel geometry to OpenCode 2", async function () {
+		await browser.executeObsidianCommand("opencode:open-terminal");
+		await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
+		await browser.pause(100);
+
+		const result = await browser.execute(async () => {
+			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			const replies: string[] = [];
+			const originalWriteStdin = view.ptySession.writeStdin;
+			view.ptySession.writeStdin = (data: string) => replies.push(data);
+			try {
+				await new Promise<void>((resolve) => view.terminal.write("\x1b[c\x1b[14t\x1b[16t", resolve));
+				await new Promise((resolve) => window.setTimeout(resolve, 25));
+			} finally {
+				view.ptySession.writeStdin = originalWriteStdin;
+			}
+			return {
+				replies,
+				rows: view.terminal.rows,
+				cols: view.terminal.cols,
+			};
+		});
+
+		expect(result.replies).toContain("\x1b[?62;4;9;22c");
+		const windowReply = result.replies.find((reply) => reply.startsWith("\x1b[4;"));
+		expect(windowReply).toBeDefined();
+		const [, windowHeight, windowWidth] = windowReply!.match(/^\x1b\[4;(\d+);(\d+)t$/) ?? [];
+		const cellReply = result.replies.find((reply) => reply.startsWith("\x1b[6;"));
+		expect(cellReply).toBeDefined();
+		const [, height, width] = cellReply!.match(/^\x1b\[6;(\d+);(\d+)t$/) ?? [];
+		expect(Number(height)).toBeGreaterThan(0);
+		expect(Number(width)).toBeGreaterThan(0);
+		expect(Math.abs(Number(windowHeight) - Number(height) * result.rows))
+			.toBeLessThanOrEqual(result.rows / 2 + 1);
+		expect(Math.abs(Number(windowWidth) - Number(width) * result.cols))
+			.toBeLessThanOrEqual(result.cols / 2 + 1);
+	});
+
+	it("[issue #36] negotiates and renders a SIXEL image", async function () {
+		if (process.platform === "win32") this.skip();
+		const previousExecutable = await browser.execute(async (stubPath: string): Promise<string> => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			const previous = String(plugin.settings.opencodePath ?? "");
+			plugin.settings.opencodePath = stubPath;
+			await plugin.saveSettings();
+			await plugin.newSession();
+			return previous;
+		}, opentuiImageStub);
+		try {
+			await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
+			await waitForTerminalText("SIXEL_READY");
+			await browser.waitUntil(() => browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0]?.view;
+				return (view?.imageAddon?.storageUsage ?? 0) > 0;
+			}), { timeout: 10_000, timeoutMsg: "The embedded terminal did not render the SIXEL image" });
+			const imageSize = await browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				for (let y = 0; y < view.terminal.buffer.active.length; y++) {
+					for (let x = 0; x < view.terminal.cols; x++) {
+						const image = view.imageAddon.getImageAtBufferCell(x, y);
+						if (image) return { width: image.width, height: image.height };
+					}
+				}
+				return null;
+			});
+			expect(imageSize).toEqual({ width: 32, height: 16 });
+			await browser.saveScreenshot(path.join(artifactsDir, "opentui-sixel-preview.png"));
+		} finally {
+			await browser.execute(async (opencodePath: string) => {
+				const plugin = (window as any).app.plugins.plugins.opencode;
+				plugin.settings.opencodePath = opencodePath;
+				await plugin.saveSettings();
+			}, previousExecutable);
+		}
 	});
 
 	it("[smoke] implements the editor protocol and file-drop delivery", async function () {

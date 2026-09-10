@@ -107,7 +107,6 @@ export default class OpencodePlugin extends Plugin {
 		this.addCommand({
 			id: "close-terminal",
 			name: "Close terminal",
-			hotkeys: [{ modifiers: ["Mod", "Shift"], key: "w" }],
 			callback: () => { void this.viewCoordinator.closeTerminal(); },
 		});
 

@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { ImageAddon } from "@xterm/addon-image";
 import { release } from "node:os";
 import OpencodePlugin from "../main";
 import { handleTerminalDrop } from "../terminalDrop";
@@ -26,6 +27,7 @@ export const OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
 export class OpencodeTerminalView extends ItemView {
 	terminal: Terminal | null = null;
 	fitAddon: FitAddon | null = null;
+	imageAddon: ImageAddon | null = null;
 	container: HTMLElement | null = null;
 	editorServer: EditorServer | null = null;
 	private editorPort: number | undefined;
@@ -107,6 +109,10 @@ export class OpencodeTerminalView extends ItemView {
 			cursorBlink: true,
 			scrollback: 10000,
 			convertEol: false,
+			windowOptions: {
+				getWinSizePixels: true,
+				getCellSizePixels: true,
+			},
 			windowsPty: process.platform === "win32"
 				? { backend: "conpty", buildNumber: Number.parseInt(release().split(".")[2], 10) }
 				: undefined,
@@ -116,6 +122,15 @@ export class OpencodeTerminalView extends ItemView {
 		const fitAddon = new FitAddon();
 		terminal.loadAddon(fitAddon);
 		terminal.loadAddon(new WebLinksAddon());
+		const imageAddon = new ImageAddon({
+			enableSizeReports: false,
+			iipSupport: false,
+			pixelLimit: 4_194_304,
+			sixelSizeLimit: 8_000_000,
+			storageLimit: 32,
+		});
+		terminal.loadAddon(imageAddon);
+		this.imageAddon = imageAddon;
 
 		terminal.open(termContainer);
 		if (process.platform === "win32") {
@@ -329,7 +344,7 @@ export class OpencodeTerminalView extends ItemView {
 				terminalInput: this.ptySession.getStdin() ? (data: string) => terminal.input(data, true) : undefined,
 				onFileDrop: this.editorServer ? (filePath: string) => {
 					const normalized = normalizeVaultPath(filePath, this.plugin.vaultRoot);
-					this.editorServer!.notifyAtMentioned(normalized);
+					return this.editorServer!.notifyAtMentioned(normalized);
 				} : undefined
 			});
 		};
@@ -430,6 +445,7 @@ export class OpencodeTerminalView extends ItemView {
 					// xterm canvas addon may throw on dispose
 				}
 				this.terminal = null;
+				this.imageAddon = null;
 			}
 			this.keyRouter.dispose();
 		});
