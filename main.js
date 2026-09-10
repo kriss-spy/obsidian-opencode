@@ -22604,6 +22604,8 @@ function executableNames(executable, platform, environment) {
 function firstExecutable(candidates) {
   for (const candidate of candidates) {
     try {
+      if (!fs3.statSync(candidate).isFile())
+        continue;
       fs3.accessSync(candidate, fs3.constants.X_OK);
       return candidate;
     } catch (e) {
@@ -22612,22 +22614,29 @@ function firstExecutable(candidates) {
   }
   return null;
 }
-function nvmBinDirectories(homeDirectory, pathApi) {
-  const versionsDirectory = pathApi.join(homeDirectory, ".nvm", "versions", "node");
+function findExecutableOnPath(executable, options = {}) {
+  var _a, _b;
+  const platform = (_a = options.platform) != null ? _a : process.platform;
+  const environment = (_b = options.environment) != null ? _b : process.env;
+  const pathApi = platform === "win32" ? path5.win32 : path5.posix;
+  const names = executableNames(executable, platform, environment);
+  if (isAbsoluteExecutablePath(executable, platform))
+    return firstExecutable(names);
+  const environmentPath = environment.PATH || (platform === "win32" ? environment.Path : void 0) || "";
+  const candidates = environmentPath.split(pathApi.delimiter).filter(Boolean).flatMap((directory) => names.map((name) => pathApi.join(directory, name)));
+  return firstExecutable(candidates);
+}
+function versionDirectories(versionsDirectory, pathApi) {
   try {
     const versions = fs3.readdirSync(versionsDirectory, { withFileTypes: true, encoding: "utf8" });
-    return versions.filter((entry) => entry.isDirectory()).sort((left, right) => right.name.localeCompare(left.name, void 0, { numeric: true })).map((entry) => pathApi.join(versionsDirectory, entry.name, "bin"));
+    return versions.filter((entry) => entry.isDirectory()).sort((left, right) => right.name.localeCompare(left.name, void 0, { numeric: true })).map((entry) => pathApi.join(versionsDirectory, entry.name));
   } catch (e) {
     return [];
   }
 }
-function nvmWindowsVersionDirectories(nvmHome, pathApi) {
-  try {
-    const versions = fs3.readdirSync(nvmHome, { withFileTypes: true, encoding: "utf8" });
-    return versions.filter((entry) => entry.isDirectory()).sort((left, right) => right.name.localeCompare(left.name, void 0, { numeric: true })).map((entry) => pathApi.join(nvmHome, entry.name));
-  } catch (e) {
-    return [];
-  }
+function nvmBinDirectories(homeDirectory) {
+  const versionsDirectory = path5.posix.join(homeDirectory, ".nvm", "versions", "node");
+  return versionDirectories(versionsDirectory, path5.posix).map((directory) => path5.posix.join(directory, "bin"));
 }
 function resolveOpencodeExecutable(configuredPath, options = {}) {
   var _a, _b, _c, _d, _e;
@@ -22636,20 +22645,18 @@ function resolveOpencodeExecutable(configuredPath, options = {}) {
   const pathApi = platform === "win32" ? path5.win32 : path5.posix;
   const homeDirectory = (_c = options.homeDirectory) != null ? _c : os4.homedir();
   const configuredExecutable = configuredPath.trim();
-  const executable = configuredExecutable === "~" ? homeDirectory : configuredExecutable.startsWith("~/") || configuredExecutable.startsWith("~\\") ? pathApi.join(homeDirectory, configuredExecutable.slice(2)) : configuredExecutable || DEFAULT_EXECUTABLE;
+  const executable = configuredExecutable.startsWith("~/") || configuredExecutable.startsWith("~\\") ? pathApi.join(homeDirectory, configuredExecutable.slice(2)) : configuredExecutable || DEFAULT_EXECUTABLE;
   const names = executableNames(executable, platform, environment);
   if (isAbsoluteExecutablePath(executable, platform)) {
-    return (_d = firstExecutable(names)) != null ? _d : executable;
+    return (_d = findExecutableOnPath(executable, { platform, environment })) != null ? _d : executable;
   }
-  const environmentPath = environment.PATH || (platform === "win32" ? environment.Path : void 0) || "";
-  const pathCandidates = environmentPath.split(pathApi.delimiter).filter(Boolean).flatMap((directory) => names.map((name) => pathApi.join(directory, name)));
-  const fromPath = firstExecutable(pathCandidates);
+  const fromPath = findExecutableOnPath(executable, { platform, environment });
   if (fromPath)
     return fromPath;
   const localDirectories = [
     ...COMMON_BIN_DIRS2.map((directory) => pathApi.join(homeDirectory, directory)),
     ...platform === "win32" && environment.NVM_SYMLINK ? [environment.NVM_SYMLINK] : [],
-    ...platform === "win32" ? environment.NVM_HOME ? nvmWindowsVersionDirectories(environment.NVM_HOME, path5.win32) : [] : nvmBinDirectories(homeDirectory, path5.posix)
+    ...platform === "win32" ? environment.NVM_HOME ? versionDirectories(environment.NVM_HOME, path5.win32) : [] : nvmBinDirectories(homeDirectory)
   ];
   const localCandidates = localDirectories.flatMap(
     (directory) => names.map((name) => pathApi.join(directory, name))
@@ -22728,7 +22735,15 @@ function parseV2SessionPage(raw) {
     throw new Error("Expected the OpenCode v2 next cursor to be a string");
   }
   const nextCursor = typeof rawNextCursor === "string" ? rawNextCursor : void 0;
-  return { sessions: payload.data.map(parseV2Session), nextCursor };
+  const sessions = payload.data.flatMap((value) => {
+    const session = parseV2Session(value);
+    const parentID = value.parentID;
+    if (parentID !== void 0 && parentID !== null && typeof parentID !== "string") {
+      throw new Error("OpenCode v2 session parentID must be a string");
+    }
+    return parentID === void 0 || parentID === null ? [session] : [];
+  });
+  return { sessions, nextCursor };
 }
 var WINDOWS_EXEC_HOST_JS = String.raw`
 const { spawn } = require("child_process");
@@ -22767,46 +22782,27 @@ function windowsCommandReferences(tokens, env) {
   });
   return { env: commandEnv, references };
 }
-function resolveWindowsExecutable(executable, env) {
-  if (path6.win32.isAbsolute(executable))
-    return executable;
-  const extensions = (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
-  const names = path6.win32.extname(executable) ? [executable] : extensions.map((extension2) => `${executable}${extension2}`);
-  for (const directory of (env.PATH || "").split(path6.win32.delimiter)) {
-    if (!directory)
-      continue;
-    for (const name of names) {
-      const candidate = path6.win32.join(directory, name);
-      try {
-        fs4.accessSync(candidate, fs4.constants.X_OK);
-        return candidate;
-      } catch (e) {
-        continue;
-      }
-    }
-  }
-  return executable;
-}
 function runExecFile(executable, args, opts) {
   return new Promise((resolve2, reject) => {
-    let file = process.platform === "win32" ? resolveWindowsExecutable(executable, opts.env) : executable;
+    var _a, _b;
+    let file = process.platform === "win32" ? (_a = findExecutableOnPath(executable, { platform: "win32", environment: opts.env })) != null ? _a : executable : executable;
     let fileArgs = args;
     let execOptions = opts;
     if (process.platform === "win32") {
       const target = file;
-      file = resolveWindowsExecutable("node.exe", opts.env);
+      file = (_b = findExecutableOnPath("node.exe", { platform: "win32", environment: opts.env })) != null ? _b : "node.exe";
       fileArgs = ["-e", WINDOWS_EXEC_HOST_JS, opts.cwd, target, ...args];
       execOptions = { ...opts, windowsHide: true };
     }
     (0, import_child_process.execFile)(file, fileArgs, execOptions, (err, stdout, stderr) => {
-      var _a, _b;
+      var _a2, _b2;
       if (err) {
         const failure = err instanceof Error ? err : new Error(typeof err === "string" ? err : "exec failed");
         if (stderr)
           failure.stderr = stderr.toString();
         reject(failure);
       } else {
-        resolve2({ stdout: (_a = stdout == null ? void 0 : stdout.toString()) != null ? _a : "", stderr: (_b = stderr == null ? void 0 : stderr.toString()) != null ? _b : "" });
+        resolve2({ stdout: (_a2 = stdout == null ? void 0 : stdout.toString()) != null ? _a2 : "", stderr: (_b2 = stderr == null ? void 0 : stderr.toString()) != null ? _b2 : "" });
       }
     });
   });
@@ -22879,6 +22875,67 @@ function classifyOperationError(error, executable, operation) {
   }
   return new CliCommandError(`OpenCode ${OPERATION_LABELS[operation]} failed: ${details || "unknown command error"}`, error);
 }
+async function runSessionCommand(context, args) {
+  let raw = "";
+  let stderrText = "";
+  try {
+    if (context.isFlatpak) {
+      const tmpFile = path6.join(os5.tmpdir(), `opencode-sessions-${Date.now()}.json`);
+      const shellCmd = `${[context.executable, ...args].map(quoteShell).join(" ")} > ${quoteShell(tmpFile)}`;
+      const result = await runExecFile("flatpak-spawn", [
+        "--host",
+        ...flatpakEnvironmentArgs(context.environmentVariables),
+        "sh",
+        "-c",
+        shellCmd
+      ], { cwd: context.cwd, env: context.env });
+      stderrText = result.stderr;
+      try {
+        raw = fs4.readFileSync(tmpFile, "utf-8");
+      } finally {
+        safeUnlinkSync(tmpFile);
+      }
+    } else {
+      const result = await runExecFile(context.executable, args, { cwd: context.cwd, env: context.env });
+      raw = result.stdout || "";
+      stderrText = result.stderr || "";
+      if (!raw.trim() && looksLikeJson(stderrText)) {
+        raw = stderrText;
+        stderrText = "";
+      }
+    }
+  } catch (error) {
+    console.error("Failed to list sessions:", error);
+    throw classifyOperationError(error, context.executable, "session-list");
+  }
+  const trimmed = raw.trim();
+  if (trimmed)
+    return trimmed;
+  if (stderrText.trim()) {
+    throw classifyOperationError(new Error(stderrText.trim()), context.executable, "session-list");
+  }
+  throw new MalformedCliOutputError(new Error("OpenCode returned no JSON output"));
+}
+async function listStableSessions(run) {
+  return parseStableSessionList(await run(["session", "list", "--format", "json"]));
+}
+async function listV2Sessions(run, directory) {
+  const sessions = [];
+  const seenCursors = /* @__PURE__ */ new Set();
+  let cursor;
+  do {
+    const query = `/api/session?directory=${encodeURIComponent(directory)}&roots=true${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+    const page = parseV2SessionPage(await run(["api", "get", query]));
+    sessions.push(...page.sessions);
+    cursor = page.nextCursor;
+    if (cursor && seenCursors.has(cursor)) {
+      throw new Error("OpenCode v2 returned a repeated session cursor");
+    }
+    if (cursor)
+      seenCursors.add(cursor);
+  } while (cursor);
+  return sessions;
+}
 var ExportTooLargeError = class extends Error {
   constructor(sessionId) {
     super(`Session ${sessionId} is too large to export`);
@@ -22922,71 +22979,20 @@ ${result.stderr}`;
     const isFlatpak = fs4.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
     const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
     const executable = this.resolvePath(env);
-    const runSessionList = async (args) => {
-      let raw = "";
-      let stderrText = "";
-      try {
-        if (isFlatpak) {
-          const tmpFile = path6.join(os5.tmpdir(), `opencode-sessions-${Date.now()}.json`);
-          const shellCmd = `${[executable, ...args].map(quoteShell).join(" ")} > ${quoteShell(tmpFile)}`;
-          const result = await runExecFile("flatpak-spawn", ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), "sh", "-c", shellCmd], { cwd: this.cwd, env });
-          stderrText = result.stderr;
-          try {
-            raw = fs4.readFileSync(tmpFile, "utf-8");
-          } finally {
-            safeUnlinkSync(tmpFile);
-          }
-        } else {
-          const result = await runExecFile(executable, args, { cwd: this.cwd, env });
-          raw = result.stdout || "";
-          stderrText = result.stderr || "";
-          if (!raw.trim() && looksLikeJson(stderrText)) {
-            raw = stderrText;
-            stderrText = "";
-          }
-        }
-      } catch (error) {
-        console.error("Failed to list sessions:", error);
-        throw classifyOperationError(error, executable, "session-list");
-      }
-      const trimmed = raw.trim();
-      if (trimmed)
-        return trimmed;
-      if (stderrText.trim())
-        throw classifyOperationError(new Error(stderrText.trim()), executable, "session-list");
-      throw new MalformedCliOutputError(new Error("OpenCode returned no JSON output"));
-    };
-    if (generation === "stable") {
-      try {
-        return parseStableSessionList(await runSessionList(["session", "list", "--format", "json"]));
-      } catch (error) {
-        if (error instanceof OpencodeError)
-          throw error;
-        throw new MalformedCliOutputError(error);
-      }
+    const run = (args) => runSessionCommand({
+      executable,
+      cwd: this.cwd,
+      env,
+      isFlatpak,
+      environmentVariables: this.environmentVariables
+    }, args);
+    try {
+      return generation === "stable" ? await listStableSessions(run) : await listV2Sessions(run, this.cwd);
+    } catch (error) {
+      if (error instanceof OpencodeError)
+        throw error;
+      throw new MalformedCliOutputError(error);
     }
-    const sessions = [];
-    const seenCursors = /* @__PURE__ */ new Set();
-    let cursor;
-    do {
-      const query = `/api/session?directory=${encodeURIComponent(this.cwd)}&roots=true${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
-      let page;
-      try {
-        page = parseV2SessionPage(await runSessionList(["api", "get", query]));
-      } catch (error) {
-        if (error instanceof OpencodeError)
-          throw error;
-        throw new MalformedCliOutputError(error);
-      }
-      sessions.push(...page.sessions);
-      cursor = page.nextCursor;
-      if (cursor && seenCursors.has(cursor)) {
-        throw new MalformedCliOutputError(new Error("OpenCode v2 returned a repeated session cursor"));
-      }
-      if (cursor)
-        seenCursors.add(cursor);
-    } while (cursor);
-    return sessions;
   }
   async exportSession(sessionId) {
     try {
@@ -23175,10 +23181,7 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
     terminal.loadAddon(new import_addon_web_links.WebLinksAddon());
     const imageAddon = new import_addon_image.ImageAddon({
       enableSizeReports: false,
-      iipSupport: false,
-      pixelLimit: 4194304,
-      sixelSizeLimit: 8e6,
-      storageLimit: 32
+      iipSupport: false
     });
     terminal.loadAddon(imageAddon);
     this.imageAddon = imageAddon;

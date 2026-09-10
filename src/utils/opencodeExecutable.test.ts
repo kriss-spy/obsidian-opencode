@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs";
-import { identifyOpenCodeCli, resolveOpencodeExecutable } from "./opencodeExecutable";
+import { findExecutableOnPath, identifyOpenCodeCli, resolveOpencodeExecutable } from "./opencodeExecutable";
 
 vi.mock("fs", () => ({
 	accessSync: vi.fn(),
+	statSync: vi.fn(() => ({ isFile: () => true })),
 	readdirSync: vi.fn(() => {
 		throw new Error("not found");
 	}),
@@ -11,6 +12,12 @@ vi.mock("fs", () => ({
 }));
 
 describe("resolveOpencodeExecutable", () => {
+	beforeEach(() => {
+		vi.mocked(fs.accessSync).mockImplementation(() => { throw new Error("not found"); });
+		vi.mocked(fs.statSync).mockReturnValue({ isFile: () => true } as fs.Stats);
+		vi.mocked(fs.readdirSync).mockImplementation(() => { throw new Error("not found"); });
+	});
+
 	afterEach(() => {
 		vi.restoreAllMocks();
 	});
@@ -37,6 +44,44 @@ describe("resolveOpencodeExecutable", () => {
 			environment: { PATH: "/usr/bin" },
 			homeDirectory: "/home/tester",
 		})).toBe("/home/tester/.nvm/versions/node/v22.17.1/bin/opencode2");
+	});
+
+	it("does not treat an exact home alias as an executable path", () => {
+		expect(resolveOpencodeExecutable("~", {
+			platform: "linux",
+			environment: { PATH: "/usr/bin" },
+			homeDirectory: "/home/tester",
+		})).toBe("~");
+		expect(fs.accessSync).not.toHaveBeenCalledWith("/home/tester", fs.constants.X_OK);
+	});
+
+	it("skips searchable directories while resolving executable candidates", () => {
+		vi.mocked(fs.statSync).mockImplementation((candidate) => ({
+			isFile: () => candidate === "/home/tester/.local/bin/opencode",
+		}) as fs.Stats);
+		vi.mocked(fs.accessSync).mockImplementation((candidate) => {
+			if (candidate !== "/home/tester/.local/bin/opencode") throw new Error("not found");
+		});
+
+		expect(resolveOpencodeExecutable("opencode", {
+			platform: "linux",
+			environment: { PATH: "/usr/bin" },
+			homeDirectory: "/home/tester",
+		})).toBe("/home/tester/.local/bin/opencode");
+	});
+
+	it("skips directories during Windows PATH lookup for wrapper executables", () => {
+		vi.mocked(fs.statSync).mockImplementation((candidate) => ({
+			isFile: () => candidate === "C:\\real\\node.EXE",
+		}) as fs.Stats);
+		vi.mocked(fs.accessSync).mockImplementation((candidate) => {
+			if (candidate !== "C:\\real\\node.EXE") throw new Error("not found");
+		});
+
+		expect(findExecutableOnPath("node", {
+			platform: "win32",
+			environment: { PATH: "C:\\configured;C:\\real", PATHEXT: ".EXE" },
+		})).toBe("C:\\real\\node.EXE");
 	});
 
 	it("resolves a bare executable installed by NVM outside the inherited PATH", () => {

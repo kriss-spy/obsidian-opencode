@@ -161,6 +161,7 @@ describe('OpencodeClient listSessions', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.mocked(fs.accessSync).mockImplementation(() => { throw new Error('not found'); });
+		vi.mocked(fs.statSync).mockReturnValue({ isFile: () => true } as fs.Stats);
 		vi.mocked(fs.existsSync).mockReturnValue(false);
 	});
 
@@ -183,6 +184,13 @@ describe('OpencodeClient listSessions', () => {
 				projectID: 'project-v2',
 				location: { directory: '/vault notes' },
 				time: { created: 10, updated: 20 },
+			}, {
+				id: 'ses_v2_child',
+				title: 'Child session',
+				projectID: 'project-v2',
+				parentID: 'ses_v2',
+				location: { directory: '/vault notes' },
+				time: { created: 11, updated: 12 },
 			}],
 			cursor: { next: 'next/page' },
 		}, {

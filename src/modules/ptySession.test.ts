@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { spawn, ChildProcess, execFileSync } from "child_process";
-import { accessSync, writeFileSync } from "fs";
+import { accessSync, statSync, writeFileSync } from "fs";
 import * as os from "os";
 import * as path from "path";
 import { EventEmitter } from "events";
@@ -21,6 +21,7 @@ vi.mock("child_process", () => ({
 
 vi.mock("fs", () => ({
 	accessSync: vi.fn(),
+	statSync: vi.fn(() => ({ isFile: () => true })),
 	existsSync: vi.fn().mockReturnValue(false),
 	mkdtempSync: vi.fn().mockReturnValue("C:\\temp\\obsidian-opencode-test"),
 	writeFileSync: vi.fn(),
@@ -54,6 +55,7 @@ describe("PtySession", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.mocked(accessSync).mockImplementation(() => undefined);
+		vi.mocked(statSync).mockReturnValue({ isFile: () => true } as ReturnType<typeof statSync>);
 		vi.stubGlobal("window", {
 			setTimeout: (callback: () => void, delay?: number) => setTimeout(callback, delay),
 			clearTimeout: (timeout: ReturnType<typeof setTimeout>) => clearTimeout(timeout),

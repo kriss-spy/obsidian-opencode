@@ -32,6 +32,7 @@ function executableNames(executable: string, platform: NodeJS.Platform, environm
 function firstExecutable(candidates: string[]): string | null {
 	for (const candidate of candidates) {
 		try {
+			if (!fs.statSync(candidate).isFile()) continue;
 			fs.accessSync(candidate, fs.constants.X_OK);
 			return candidate;
 		} catch {
@@ -41,29 +42,40 @@ function firstExecutable(candidates: string[]): string | null {
 	return null;
 }
 
-function nvmBinDirectories(homeDirectory: string, pathApi: typeof path.posix | typeof path.win32): string[] {
-	const versionsDirectory = pathApi.join(homeDirectory, ".nvm", "versions", "node");
+export function findExecutableOnPath(
+	executable: string,
+	options: Pick<ExecutableResolutionOptions, "platform" | "environment"> = {}
+): string | null {
+	const platform = options.platform ?? process.platform;
+	const environment = options.environment ?? process.env;
+	const pathApi = platform === "win32" ? path.win32 : path.posix;
+	const names = executableNames(executable, platform, environment);
+	if (isAbsoluteExecutablePath(executable, platform)) return firstExecutable(names);
+
+	const environmentPath = environment.PATH || (platform === "win32" ? environment.Path : undefined) || "";
+	const candidates = environmentPath
+		.split(pathApi.delimiter)
+		.filter(Boolean)
+		.flatMap((directory) => names.map((name) => pathApi.join(directory, name)));
+	return firstExecutable(candidates);
+}
+
+function versionDirectories(versionsDirectory: string, pathApi: typeof path.posix | typeof path.win32): string[] {
 	try {
 		const versions = fs.readdirSync(versionsDirectory, { withFileTypes: true, encoding: "utf8" });
 		return versions
 			.filter((entry) => entry.isDirectory())
 			.sort((left, right) => right.name.localeCompare(left.name, undefined, { numeric: true }))
-			.map((entry) => pathApi.join(versionsDirectory, entry.name, "bin"));
+			.map((entry) => pathApi.join(versionsDirectory, entry.name));
 	} catch {
 		return [];
 	}
 }
 
-function nvmWindowsVersionDirectories(nvmHome: string, pathApi: typeof path.win32): string[] {
-	try {
-		const versions = fs.readdirSync(nvmHome, { withFileTypes: true, encoding: "utf8" });
-		return versions
-			.filter((entry) => entry.isDirectory())
-			.sort((left, right) => right.name.localeCompare(left.name, undefined, { numeric: true }))
-			.map((entry) => pathApi.join(nvmHome, entry.name));
-	} catch {
-		return [];
-	}
+function nvmBinDirectories(homeDirectory: string): string[] {
+	const versionsDirectory = path.posix.join(homeDirectory, ".nvm", "versions", "node");
+	return versionDirectories(versionsDirectory, path.posix)
+		.map((directory) => path.posix.join(directory, "bin"));
 }
 
 export function resolveOpencodeExecutable(
@@ -75,23 +87,16 @@ export function resolveOpencodeExecutable(
 	const pathApi = platform === "win32" ? path.win32 : path.posix;
 	const homeDirectory = options.homeDirectory ?? os.homedir();
 	const configuredExecutable = configuredPath.trim();
-	const executable = configuredExecutable === "~"
-		? homeDirectory
-		: configuredExecutable.startsWith("~/") || configuredExecutable.startsWith("~\\")
+	const executable = configuredExecutable.startsWith("~/") || configuredExecutable.startsWith("~\\")
 			? pathApi.join(homeDirectory, configuredExecutable.slice(2))
 			: configuredExecutable || DEFAULT_EXECUTABLE;
 	const names = executableNames(executable, platform, environment);
 
 	if (isAbsoluteExecutablePath(executable, platform)) {
-		return firstExecutable(names) ?? executable;
+		return findExecutableOnPath(executable, { platform, environment }) ?? executable;
 	}
 
-	const environmentPath = environment.PATH || (platform === "win32" ? environment.Path : undefined) || "";
-	const pathCandidates = environmentPath
-		.split(pathApi.delimiter)
-		.filter(Boolean)
-		.flatMap((directory) => names.map((name) => pathApi.join(directory, name)));
-	const fromPath = firstExecutable(pathCandidates);
+	const fromPath = findExecutableOnPath(executable, { platform, environment });
 	if (fromPath) return fromPath;
 
 	const localDirectories = [
@@ -99,9 +104,9 @@ export function resolveOpencodeExecutable(
 		...(platform === "win32" && environment.NVM_SYMLINK ? [environment.NVM_SYMLINK] : []),
 		...(platform === "win32"
 			? environment.NVM_HOME
-				? nvmWindowsVersionDirectories(environment.NVM_HOME, path.win32)
+				? versionDirectories(environment.NVM_HOME, path.win32)
 				: []
-			: nvmBinDirectories(homeDirectory, path.posix)),
+			: nvmBinDirectories(homeDirectory)),
 	];
 	const localCandidates = localDirectories.flatMap((directory) =>
 		names.map((name) => pathApi.join(directory, name))

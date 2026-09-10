@@ -125,9 +125,6 @@ export class OpencodeTerminalView extends ItemView {
 		const imageAddon = new ImageAddon({
 			enableSizeReports: false,
 			iipSupport: false,
-			pixelLimit: 4_194_304,
-			sixelSizeLimit: 8_000_000,
-			storageLimit: 32,
 		});
 		terminal.loadAddon(imageAddon);
 		this.imageAddon = imageAddon;

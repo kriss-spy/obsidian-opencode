@@ -4,7 +4,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { createChildEnvironment, EnvironmentVariables, flatpakEnvironmentArgs } from "./environment";
-import { identifyOpenCodeCli, OpenCodeCliGeneration, resolveOpencodeExecutable } from "./opencodeExecutable";
+import { findExecutableOnPath, identifyOpenCodeCli, OpenCodeCliGeneration, resolveOpencodeExecutable } from "./opencodeExecutable";
 
 export interface OpencodeSession {
 	id: string;
@@ -148,7 +148,15 @@ function parseV2SessionPage(raw: string): { sessions: OpencodeSession[]; nextCur
 		throw new Error("Expected the OpenCode v2 next cursor to be a string");
 	}
 	const nextCursor = typeof rawNextCursor === "string" ? rawNextCursor : undefined;
-	return { sessions: payload.data.map(parseV2Session), nextCursor };
+	const sessions = payload.data.flatMap((value) => {
+		const session = parseV2Session(value);
+		const parentID = (value as Record<string, unknown>).parentID;
+		if (parentID !== undefined && parentID !== null && typeof parentID !== "string") {
+			throw new Error("OpenCode v2 session parentID must be a string");
+		}
+		return parentID === undefined || parentID === null ? [session] : [];
+	});
+	return { sessions, nextCursor };
 }
 
 interface ExecResult {
@@ -195,33 +203,16 @@ function windowsCommandReferences(tokens: string[], env: NodeJS.ProcessEnv): { e
 	return { env: commandEnv, references };
 }
 
-function resolveWindowsExecutable(executable: string, env: NodeJS.ProcessEnv): string {
-	if (path.win32.isAbsolute(executable)) return executable;
-	const extensions = (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
-	const names = path.win32.extname(executable) ? [executable] : extensions.map((extension) => `${executable}${extension}`);
-	for (const directory of (env.PATH || "").split(path.win32.delimiter)) {
-		if (!directory) continue;
-		for (const name of names) {
-			const candidate = path.win32.join(directory, name);
-			try {
-				fs.accessSync(candidate, fs.constants.X_OK);
-				return candidate;
-			} catch {
-				continue;
-			}
-		}
-	}
-	return executable;
-}
-
 function runExecFile(executable: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv }): Promise<ExecResult> {
 	return new Promise((resolve, reject) => {
-		let file = process.platform === "win32" ? resolveWindowsExecutable(executable, opts.env) : executable;
+		let file = process.platform === "win32"
+			? findExecutableOnPath(executable, { platform: "win32", environment: opts.env }) ?? executable
+			: executable;
 		let fileArgs = args;
 		let execOptions: Parameters<typeof execFile>[2] = opts;
 		if (process.platform === "win32") {
 			const target = file;
-			file = resolveWindowsExecutable("node.exe", opts.env);
+			file = findExecutableOnPath("node.exe", { platform: "win32", environment: opts.env }) ?? "node.exe";
 			fileArgs = ["-e", WINDOWS_EXEC_HOST_JS, opts.cwd, target, ...args];
 			execOptions = { ...opts, windowsHide: true };
 		}
@@ -323,6 +314,84 @@ function classifyOperationError(error: unknown, executable: string, operation: O
 	return new CliCommandError(`OpenCode ${OPERATION_LABELS[operation]} failed: ${details || "unknown command error"}`, error);
 }
 
+interface SessionCommandContext {
+	executable: string;
+	cwd: string;
+	env: NodeJS.ProcessEnv;
+	isFlatpak: boolean;
+	environmentVariables: EnvironmentVariables;
+}
+
+type SessionCommandRunner = (args: string[]) => Promise<string>;
+
+async function runSessionCommand(context: SessionCommandContext, args: string[]): Promise<string> {
+	let raw = "";
+	let stderrText = "";
+	try {
+		if (context.isFlatpak) {
+			// flatpak-spawn's stdout forwarding can drop/truncate the captured
+			// output (see issue #25: empty stdout -> JSON.parse("") crash).
+			// Route through a host-side temp file, matching the export path.
+			const tmpFile = path.join(os.tmpdir(), `opencode-sessions-${Date.now()}.json`);
+			const shellCmd = `${[context.executable, ...args].map(quoteShell).join(" ")} > ${quoteShell(tmpFile)}`;
+			const result = await runExecFile("flatpak-spawn", [
+				"--host",
+				...flatpakEnvironmentArgs(context.environmentVariables),
+				"sh",
+				"-c",
+				shellCmd,
+			], { cwd: context.cwd, env: context.env });
+			stderrText = result.stderr;
+			try {
+				raw = fs.readFileSync(tmpFile, "utf-8");
+			} finally {
+				safeUnlinkSync(tmpFile);
+			}
+		} else {
+			const result = await runExecFile(context.executable, args, { cwd: context.cwd, env: context.env });
+			raw = result.stdout || "";
+			stderrText = result.stderr || "";
+			// Some setups route the JSON payload to stderr; fall back to it
+			// only when it actually looks like JSON to avoid parsing log noise.
+			if (!raw.trim() && looksLikeJson(stderrText)) {
+				raw = stderrText;
+				stderrText = "";
+			}
+		}
+	} catch (error) {
+		console.error("Failed to list sessions:", error);
+		throw classifyOperationError(error, context.executable, "session-list");
+	}
+
+	const trimmed = raw.trim();
+	if (trimmed) return trimmed;
+	if (stderrText.trim()) {
+		throw classifyOperationError(new Error(stderrText.trim()), context.executable, "session-list");
+	}
+	throw new MalformedCliOutputError(new Error("OpenCode returned no JSON output"));
+}
+
+async function listStableSessions(run: SessionCommandRunner): Promise<OpencodeSession[]> {
+	return parseStableSessionList(await run(["session", "list", "--format", "json"]));
+}
+
+async function listV2Sessions(run: SessionCommandRunner, directory: string): Promise<OpencodeSession[]> {
+	const sessions: OpencodeSession[] = [];
+	const seenCursors = new Set<string>();
+	let cursor: string | undefined;
+	do {
+		const query = `/api/session?directory=${encodeURIComponent(directory)}&roots=true${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+		const page = parseV2SessionPage(await run(["api", "get", query]));
+		sessions.push(...page.sessions);
+		cursor = page.nextCursor;
+		if (cursor && seenCursors.has(cursor)) {
+			throw new Error("OpenCode v2 returned a repeated session cursor");
+		}
+		if (cursor) seenCursors.add(cursor);
+	} while (cursor);
+	return sessions;
+}
+
 export interface OpenCodeCompatibility {
 	generation: OpenCodeCliGeneration;
 	executable: string;
@@ -374,75 +443,22 @@ export class OpencodeClient {
 		const isFlatpak = fs.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
 		const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
 		const executable = this.resolvePath(env);
+		const run = (args: string[]) => runSessionCommand({
+			executable,
+			cwd: this.cwd,
+			env,
+			isFlatpak,
+			environmentVariables: this.environmentVariables,
+		}, args);
 
-		const runSessionList = async (args: string[]): Promise<string> => {
-			let raw = "";
-			let stderrText = "";
-			try {
-				if (isFlatpak) {
-					// flatpak-spawn's stdout forwarding can drop/truncate the captured
-					// output (see issue #25: empty stdout -> JSON.parse("") crash).
-					// Route through a host-side temp file, matching the export path.
-					const tmpFile = path.join(os.tmpdir(), `opencode-sessions-${Date.now()}.json`);
-					const shellCmd = `${[executable, ...args].map(quoteShell).join(" ")} > ${quoteShell(tmpFile)}`;
-					const result = await runExecFile("flatpak-spawn", ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), "sh", "-c", shellCmd], { cwd: this.cwd, env });
-					stderrText = result.stderr;
-					try {
-						raw = fs.readFileSync(tmpFile, "utf-8");
-					} finally {
-						safeUnlinkSync(tmpFile);
-					}
-				} else {
-					const result = await runExecFile(executable, args, { cwd: this.cwd, env });
-					raw = result.stdout || "";
-					stderrText = result.stderr || "";
-					// Some setups route the JSON payload to stderr; fall back to it
-					// only when it actually looks like JSON to avoid parsing log noise.
-					if (!raw.trim() && looksLikeJson(stderrText)) {
-						raw = stderrText;
-						stderrText = "";
-					}
-				}
-			} catch (error) {
-				console.error("Failed to list sessions:", error);
-				throw classifyOperationError(error, executable, "session-list");
-			}
-
-			const trimmed = raw.trim();
-			if (trimmed) return trimmed;
-			if (stderrText.trim()) throw classifyOperationError(new Error(stderrText.trim()), executable, "session-list");
-			throw new MalformedCliOutputError(new Error("OpenCode returned no JSON output"));
-		};
-
-		if (generation === "stable") {
-			try {
-				return parseStableSessionList(await runSessionList(["session", "list", "--format", "json"]));
-			} catch (error) {
-				if (error instanceof OpencodeError) throw error;
-				throw new MalformedCliOutputError(error);
-			}
+		try {
+			return generation === "stable"
+				? await listStableSessions(run)
+				: await listV2Sessions(run, this.cwd);
+		} catch (error) {
+			if (error instanceof OpencodeError) throw error;
+			throw new MalformedCliOutputError(error);
 		}
-
-		const sessions: OpencodeSession[] = [];
-		const seenCursors = new Set<string>();
-		let cursor: string | undefined;
-		do {
-			const query = `/api/session?directory=${encodeURIComponent(this.cwd)}&roots=true${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
-			let page: ReturnType<typeof parseV2SessionPage>;
-			try {
-				page = parseV2SessionPage(await runSessionList(["api", "get", query]));
-			} catch (error) {
-				if (error instanceof OpencodeError) throw error;
-				throw new MalformedCliOutputError(error);
-			}
-			sessions.push(...page.sessions);
-			cursor = page.nextCursor;
-			if (cursor && seenCursors.has(cursor)) {
-				throw new MalformedCliOutputError(new Error("OpenCode v2 returned a repeated session cursor"));
-			}
-			if (cursor) seenCursors.add(cursor);
-		} while (cursor);
-		return sessions;
 	}
 
 	async exportSession(sessionId: string): Promise<OpencodeExport | null> {
