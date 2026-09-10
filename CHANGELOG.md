@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0-beta.1] - 2026-09-10
+
 ### Fixed
 
 - **Close terminal command** — Add a dedicated `OpenCode: Close terminal` command that users can bind in Obsidian's Hotkeys settings, including routing while the terminal is focused. It has no default shortcut, avoiding conflicts with Obsidian's tab commands.
@@ -222,7 +224,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Session manager with history browser, conversation preview, one-click restore, and Markdown export.
 - Settings for `opencode` binary path, default CLI arguments, and terminal styling.
 
-[Unreleased]: https://github.com/kriss-spy/obsidian-opencode/compare/1.5.2...HEAD
+[Unreleased]: https://github.com/kriss-spy/obsidian-opencode/compare/2.0.0-beta.1...HEAD
+[2.0.0-beta.1]: https://github.com/kriss-spy/obsidian-opencode/compare/1.5.3...2.0.0-beta.1
+[1.5.3]: https://github.com/kriss-spy/obsidian-opencode/compare/1.5.2...1.5.3
 [1.5.2]: https://github.com/kriss-spy/obsidian-opencode/compare/1.5.1...1.5.2
 [1.5.0]: https://github.com/kriss-spy/obsidian-opencode/compare/1.4.1...1.5.0
 [1.4.1]: https://github.com/kriss-spy/obsidian-opencode/compare/1.4.0...1.4.1

@@ -21952,7 +21952,7 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // manifest.json
-var version = "1.5.3";
+var version = "2.0.0-beta.1";
 
 // src/editorServer.ts
 var fs = __toESM(require("fs"));
