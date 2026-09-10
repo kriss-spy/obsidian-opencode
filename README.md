@@ -63,6 +63,8 @@ See [Testing in Obsidian](docs/testing-obsidian.md) for setup, coverage, evidenc
 
 - **Empty external-editor prompts are not applied:** In both stable OpenCode and the OpenCode 2 preview, opening the prompt in an external editor, deleting all content, and saving leaves the previous prompt in place. This also reproduces when OpenCode runs outside Obsidian, so it must be fixed upstream.
 
+- **OpenCode 2 can time out while pasting large images:** This reproduces in both the embedded terminal and standalone OpenCode 2, so it is not caused by the plugin. OpenCode 2 beta `0.0.0-beta-19059` configures clipboard reads with a 1-second timeout and an 8 MiB read limit; a 54.5 MB, 2720 x 18447 PNG reports `Clipboard read timed out`. Its separate local-file attachment limit is 20 MiB, so attaching that same file by path is also unsupported. Stable OpenCode 1.4.6 on Linux reads image data through `wl-paste` without OpenCode 2's explicit clipboard deadline and byte limit, so the large image may work there, but that comparison has not yet been verified manually.
+
 - **large session preview:** While the buffer size for exporting sessions has been increased (up to 100MB), exceptionally large or deeply complex OpenCode sessions with massive token counts may still occasionally fail to preview or load properly.
 
 - **not tested on all Linux distros:** While the plugin should work on major distros, it's only tested on manjaro, ubuntu, and fedora.
