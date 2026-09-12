@@ -7,10 +7,17 @@ function registerRouter(
 	customKeys: Record<string, Array<{ modifiers: string[]; key: string }> | undefined> = {},
 	reservedTerminalHotkeys: ReadonlySet<string> = new Set(),
 	registeredCommandIds?: ReadonlySet<string>,
+	clipboard?: { readText(): Promise<string>; writeText(text: string): Promise<void> },
+	onClipboardImagePaste?: (png: Buffer) => void | Promise<void>,
+	copySelectionOnCtrlC = false,
 ) {
 	const containerHandlers = new Map<string, (event: Event) => void>();
 
 	const terminalPaste = vi.fn();
+	const terminalClearSelection = vi.fn();
+	let selection = "";
+	let osc52Handler: ((data: string) => boolean | Promise<boolean>) | undefined;
+	const clipboardError = vi.fn();
 	const executeCommandById = vi.fn(() => true);
 	const pushScope = vi.fn();
 	const popScope = vi.fn();
@@ -35,8 +42,23 @@ function registerRouter(
 			},
 			keymap: { pushScope, popScope },
 		},
-		terminal: { paste: terminalPaste },
+		terminal: {
+			paste: terminalPaste,
+			hasSelection: () => Boolean(selection),
+			getSelection: () => selection,
+			clearSelection: terminalClearSelection,
+			parser: {
+				registerOscHandler: (_identifier: number, handler: typeof osc52Handler) => {
+					osc52Handler = handler;
+					return { dispose: vi.fn() };
+				},
+			},
+		},
 		reservedTerminalHotkeys,
+		clipboard,
+		copySelectionOnCtrlC,
+		onClipboardError: clipboardError,
+		onClipboardImagePaste,
 		container: {
 			contains: () => true,
 			ownerDocument: { activeElement: null },
@@ -52,6 +74,9 @@ function registerRouter(
 
 	return {
 		terminalPaste,
+		terminalClearSelection,
+		clipboardError,
+		setSelection: (value: string) => { selection = value; },
 		executeCommandById,
 		pushScope,
 		popScope,
@@ -69,6 +94,18 @@ function registerRouter(
 			} as unknown as ClipboardEvent);
 			return { preventDefault, stopImmediatePropagation };
 		},
+		dispatchKeydown: (event: Partial<KeyboardEvent>) => {
+			const preventDefault = vi.fn();
+			const stopImmediatePropagation = vi.fn();
+			containerHandlers.get("keydown")?.({
+				target: {},
+				preventDefault,
+				stopImmediatePropagation,
+				...event,
+			} as unknown as KeyboardEvent);
+			return { preventDefault, stopImmediatePropagation };
+		},
+		dispatchOsc52: (data: string) => osc52Handler?.(data),
 		router,
 	};
 }
@@ -125,6 +162,23 @@ describe("TerminalKeyRouter", () => {
 		const ctrlP = scope.handlers.find(({ key }) => key === "P");
 		expect(ctrlP).toBeDefined();
 		ctrlP!.callback({ isComposing: false } as KeyboardEvent);
+		expect(executeCommandById).toHaveBeenCalledWith(commandId);
+		router.dispose();
+	});
+
+	it("routes the configurable close-terminal shortcut while the terminal is focused", () => {
+		const commandId = "opencode:close-terminal";
+		const { dispatchContainerEvent, executeCommandById, pushScope, router } = registerRouter({
+			[commandId]: [{ modifiers: ["Mod", "Shift"], key: "W" }],
+		});
+
+		dispatchContainerEvent("focusin");
+		const scope = pushScope.mock.calls[0][0] as Scope & {
+			handlers: Array<{ key: string | null; callback: (event: KeyboardEvent) => unknown }>;
+		};
+		const closeTerminal = scope.handlers.find(({ key }) => key === "W");
+		expect(closeTerminal).toBeDefined();
+		closeTerminal!.callback({ isComposing: false } as KeyboardEvent);
 		expect(executeCommandById).toHaveBeenCalledWith(commandId);
 		router.dispose();
 	});
@@ -208,5 +262,105 @@ describe("TerminalKeyRouter", () => {
 		expect(event.preventDefault).toHaveBeenCalledOnce();
 		expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
 		router.dispose();
+	});
+
+	it("leaves Ctrl+C to OpenCode when copy-on-select is enabled", () => {
+		const clipboard = { readText: vi.fn(), writeText: vi.fn().mockResolvedValue(undefined) };
+		const context = registerRouter({}, new Set(), undefined, clipboard);
+		context.setSelection("selected text");
+
+		const event = context.dispatchKeydown({ key: "c", ctrlKey: true });
+
+		expect(clipboard.writeText).not.toHaveBeenCalled();
+		expect(event.preventDefault).not.toHaveBeenCalled();
+		expect(event.stopImmediatePropagation).not.toHaveBeenCalled();
+		context.router.dispose();
+	});
+
+	it("copies a WSL selection with Ctrl+C when OpenCode copy-on-select is disabled", async () => {
+		const clipboard = { readText: vi.fn(), writeText: vi.fn().mockResolvedValue(undefined) };
+		const context = registerRouter({}, new Set(), undefined, clipboard, undefined, true);
+		context.setSelection("Décodage 中文 😀\n$HOME 'quotes'");
+
+		const event = context.dispatchKeydown({ key: "c", ctrlKey: true });
+		await vi.waitFor(() => expect(context.terminalClearSelection).toHaveBeenCalledOnce());
+
+		expect(clipboard.writeText).toHaveBeenCalledWith("Décodage 中文 😀\n$HOME 'quotes'");
+		expect(event.preventDefault).toHaveBeenCalledOnce();
+		expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
+		context.router.dispose();
+	});
+
+	it("still sends Ctrl+C to OpenCode without a selection when copy-on-select is disabled", () => {
+		const clipboard = { readText: vi.fn(), writeText: vi.fn() };
+		const context = registerRouter({}, new Set(), undefined, clipboard, undefined, true);
+
+		const event = context.dispatchKeydown({ key: "c", ctrlKey: true });
+
+		expect(clipboard.writeText).not.toHaveBeenCalled();
+		expect(event.preventDefault).not.toHaveBeenCalled();
+		expect(event.stopImmediatePropagation).not.toHaveBeenCalled();
+		context.router.dispose();
+	});
+
+	it("retains the selection when conditional Ctrl+C copy fails", async () => {
+		const clipboard = {
+			readText: vi.fn(),
+			writeText: vi.fn().mockRejectedValue(new Error("PowerShell interop failed")),
+		};
+		const context = registerRouter({}, new Set(), undefined, clipboard, undefined, true);
+		context.setSelection("keep me");
+
+		context.dispatchKeydown({ key: "c", ctrlKey: true });
+		await vi.waitFor(() => expect(context.clipboardError).toHaveBeenCalledWith(expect.stringMatching(/PowerShell interop failed/)));
+
+		expect(context.terminalClearSelection).not.toHaveBeenCalled();
+		context.router.dispose();
+	});
+
+	it("reads the Windows clipboard for WSL paste and normalizes line endings", async () => {
+		const clipboard = {
+			readText: vi.fn().mockResolvedValue("é中😀\r\nsecond\rthird"),
+			writeText: vi.fn(),
+		};
+		const context = registerRouter({}, new Set(), undefined, clipboard);
+
+		const event = context.dispatchKeydown({ key: "v", ctrlKey: true });
+		await vi.waitFor(() => expect(context.terminalPaste).toHaveBeenCalledWith("é中😀\nsecond\nthird"));
+
+		expect(event.preventDefault).toHaveBeenCalledOnce();
+		context.router.dispose();
+	});
+
+	it("gives a Windows clipboard image precedence over text paste", async () => {
+		const image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+		const onClipboardImagePaste = vi.fn().mockResolvedValue(undefined);
+		const clipboard = {
+			readImagePng: vi.fn().mockResolvedValue(image),
+			readText: vi.fn().mockResolvedValue("fallback text"),
+			writeText: vi.fn(),
+		};
+		const imageContext = registerRouter({}, new Set(), undefined, clipboard, onClipboardImagePaste);
+
+		imageContext.dispatchKeydown({ key: "v", ctrlKey: true });
+		await vi.waitFor(() => expect(onClipboardImagePaste).toHaveBeenCalledWith(image));
+
+		expect(clipboard.readText).not.toHaveBeenCalled();
+		expect(imageContext.terminalPaste).not.toHaveBeenCalled();
+		imageContext.router.dispose();
+	});
+
+	it("routes only valid OSC 52 clipboard sets to the WSL bridge", async () => {
+		const clipboard = { readText: vi.fn(), writeText: vi.fn().mockResolvedValue(undefined) };
+		const context = registerRouter({}, new Set(), undefined, clipboard);
+		const text = "OSC é中😀";
+
+		await context.dispatchOsc52(`c;${Buffer.from(text, "utf8").toString("base64")}`);
+		await context.dispatchOsc52("c;?");
+		await context.dispatchOsc52("c;not base64");
+
+		expect(clipboard.writeText).toHaveBeenCalledOnce();
+		expect(clipboard.writeText).toHaveBeenCalledWith(text);
+		context.router.dispose();
 	});
 });

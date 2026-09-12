@@ -7,6 +7,7 @@ interface MockLeaf {
 	type?: string;
 	view: object;
 	setViewState: ReturnType<typeof vi.fn>;
+	detach: ReturnType<typeof vi.fn>;
 }
 
 interface MockWorkspace {
@@ -24,6 +25,7 @@ const createMockLeaf = (id: string): MockLeaf => ({
 	id,
 	view: {},
 	setViewState: vi.fn().mockResolvedValue(undefined),
+	detach: vi.fn().mockResolvedValue(undefined),
 });
 
 const createMockWorkspace = (): MockWorkspace => {
@@ -127,19 +129,21 @@ describe('ViewCoordinator', () => {
 		expect(workspace.revealLeaf).toHaveBeenCalledWith(existingLeaf);
 	});
 
-	it('should close every terminal view', async () => {
-		const firstLeaf = { ...createMockLeaf('first'), type: 'opencode-terminal', detach: vi.fn() };
-		const secondLeaf = { ...createMockLeaf('second'), type: 'opencode-terminal', detach: vi.fn() };
+	it('closes every OpenCode terminal leaf without touching other views', async () => {
+		const firstTerminal = { ...createMockLeaf('terminal-1'), type: 'opencode-terminal' };
+		const secondTerminal = { ...createMockLeaf('terminal-2'), type: 'opencode-terminal' };
+		const conversation = { ...createMockLeaf('conversation'), type: 'opencode-conversations' };
 		const workspace = createMockWorkspace();
-		workspace._leaves.push(firstLeaf, secondLeaf);
+		workspace._leaves.push(firstTerminal, secondTerminal, conversation);
 		const coordinator = new ViewCoordinator(workspace as unknown as Workspace, {
 			terminalViewType: 'opencode-terminal',
 			conversationViewType: 'opencode-conversations',
 		});
 
-		await coordinator.closeTerminalViews();
+		await coordinator.closeTerminal();
 
-		expect(firstLeaf.detach).toHaveBeenCalledOnce();
-		expect(secondLeaf.detach).toHaveBeenCalledOnce();
+		expect(firstTerminal.detach).toHaveBeenCalledOnce();
+		expect(secondTerminal.detach).toHaveBeenCalledOnce();
+		expect(conversation.detach).not.toHaveBeenCalled();
 	});
 });

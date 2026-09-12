@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { OpencodeClient, ExportTooLargeError } from './opencode';
+import { CliNotFoundError, CliPermissionError, IncompatibleCliError, MalformedCliOutputError, OpencodeClient, ExportTooLargeError, UnsupportedCliError } from './opencode';
 import { ChildProcess, execFile, spawn } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 vi.mock('obsidian', () => ({
 	Notice: class {
@@ -100,6 +102,40 @@ describe('OpencodeClient export with large sessions', () => {
 		expect(fs.unlinkSync).toHaveBeenCalled();
 	});
 
+	it('uses the formal OpenCode v2 session export command', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+		const mockProcess = createMockProcess();
+		mockSpawn.mockReturnValue(mockProcess.process);
+		vi.mocked(fs.statSync).mockReturnValue({ size: 1000 } as unknown as fs.Stats);
+		vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ info: {}, messages: [] }));
+
+		const promise = new OpencodeClient('opencode', '/tmp').exportSession('session-v2', 'v2');
+		expect(mockSpawn).toHaveBeenCalledWith(
+			expect.stringMatching(/^'opencode' 'session' 'export' 'session-v2' > /),
+			[],
+			expect.objectContaining({ cwd: '/tmp', shell: true }),
+		);
+		mockProcess.emitClose(0);
+		await expect(promise).resolves.toEqual({ info: {}, messages: [] });
+	});
+
+	it('keeps the preview OpenCode v2 export command as a fallback', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+		const mockProcess = createMockProcess();
+		mockSpawn.mockReturnValue(mockProcess.process);
+		vi.mocked(fs.statSync).mockReturnValue({ size: 1000 } as unknown as fs.Stats);
+		vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ info: {}, messages: [] }));
+
+		const promise = new OpencodeClient('opencode2', '/tmp').exportSession('session-preview', 'v2-preview');
+		expect(mockSpawn).toHaveBeenCalledWith(
+			expect.stringMatching(/^'opencode2' 'export' 'session-preview' > /),
+			[],
+			expect.objectContaining({ cwd: '/tmp', shell: true }),
+		);
+		mockProcess.emitClose(0);
+		await expect(promise).resolves.toEqual({ info: {}, messages: [] });
+	});
+
 	it('should return null on non-JSON output', async () => {
 		const mockProcess = createMockProcess();
 
@@ -159,6 +195,7 @@ describe('OpencodeClient listSessions', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		vi.mocked(fs.accessSync).mockImplementation(() => { throw new Error('not found'); });
+		vi.mocked(fs.statSync).mockReturnValue({ isFile: () => true } as fs.Stats);
 		vi.mocked(fs.existsSync).mockReturnValue(false);
 	});
 
@@ -171,6 +208,126 @@ describe('OpencodeClient listSessions', () => {
 		mockExecResult(JSON.stringify(sessions), '');
 		const client = new OpencodeClient('opencode', '/tmp');
 		await expect(client.listSessions()).resolves.toEqual(sessions);
+	});
+
+	it('lists OpenCode v2 sessions through the directory-scoped API', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+		const pages = [{
+			data: [{
+				id: 'ses_v2',
+				title: 'V2 session',
+				projectID: 'project-v2',
+				location: { directory: '/vault notes' },
+				time: { created: 10, updated: 20 },
+			}, {
+				id: 'ses_v2_child',
+				title: 'Child session',
+				projectID: 'project-v2',
+				parentID: 'ses_v2',
+				location: { directory: '/vault notes' },
+				time: { created: 11, updated: 12 },
+			}],
+			cursor: { next: 'next/page' },
+		}, {
+			data: [{
+				id: 'ses_v2_older',
+				title: 'Older v2 session',
+				projectID: 'project-v2',
+				location: { directory: '/vault notes' },
+				time: { created: 5, updated: 8 },
+			}],
+			cursor: {},
+		}];
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			const page = pages.shift();
+			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(
+				null,
+				JSON.stringify(page),
+				'',
+			);
+			return {} as unknown as ChildProcess;
+		});
+		const client = new OpencodeClient('opencode2', '/vault notes');
+
+		await expect(client.listSessions('v2')).resolves.toEqual([{
+			id: 'ses_v2',
+			title: 'V2 session',
+			projectId: 'project-v2',
+			directory: '/vault notes',
+			created: 10,
+			updated: 20,
+		}, {
+			id: 'ses_v2_older',
+			title: 'Older v2 session',
+			projectId: 'project-v2',
+			directory: '/vault notes',
+			created: 5,
+			updated: 8,
+		}]);
+		expect(mockExecFile).toHaveBeenNthCalledWith(
+			1,
+			'opencode2',
+			['api', 'get', '/api/session?directory=%2Fvault%20notes&roots=true'],
+			expect.objectContaining({ cwd: '/vault notes' }),
+			expect.any(Function),
+		);
+		expect(mockExecFile).toHaveBeenNthCalledWith(
+			2,
+			'opencode2',
+			['api', 'get', '/api/session?directory=%2Fvault%20notes&roots=true&cursor=next%2Fpage'],
+			expect.objectContaining({ cwd: '/vault notes' }),
+			expect.any(Function),
+		);
+	});
+
+	it('treats a null OpenCode v2 next cursor as the end of pagination', async () => {
+		mockExecResult(JSON.stringify({
+			data: [],
+			cursor: { next: null, previous: null },
+		}), '');
+
+		await expect(new OpencodeClient('opencode2', '/vault').listSessions('v2'))
+			.resolves.toEqual([]);
+		expect(mockExecFile).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps the preview OpenCode v2 session API as a fallback', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+		mockExecResult(JSON.stringify({ data: [], cursor: {} }), '');
+
+		await expect(new OpencodeClient('opencode2', '/vault').listSessions('v2-preview'))
+			.resolves.toEqual([]);
+		expect(mockExecFile).toHaveBeenCalledWith(
+			'opencode2',
+			['api', 'get', '/api/session?directory=%2Fvault&roots=true'],
+			expect.any(Object),
+			expect.any(Function),
+		);
+	});
+
+	it('rejects malformed OpenCode v2 API envelopes', async () => {
+		mockExecResult(JSON.stringify({ sessions: [] }), '');
+
+		await expect(new OpencodeClient('opencode2', '/vault').listSessions('v2'))
+			.rejects.toBeInstanceOf(MalformedCliOutputError);
+	});
+
+	it('uses the shared user-local executable detection when the configured path is empty', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+		const detected = path.posix.join(os.homedir(), '.opencode/bin/opencode');
+		vi.mocked(fs.accessSync).mockImplementation((candidate) => {
+			if (candidate !== detected) throw new Error('not found');
+		});
+		mockExecResult('[]', '');
+
+		await new OpencodeClient('', '/vault').listSessions();
+
+		expect(mockExecFile).toHaveBeenCalledWith(
+			detected,
+			['session', 'list', '--format', 'json'],
+			expect.objectContaining({ cwd: '/vault' }),
+			expect.any(Function)
+		);
 	});
 
 	it('passes configured variables without dropping the inherited environment', async () => {
@@ -202,16 +359,50 @@ describe('OpencodeClient listSessions', () => {
 		await expect(client.listSessions()).resolves.toEqual(sessions);
 	});
 
-	it('returns [] when stdout and stderr are both empty instead of crashing JSON.parse', async () => {
+	it('reports empty command output as malformed instead of a genuine empty list', async () => {
 		mockExecResult('', '');
 		const client = new OpencodeClient('opencode', '/tmp');
-		await expect(client.listSessions()).resolves.toEqual([]);
+		await expect(client.listSessions()).rejects.toBeInstanceOf(MalformedCliOutputError);
 	});
 
-	it('returns [] when stderr is non-JSON noise and stdout is empty', async () => {
+	it('throws a typed error when the OpenCode executable cannot be started', async () => {
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			const error = Object.assign(new Error('spawn opencode ENOENT'), { code: 'ENOENT' });
+			(callback as unknown as (error: Error) => void)(error);
+			return {} as unknown as ChildProcess;
+		});
+
+		await expect(new OpencodeClient('/missing/opencode', '/vault').listSessions())
+			.rejects.toBeInstanceOf(CliNotFoundError);
+	});
+
+	it('throws a typed error when the OpenCode executable is not permitted to run', async () => {
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			const error = Object.assign(new Error('spawn opencode EACCES'), { code: 'EACCES' });
+			(callback as unknown as (error: Error) => void)(error);
+			return {} as unknown as ChildProcess;
+		});
+
+		await expect(new OpencodeClient('/restricted/opencode', '/vault').listSessions())
+			.rejects.toBeInstanceOf(CliPermissionError);
+	});
+
+	it('reports an unsupported CLI when session listing fails with an unknown option', async () => {
 		mockExecResult('', 'Error: unknown option --format\n');
 		const client = new OpencodeClient('opencode', '/tmp');
-		await expect(client.listSessions()).resolves.toEqual([]);
+		await expect(client.listSessions()).rejects.toBeInstanceOf(UnsupportedCliError);
+	});
+
+	it('throws a typed error when session output is malformed', async () => {
+		mockExecResult('{not-json', '');
+		await expect(new OpencodeClient('opencode', '/tmp').listSessions())
+			.rejects.toBeInstanceOf(MalformedCliOutputError);
+	});
+
+	it('rejects malformed entries inside a session array', async () => {
+		mockExecResult('[{}]', '');
+		await expect(new OpencodeClient('opencode', '/tmp').listSessions())
+			.rejects.toBeInstanceOf(MalformedCliOutputError);
 	});
 
 	it('passes Windows command tokens through the isolated Node host', async () => {
@@ -231,6 +422,22 @@ describe('OpencodeClient listSessions', () => {
 				}),
 				expect.any(Function)
 			);
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it('classifies a missing executable reported through the Windows command host', async () => {
+		const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			const error = Object.assign(new Error('Command failed'), { code: 1 });
+			(callback as unknown as (error: Error, stdout: string, stderr: string) => void)(error, '', 'spawn opencode ENOENT');
+			return {} as unknown as ChildProcess;
+		});
+
+		try {
+			await expect(new OpencodeClient('C:\\missing\\opencode.exe', 'C:\\vault').listSessions())
+				.rejects.toBeInstanceOf(CliNotFoundError);
 		} finally {
 			platform.mockRestore();
 		}
@@ -308,6 +515,31 @@ describe('OpencodeClient listSessions', () => {
 		expect(fs.unlinkSync).toHaveBeenCalled();
 	});
 
+	it('uses the OpenCode v2 API through the Flatpak host bridge', async () => {
+		vi.mocked(fs.existsSync).mockReturnValue(true);
+		mockExecResult('', '');
+		vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ data: [], cursor: {} }));
+
+		await expect(new OpencodeClient('/host/bin/opencode2', '/vault notes').listSessions('v2'))
+			.resolves.toEqual([]);
+		const shellCommand = mockExecFile.mock.calls[0]?.[1]?.at(-1);
+		expect(shellCommand).toContain("'/host/bin/opencode2' 'api' 'get' '/api/session?directory=%2Fvault%20notes&roots=true'");
+	});
+
+	it('classifies a missing executable reported by the Flatpak host shell', async () => {
+		vi.mocked(fs.existsSync).mockReturnValue(true);
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			const error = Object.assign(new Error('Command failed'), { code: 127 });
+			(callback as unknown as (error: Error, stdout: string, stderr: string) => void)(error, '', 'sh: opencode: not found');
+			return {} as unknown as ChildProcess;
+		});
+
+		await expect(new OpencodeClient('opencode', '/vault').listSessions())
+			.rejects.toBeInstanceOf(CliNotFoundError);
+		const shellCommand = mockExecFile.mock.calls[0]?.[1]?.at(-1);
+		expect(shellCommand).not.toContain('2>/dev/null');
+	});
+
 	it('forwards configured variables to the Flatpak host', async () => {
 		const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
 		vi.mocked(fs.existsSync).mockReturnValue(true);
@@ -336,6 +568,73 @@ describe('OpencodeClient listSessions', () => {
 			const launcherPath = (env as Record<string, unknown>).PATH;
 			if (typeof launcherPath !== 'string') throw new Error('Expected Flatpak launcher PATH');
 			expect(launcherPath).not.toContain('/host/configured/bin');
+		} finally {
+			platform.mockRestore();
+		}
+	});
+});
+
+describe('OpencodeClient compatibility', () => {
+	const mockExecFile = vi.mocked(execFile);
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		vi.mocked(fs.accessSync).mockImplementation(() => { throw new Error('not found'); });
+		vi.mocked(fs.existsSync).mockReturnValue(false);
+	});
+
+	it('rejects Codex even though it can run inside the terminal PTY', async () => {
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(null, 'Codex CLI\nUsage: codex [OPTIONS]', '');
+			return {} as unknown as ChildProcess;
+		});
+
+		await expect(new OpencodeClient('/usr/bin/codex', '/vault').checkCompatibility())
+			.rejects.toBeInstanceOf(IncompatibleCliError);
+	});
+
+	it('reports an unsupported help command as an incompatible executable', async () => {
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			const error = Object.assign(new Error('unknown option --help'), { code: 1 });
+			(callback as unknown as (error: Error, stdout: string, stderr: string) => void)(error, '', 'unknown option --help');
+			return {} as unknown as ChildProcess;
+		});
+
+		await expect(new OpencodeClient('/usr/bin/other-agent', '/vault').checkCompatibility())
+			.rejects.toBeInstanceOf(IncompatibleCliError);
+	});
+
+	it.each([
+		['stable', 'opencode [project]  start opencode tui'],
+		['v2', 'DESCRIPTION\n  OpenCode command line interface'],
+		['v2-preview', 'OpenCode 2.0 preview command line interface'],
+	] as const)('accepts %s OpenCode help output', async (generation, output) => {
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(null, output, '');
+			return {} as unknown as ChildProcess;
+		});
+
+		await expect(new OpencodeClient('opencode', '/vault').checkCompatibility())
+			.resolves.toMatchObject({ generation });
+	});
+
+	it('probes configured PowerShell wrappers through the Windows command host', async () => {
+		const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(null, 'start opencode tui', '');
+			return {} as unknown as ChildProcess;
+		});
+		const wrapper = 'C:\\tools\\opencode-wrapper.ps1';
+
+		try {
+			await expect(new OpencodeClient(wrapper, 'C:\\vault').checkCompatibility())
+				.resolves.toEqual({ generation: 'stable', executable: wrapper });
+			expect(mockExecFile).toHaveBeenCalledWith(
+				'node.exe',
+				['-e', expect.stringMatching(/\.ps1[\s\S]*powershell\.exe/), 'C:\\vault', wrapper, '--help'],
+				expect.objectContaining({ windowsHide: true }),
+				expect.any(Function)
+			);
 		} finally {
 			platform.mockRestore();
 		}

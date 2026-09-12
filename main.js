@@ -15616,6 +15616,2322 @@ ${s3.join("\n")}
   }
 });
 
+// node_modules/@xterm/addon-image/lib/addon-image.js
+var require_addon_image = __commonJS({
+  "node_modules/@xterm/addon-image/lib/addon-image.js"(exports, module2) {
+    !function(e, t) {
+      "object" == typeof exports && "object" == typeof module2 ? module2.exports = t() : "function" == typeof define && define.amd ? define([], t) : "object" == typeof exports ? exports.ImageAddon = t() : e.ImageAddon = t();
+    }(globalThis, () => (() => {
+      "use strict";
+      var e = { 65: (e2, t2) => {
+        function A2(e3) {
+          if ("undefined" != typeof Buffer)
+            return Buffer.from(e3, "base64");
+          const t3 = atob(e3), A3 = new Uint8Array(t3.length);
+          for (let e4 = 0; e4 < A3.length; ++e4)
+            A3[e4] = t3.charCodeAt(e4);
+          return A3;
+        }
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.InWasm = void 0, t2.InWasm = function(e3) {
+          if (e3.d) {
+            const { t: t3, s: i2, d: s } = e3;
+            let r, n;
+            const o = WebAssembly;
+            return 2 === t3 ? i2 ? () => r || (r = A2(s)) : () => Promise.resolve(r || (r = A2(s))) : 1 === t3 ? i2 ? () => n || (n = new o.Module(r || (r = A2(s)))) : () => n ? Promise.resolve(n) : o.compile(r || (r = A2(s))).then((e4) => n = e4) : i2 ? (e4) => new o.Instance(n || (n = new o.Module(r || (r = A2(s)))), e4) : (e4) => n ? o.instantiate(n, e4) : o.instantiate(r || (r = A2(s)), e4).then((e5) => (n = e5.module) && e5.instance);
+          }
+          if ("undefined" == typeof _wasmCtx)
+            throw new Error('must run "inwasm"');
+          _wasmCtx.add(e3);
+        };
+      }, 939: (e2, t2) => {
+        function A2(e3) {
+          return 255 & e3;
+        }
+        function i2(e3) {
+          return e3 >>> 8 & 255;
+        }
+        function s(e3) {
+          return e3 >>> 16 & 255;
+        }
+        function r(e3, t3, A3, i3 = 255) {
+          return ((255 & i3) << 24 | (255 & A3) << 16 | (255 & t3) << 8 | 255 & e3) >>> 0;
+        }
+        function n(e3, t3, A3) {
+          return Math.max(e3, Math.min(A3, t3));
+        }
+        function o(e3, t3, A3) {
+          return A3 < 0 && (A3 += 1), A3 > 1 && (A3 -= 1), 6 * A3 < 1 ? t3 + 6 * (e3 - t3) * A3 : 2 * A3 < 1 ? e3 : 3 * A3 < 2 ? t3 + (e3 - t3) * (4 - 6 * A3) : t3;
+        }
+        function a(e3, t3, A3) {
+          return (4278190080 | Math.round(A3 / 100 * 255) << 16 | Math.round(t3 / 100 * 255) << 8 | Math.round(e3 / 100 * 255)) >>> 0;
+        }
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.DEFAULT_FOREGROUND = t2.DEFAULT_BACKGROUND = t2.PALETTE_ANSI_256 = t2.PALETTE_VT340_GREY = t2.PALETTE_VT340_COLOR = t2.normalizeHLS = t2.normalizeRGB = t2.nearestColorIndex = t2.fromRGBA8888 = t2.toRGBA8888 = t2.alpha = t2.blue = t2.green = t2.red = t2.BIG_ENDIAN = void 0, t2.BIG_ENDIAN = 255 === new Uint8Array(new Uint32Array([4278190080]).buffer)[0], t2.BIG_ENDIAN && console.warn("BE platform detected. This version of node-sixel works only on LE properly."), t2.red = A2, t2.green = i2, t2.blue = s, t2.alpha = function(e3) {
+          return e3 >>> 24 & 255;
+        }, t2.toRGBA8888 = r, t2.fromRGBA8888 = function(e3) {
+          return [255 & e3, e3 >> 8 & 255, e3 >> 16 & 255, e3 >>> 24];
+        }, t2.nearestColorIndex = function(e3, t3) {
+          const r2 = A2(e3), n2 = i2(e3), o2 = s(e3);
+          let a2 = Number.MAX_SAFE_INTEGER, h = -1;
+          for (let e4 = 0; e4 < t3.length; ++e4) {
+            const A3 = r2 - t3[e4][0], i3 = n2 - t3[e4][1], s2 = o2 - t3[e4][2], g = A3 * A3 + i3 * i3 + s2 * s2;
+            if (!g)
+              return e4;
+            g < a2 && (a2 = g, h = e4);
+          }
+          return h;
+        }, t2.normalizeRGB = a, t2.normalizeHLS = function(e3, t3, A3) {
+          return function(e4, t4, A4) {
+            if (!A4) {
+              const e5 = Math.round(255 * t4);
+              return r(e5, e5, e5);
+            }
+            const i3 = t4 < 0.5 ? t4 * (1 + A4) : t4 + A4 - t4 * A4, s2 = 2 * t4 - i3;
+            return r(n(0, 255, Math.round(255 * o(i3, s2, e4 + 1 / 3))), n(0, 255, Math.round(255 * o(i3, s2, e4))), n(0, 255, Math.round(255 * o(i3, s2, e4 - 1 / 3))));
+          }((e3 + 240) / 360, t3 / 100, A3 / 100);
+        }, t2.PALETTE_VT340_COLOR = new Uint32Array([a(0, 0, 0), a(20, 20, 80), a(80, 13, 13), a(20, 80, 20), a(80, 20, 80), a(20, 80, 80), a(80, 80, 20), a(53, 53, 53), a(26, 26, 26), a(33, 33, 60), a(60, 26, 26), a(33, 60, 33), a(60, 33, 60), a(33, 60, 60), a(60, 60, 33), a(80, 80, 80)]), t2.PALETTE_VT340_GREY = new Uint32Array([a(0, 0, 0), a(13, 13, 13), a(26, 26, 26), a(40, 40, 40), a(6, 6, 6), a(20, 20, 20), a(33, 33, 33), a(46, 46, 46), a(0, 0, 0), a(13, 13, 13), a(26, 26, 26), a(40, 40, 40), a(6, 6, 6), a(20, 20, 20), a(33, 33, 33), a(46, 46, 46)]), t2.PALETTE_ANSI_256 = (() => {
+          const e3 = [r(0, 0, 0), r(205, 0, 0), r(0, 205, 0), r(205, 205, 0), r(0, 0, 238), r(205, 0, 205), r(0, 250, 205), r(229, 229, 229), r(127, 127, 127), r(255, 0, 0), r(0, 255, 0), r(255, 255, 0), r(92, 92, 255), r(255, 0, 255), r(0, 255, 255), r(255, 255, 255)], t3 = [0, 95, 135, 175, 215, 255];
+          for (let A3 = 0; A3 < 6; ++A3)
+            for (let i3 = 0; i3 < 6; ++i3)
+              for (let s2 = 0; s2 < 6; ++s2)
+                e3.push(r(t3[A3], t3[i3], t3[s2]));
+          for (let t4 = 8; t4 <= 238; t4 += 10)
+            e3.push(r(t4, t4, t4));
+          return new Uint32Array(e3);
+        })(), t2.DEFAULT_BACKGROUND = r(0, 0, 0, 255), t2.DEFAULT_FOREGROUND = r(255, 255, 255, 255);
+      }, 591: (e2, t2, A2) => {
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.decodeAsync = t2.decode = t2.Decoder = t2.DecoderAsync = void 0;
+        const i2 = A2(939), s = A2(199), r = function(e3) {
+          if ("undefined" != typeof Buffer)
+            return Buffer.from(e3, "base64");
+          const t3 = atob(e3), A3 = new Uint8Array(t3.length);
+          for (let e4 = 0; e4 < A3.length; ++e4)
+            A3[e4] = t3.charCodeAt(e4);
+          return A3;
+        }(s.LIMITS.BYTES);
+        let n;
+        const o = new Uint32Array();
+        class a {
+          constructor() {
+            this.bandHandler = (e3) => 1, this.modeHandler = (e3) => 1;
+          }
+          handle_band(e3) {
+            return this.bandHandler(e3);
+          }
+          mode_parsed(e3) {
+            return this.modeHandler(e3);
+          }
+        }
+        const h = { memoryLimit: 134217728, sixelColor: i2.DEFAULT_FOREGROUND, fillColor: i2.DEFAULT_BACKGROUND, palette: i2.PALETTE_VT340_COLOR, paletteLimit: s.LIMITS.PALETTE_SIZE, truncate: true };
+        function g(e3) {
+          const t3 = new a(), A3 = { env: { handle_band: t3.handle_band.bind(t3), mode_parsed: t3.mode_parsed.bind(t3) } };
+          return WebAssembly.instantiate(n || r, A3).then((A4) => (n = n || A4.module, new l(e3, A4.instance || A4, t3)));
+        }
+        t2.DecoderAsync = g;
+        class l {
+          constructor(e3, t3, A3) {
+            if (this._PIXEL_OFFSET = s.LIMITS.MAX_WIDTH + 4, this._canvas = o, this._bandWidths = [], this._maxWidth = 0, this._minWidth = s.LIMITS.MAX_WIDTH, this._lastOffset = 0, this._currentHeight = 0, this._opts = Object.assign({}, h, e3), this._opts.paletteLimit > s.LIMITS.PALETTE_SIZE)
+              throw new Error(`DecoderOptions.paletteLimit must not exceed ${s.LIMITS.PALETTE_SIZE}`);
+            if (t3)
+              A3.bandHandler = this._handle_band.bind(this), A3.modeHandler = this._initCanvas.bind(this);
+            else {
+              const e4 = n || (n = new WebAssembly.Module(r));
+              t3 = new WebAssembly.Instance(e4, { env: { handle_band: this._handle_band.bind(this), mode_parsed: this._initCanvas.bind(this) } });
+            }
+            this._instance = t3, this._wasm = this._instance.exports, this._chunk = new Uint8Array(this._wasm.memory.buffer, this._wasm.get_chunk_address(), s.LIMITS.CHUNK_SIZE), this._states = new Uint32Array(this._wasm.memory.buffer, this._wasm.get_state_address(), 12), this._palette = new Uint32Array(this._wasm.memory.buffer, this._wasm.get_palette_address(), s.LIMITS.PALETTE_SIZE), this._palette.set(this._opts.palette), this._pSrc = new Uint32Array(this._wasm.memory.buffer, this._wasm.get_p0_address()), this._wasm.init(i2.DEFAULT_FOREGROUND, 0, this._opts.paletteLimit, 0);
+          }
+          get _fillColor() {
+            return this._states[0];
+          }
+          get _truncate() {
+            return this._states[8];
+          }
+          get _rasterWidth() {
+            return this._states[6];
+          }
+          get _rasterHeight() {
+            return this._states[7];
+          }
+          get _width() {
+            return this._states[2] ? this._states[2] - 4 : 0;
+          }
+          get _height() {
+            return this._states[3];
+          }
+          get _level() {
+            return this._states[9];
+          }
+          get _mode() {
+            return this._states[10];
+          }
+          get _paletteLimit() {
+            return this._states[11];
+          }
+          _initCanvas(e3) {
+            if (2 === e3) {
+              const e4 = this.width * this.height;
+              if (e4 > this._canvas.length) {
+                if (this._opts.memoryLimit && 4 * e4 > this._opts.memoryLimit)
+                  throw this.release(), new Error("image exceeds memory limit");
+                this._canvas = new Uint32Array(e4);
+              }
+              this._maxWidth = this._width;
+            } else if (1 === e3)
+              if (2 === this._level) {
+                const e4 = Math.min(this._rasterWidth, s.LIMITS.MAX_WIDTH) * this._rasterHeight;
+                if (e4 > this._canvas.length) {
+                  if (this._opts.memoryLimit && 4 * e4 > this._opts.memoryLimit)
+                    throw this.release(), new Error("image exceeds memory limit");
+                  this._canvas = new Uint32Array(e4);
+                }
+              } else
+                this._canvas.length < 65536 && (this._canvas = new Uint32Array(65536));
+            return 0;
+          }
+          _realloc(e3, t3) {
+            const A3 = e3 + t3;
+            if (A3 > this._canvas.length) {
+              if (this._opts.memoryLimit && 4 * A3 > this._opts.memoryLimit)
+                throw this.release(), new Error("image exceeds memory limit");
+              const e4 = new Uint32Array(65536 * Math.ceil(A3 / 65536));
+              e4.set(this._canvas), this._canvas = e4;
+            }
+          }
+          _handle_band(e3) {
+            const t3 = this._PIXEL_OFFSET;
+            let A3 = this._lastOffset;
+            if (2 === this._mode) {
+              let i3 = this.height - this._currentHeight, s2 = 0;
+              for (; s2 < 6 && i3 > 0; )
+                this._canvas.set(this._pSrc.subarray(t3 * s2, t3 * s2 + e3), A3 + e3 * s2), s2++, i3--;
+              this._lastOffset += e3 * s2, this._currentHeight += s2;
+            } else if (1 === this._mode) {
+              this._realloc(A3, 6 * e3), this._maxWidth = Math.max(this._maxWidth, e3), this._minWidth = Math.min(this._minWidth, e3);
+              for (let i3 = 0; i3 < 6; ++i3)
+                this._canvas.set(this._pSrc.subarray(t3 * i3, t3 * i3 + e3), A3 + e3 * i3);
+              this._bandWidths.push(e3), this._lastOffset += 6 * e3, this._currentHeight += 6;
+            }
+            return 0;
+          }
+          get width() {
+            return 1 !== this._mode ? this._width : Math.max(this._maxWidth, this._wasm.current_width());
+          }
+          get height() {
+            return 1 !== this._mode ? this._height : this._wasm.current_width() ? 6 * this._bandWidths.length + this._wasm.current_height() : 6 * this._bandWidths.length;
+          }
+          get palette() {
+            return this._palette.subarray(0, this._paletteLimit);
+          }
+          get memoryUsage() {
+            return this._canvas.byteLength + this._wasm.memory.buffer.byteLength + 8 * this._bandWidths.length;
+          }
+          get properties() {
+            return { width: this.width, height: this.height, mode: this._mode, level: this._level, truncate: !!this._truncate, paletteLimit: this._paletteLimit, fillColor: this._fillColor, memUsage: this.memoryUsage, rasterAttributes: { numerator: this._states[4], denominator: this._states[5], width: this._rasterWidth, height: this._rasterHeight } };
+          }
+          init(e3 = this._opts.fillColor, t3 = this._opts.palette, A3 = this._opts.paletteLimit, i3 = this._opts.truncate) {
+            this._wasm.init(this._opts.sixelColor, e3, A3, i3 ? 1 : 0), t3 && this._palette.set(t3.subarray(0, s.LIMITS.PALETTE_SIZE)), this._bandWidths.length = 0, this._maxWidth = 0, this._minWidth = s.LIMITS.MAX_WIDTH, this._lastOffset = 0, this._currentHeight = 0;
+          }
+          decode(e3, t3 = 0, A3 = e3.length) {
+            let i3 = t3;
+            for (; i3 < A3; ) {
+              const t4 = Math.min(A3 - i3, s.LIMITS.CHUNK_SIZE);
+              this._chunk.set(e3.subarray(i3, i3 += t4)), this._wasm.decode(0, t4);
+            }
+          }
+          decodeString(e3, t3 = 0, A3 = e3.length) {
+            let i3 = t3;
+            for (; i3 < A3; ) {
+              const t4 = Math.min(A3 - i3, s.LIMITS.CHUNK_SIZE);
+              for (let A4 = 0, s2 = i3; A4 < t4; ++A4, ++s2)
+                this._chunk[A4] = e3.charCodeAt(s2);
+              i3 += t4, this._wasm.decode(0, t4);
+            }
+          }
+          get data32() {
+            if (0 === this._mode || !this.width || !this.height)
+              return o;
+            const e3 = this._wasm.current_width();
+            if (2 === this._mode) {
+              let t3 = this.height - this._currentHeight;
+              if (t3 > 0) {
+                const A3 = this._PIXEL_OFFSET;
+                let i3 = this._lastOffset, s2 = 0;
+                for (; s2 < 6 && t3 > 0; )
+                  this._canvas.set(this._pSrc.subarray(A3 * s2, A3 * s2 + e3), i3 + e3 * s2), s2++, t3--;
+                t3 && this._canvas.fill(this._fillColor, i3 + e3 * s2);
+              }
+              return this._canvas.subarray(0, this.width * this.height);
+            }
+            if (1 === this._mode) {
+              if (this._minWidth === this._maxWidth) {
+                let t4 = false;
+                if (e3)
+                  if (e3 !== this._minWidth)
+                    t4 = true;
+                  else {
+                    const t5 = this._PIXEL_OFFSET;
+                    let A4 = this._lastOffset;
+                    this._realloc(A4, 6 * e3);
+                    for (let i4 = 0; i4 < 6; ++i4)
+                      this._canvas.set(this._pSrc.subarray(t5 * i4, t5 * i4 + e3), A4 + e3 * i4);
+                  }
+                if (!t4)
+                  return this._canvas.subarray(0, this.width * this.height);
+              }
+              const t3 = new Uint32Array(this.width * this.height);
+              t3.fill(this._fillColor);
+              let A3 = 0, i3 = 0;
+              for (let e4 = 0; e4 < this._bandWidths.length; ++e4) {
+                const s2 = this._bandWidths[e4];
+                for (let e5 = 0; e5 < 6; ++e5)
+                  t3.set(this._canvas.subarray(i3, i3 += s2), A3), A3 += this.width;
+              }
+              if (e3) {
+                const i4 = this._PIXEL_OFFSET, s2 = this._wasm.current_height();
+                for (let r2 = 0; r2 < s2; ++r2)
+                  t3.set(this._pSrc.subarray(i4 * r2, i4 * r2 + e3), A3 + this.width * r2);
+              }
+              return t3;
+            }
+            return o;
+          }
+          get data8() {
+            return new Uint8ClampedArray(this.data32.buffer, 0, this.width * this.height * 4);
+          }
+          release() {
+            this._canvas = o, this._bandWidths.length = 0, this._maxWidth = 0, this._minWidth = s.LIMITS.MAX_WIDTH, this._wasm.init(i2.DEFAULT_FOREGROUND, 0, this._opts.paletteLimit, 0);
+          }
+        }
+        t2.Decoder = l, t2.decode = function(e3, t3) {
+          const A3 = new l(t3);
+          return A3.init(), "string" == typeof e3 ? A3.decodeString(e3) : A3.decode(e3), { width: A3.width, height: A3.height, data32: A3.data32, data8: A3.data8 };
+        }, t2.decodeAsync = async function(e3, t3) {
+          const A3 = await g(t3);
+          return A3.init(), "string" == typeof e3 ? A3.decodeString(e3) : A3.decode(e3), { width: A3.width, height: A3.height, data32: A3.data32, data8: A3.data8 };
+        };
+      }, 199: (e2, t2) => {
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.LIMITS = void 0, t2.LIMITS = { CHUNK_SIZE: 16384, PALETTE_SIZE: 4096, MAX_WIDTH: 16384, BYTES: "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AEHAiwIgADcDAEG4iwIgADcDAEGwiwIgADcDAEGoiwIgADcDAEGgiwIgADcDAEGYiwIgADcDAEGQiwIgADcDAEGIiwIgADcDAEGAiwIgADcDAEH4igIgADcDAEHwigIgADcDAEHoigIgADcDAEHgigIgADcDAEHYigIgADcDAEHQigIgADcDAEHIigIgADcDAEHAigIgADcDAEG4igIgADcDAEGwigIgADcDAEGoigIgADcDAEGgigIgADcDAEGYigIgADcDAEGQigIgADcDAEGIigIgADcDAEGAigIgADcDAEH4iQIgADcDAEHwiQIgADcDAEHoiQIgADcDAEHgiQIgADcDAEHYiQIgADcDAEHQiQIgADcDAEHIiQIgADcDAEHAiQIgADcDAEG4iQIgADcDAEGwiQIgADcDAEGoCCgCACIEQf8AakGAAW0hCAJAIARBgQFIDQBBASEBIAhBAiAIQQJKG0EBayICQQFxIQMgBEGBAk4EQCACQX5xIQIDQCABQQl0IgdBEHJBoIkCakGwiQJBgAT8CgAAIAdBsI0CakGwiQJBgAT8CgAAIAFBAmohASACQQJrIgINAAsLIANFDQAgAUEJdEEQckGgiQJqQbCJAkGABPwKAAALAkAgBEEBSA0AIAhBASAIQQFKGyIDQQFxIQUCQCADQQFrIgdFBEBBACEBDAELIANB/v///wdxIQJBACEBA0AgAUEJdCIGQRByQbCJBmpBsIkCQYAE/AoAACAGQZAEckGwiQZqQbCJAkGABPwKAAAgAUECaiEBIAJBAmsiAg0ACwsgBQRAIAFBCXRBEHJBsIkGakGwiQJBgAT8CgAACyAEQQFIDQAgA0EBcSEFIAcEfyADQf7///8HcSECQQAhAQNAIAFBCXQiBkEQckHAiQpqQbCJAkGABPwKAAAgBkGQBHJBwIkKakGwiQJBgAT8CgAAIAFBAmohASACQQJrIgINAAsgAUEHdEEEcgVBBAshASAFBEAgAUECdEHAiQpqQbCJAkGABPwKAAALIARBAUgNACADQQFxIQUgBwR/IANB/v///wdxIQJBACEBA0AgAUEJdCIGQRByQdCJDmpBsIkCQYAE/AoAACAGQZAEckHQiQ5qQbCJAkGABPwKAAAgAUECaiEBIAJBAmsiAg0ACyABQQd0QQRyBUEECyEBIAUEQCABQQJ0QdCJ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" };
+      }, 795: (e2, t2, A2) => {
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.IIPHandler = void 0;
+        const i2 = A2(463), s = A2(699), r = A2(669), n = A2(389), o = A2(462), a = { name: "Unnamed file", size: 0, width: "auto", height: "auto", preserveAspectRatio: 1, inline: 0 };
+        t2.IIPHandler = class {
+          constructor(e3, t3, A3, i3) {
+            this._opts = e3, this._renderer = t3, this._storage = A3, this._coreTerminal = i3, this._aborted = false, this._hp = new n.HeaderParser(), this._header = a, this._dec = new r.default(4194304), this._metrics = o.UNSUPPORTED_TYPE;
+          }
+          reset() {
+          }
+          start() {
+            this._aborted = false, this._header = a, this._metrics = o.UNSUPPORTED_TYPE, this._hp.reset();
+          }
+          put(e3, t3, A3) {
+            if (!this._aborted)
+              if (4 === this._hp.state)
+                this._dec.put(e3, t3, A3) && (this._dec.release(), this._aborted = true);
+              else {
+                const i3 = this._hp.parse(e3, t3, A3);
+                if (-1 === i3)
+                  return void (this._aborted = true);
+                if (i3 > 0) {
+                  if (this._header = Object.assign({}, a, this._hp.fields), !this._header.inline || !this._header.size || this._header.size > this._opts.iipSizeLimit)
+                    return void (this._aborted = true);
+                  this._dec.init(this._header.size), this._dec.put(e3, i3, A3) && (this._dec.release(), this._aborted = true);
+                }
+              }
+          }
+          end(e3) {
+            if (this._aborted)
+              return true;
+            let t3 = 0, A3 = 0, s2 = true;
+            if ((s2 = e3) && (s2 = !this._dec.end()) && (this._metrics = (0, o.imageType)(this._dec.data8), (s2 = "unsupported" !== this._metrics.mime) && (t3 = this._metrics.width, A3 = this._metrics.height, (s2 = t3 && A3 && t3 * A3 < this._opts.pixelLimit) && ([t3, A3] = this._resize(t3, A3).map(Math.floor), s2 = t3 && A3 && t3 * A3 < this._opts.pixelLimit))), !s2)
+              return this._dec.release(), true;
+            const r2 = new Blob([this._dec.data8], { type: this._metrics.mime });
+            if (this._dec.release(), !window.createImageBitmap) {
+              const e4 = URL.createObjectURL(r2), s3 = new Image();
+              return new Promise((r3) => {
+                s3.addEventListener("load", () => {
+                  var n2;
+                  URL.revokeObjectURL(e4);
+                  const o2 = i2.ImageRenderer.createCanvas(window.document, t3, A3);
+                  null === (n2 = o2.getContext("2d")) || void 0 === n2 || n2.drawImage(s3, 0, 0, t3, A3), this._storage.addImage(o2), r3(true);
+                }), s3.src = e4, setTimeout(() => r3(true), 1e3);
+              });
+            }
+            return createImageBitmap(r2, { resizeWidth: t3, resizeHeight: A3 }).then((e4) => (this._storage.addImage(e4), true));
+          }
+          _resize(e3, t3) {
+            var A3, i3, r2, n2;
+            const o2 = (null === (A3 = this._renderer.dimensions) || void 0 === A3 ? void 0 : A3.css.cell.width) || s.CELL_SIZE_DEFAULT.width, a2 = (null === (i3 = this._renderer.dimensions) || void 0 === i3 ? void 0 : i3.css.cell.height) || s.CELL_SIZE_DEFAULT.height, h = (null === (r2 = this._renderer.dimensions) || void 0 === r2 ? void 0 : r2.css.canvas.width) || o2 * this._coreTerminal.cols, g = (null === (n2 = this._renderer.dimensions) || void 0 === n2 ? void 0 : n2.css.canvas.height) || a2 * this._coreTerminal.rows, l = this._dim(this._header.width, h, o2), c = this._dim(this._header.height, g, a2);
+            if (!l && !c) {
+              const A4 = h / e3, i4 = (g - a2) / t3, s2 = Math.min(A4, i4);
+              return s2 < 1 ? [e3 * s2, t3 * s2] : [e3, t3];
+            }
+            return l ? !this._header.preserveAspectRatio && l && c ? [l, c] : [l, t3 * l / e3] : [e3 * c / t3, c];
+          }
+          _dim(e3, t3, A3) {
+            return "auto" === e3 ? 0 : e3.endsWith("%") ? parseInt(e3.slice(0, -1)) * t3 / 100 : e3.endsWith("px") ? parseInt(e3.slice(0, -2)) : parseInt(e3) * A3;
+          }
+        };
+      }, 389: (e2, t2) => {
+        function A2(e3) {
+          let t3 = "";
+          for (let A3 = 0; A3 < e3.length; ++A3)
+            t3 += String.fromCharCode(e3[A3]);
+          return t3;
+        }
+        function i2(e3) {
+          let t3 = 0;
+          for (let A3 = 0; A3 < e3.length; ++A3) {
+            if (e3[A3] < 48 || e3[A3] > 57)
+              throw new Error("illegal char");
+            t3 = 10 * t3 + e3[A3] - 48;
+          }
+          return t3;
+        }
+        function s(e3) {
+          const t3 = A2(e3);
+          if (!t3.match(/^((auto)|(\d+?((px)|(%)){0,1}))$/))
+            throw new Error("illegal size");
+          return t3;
+        }
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.HeaderParser = void 0;
+        const r = { inline: i2, size: i2, name: function(e3) {
+          if ("undefined" != typeof Buffer)
+            return Buffer.from(A2(e3), "base64").toString();
+          const t3 = atob(A2(e3)), i3 = new Uint8Array(t3.length);
+          for (let e4 = 0; e4 < i3.length; ++e4)
+            i3[e4] = t3.charCodeAt(e4);
+          return new TextDecoder().decode(i3);
+        }, width: s, height: s, preserveAspectRatio: i2 }, n = [70, 105, 108, 101], o = 1024;
+        t2.HeaderParser = class {
+          constructor() {
+            this.state = 0, this._buffer = new Uint32Array(o), this._position = 0, this._key = "", this.fields = {};
+          }
+          reset() {
+            this._buffer.fill(0), this.state = 0, this._position = 0, this.fields = {}, this._key = "";
+          }
+          parse(e3, t3, A3) {
+            let i3 = this.state, s2 = this._position;
+            const r2 = this._buffer;
+            if (1 === i3 || 4 === i3)
+              return -1;
+            if (0 === i3 && s2 > 6)
+              return -1;
+            for (let a = t3; a < A3; ++a) {
+              const t4 = e3[a];
+              switch (t4) {
+                case 59:
+                  if (!this._storeValue(s2))
+                    return this._a();
+                  i3 = 2, s2 = 0;
+                  break;
+                case 61:
+                  if (0 === i3) {
+                    for (let e4 = 0; e4 < n.length; ++e4)
+                      if (r2[e4] !== n[e4])
+                        return this._a();
+                    i3 = 2, s2 = 0;
+                  } else if (2 === i3) {
+                    if (!this._storeKey(s2))
+                      return this._a();
+                    i3 = 3, s2 = 0;
+                  } else if (3 === i3) {
+                    if (s2 >= o)
+                      return this._a();
+                    r2[s2++] = t4;
+                  }
+                  break;
+                case 58:
+                  return 3 !== i3 || this._storeValue(s2) ? (this.state = 4, a + 1) : this._a();
+                default:
+                  if (s2 >= o)
+                    return this._a();
+                  r2[s2++] = t4;
+              }
+            }
+            return this.state = i3, this._position = s2, -2;
+          }
+          _a() {
+            return this.state = 1, -1;
+          }
+          _storeKey(e3) {
+            const t3 = A2(this._buffer.subarray(0, e3));
+            return !!t3 && (this._key = t3, this.fields[t3] = null, true);
+          }
+          _storeValue(e3) {
+            if (this._key) {
+              try {
+                const t3 = this._buffer.slice(0, e3);
+                this.fields[this._key] = r[this._key] ? r[this._key](t3) : t3;
+              } catch (e4) {
+                return false;
+              }
+              return true;
+            }
+            return false;
+          }
+        };
+      }, 462: (e2, t2) => {
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.UNSUPPORTED_TYPE = void 0, t2.imageType = function(e3) {
+          if (e3.length < 24)
+            return t2.UNSUPPORTED_TYPE;
+          const A2 = new Uint32Array(e3.buffer, e3.byteOffset, 6);
+          if (1196314761 === A2[0] && 169478669 === A2[1] && 1380206665 === A2[3])
+            return { mime: "image/png", width: e3[16] << 24 | e3[17] << 16 | e3[18] << 8 | e3[19], height: e3[20] << 24 | e3[21] << 16 | e3[22] << 8 | e3[23] };
+          if (255 === e3[0] && 216 === e3[1] && 255 === e3[2]) {
+            const [t3, A3] = function(e4) {
+              const t4 = e4.length;
+              let A4 = 4, i2 = e4[A4] << 8 | e4[A4 + 1];
+              for (; ; ) {
+                if (A4 += i2, A4 >= t4)
+                  return [0, 0];
+                if (255 !== e4[A4])
+                  return [0, 0];
+                if (192 === e4[A4 + 1] || 194 === e4[A4 + 1])
+                  return A4 + 8 < t4 ? [e4[A4 + 7] << 8 | e4[A4 + 8], e4[A4 + 5] << 8 | e4[A4 + 6]] : [0, 0];
+                A4 += 2, i2 = e4[A4] << 8 | e4[A4 + 1];
+              }
+            }(e3);
+            return { mime: "image/jpeg", width: t3, height: A3 };
+          }
+          return 944130375 !== A2[0] || 55 !== e3[4] && 57 !== e3[4] || 97 !== e3[5] ? t2.UNSUPPORTED_TYPE : { mime: "image/gif", width: e3[7] << 8 | e3[6], height: e3[9] << 8 | e3[8] };
+        }, t2.UNSUPPORTED_TYPE = { mime: "unsupported", width: 0, height: 0 };
+      }, 463: (e2, t2, A2) => {
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.ImageRenderer = void 0;
+        const i2 = A2(939), s = A2(540);
+        class r extends s.Disposable {
+          static createCanvas(e3, t3, A3) {
+            const i3 = (e3 || document).createElement("canvas");
+            return i3.width = 0 | t3, i3.height = 0 | A3, i3;
+          }
+          static createImageData(e3, t3, A3, i3) {
+            if ("function" != typeof ImageData) {
+              const s2 = e3.createImageData(t3, A3);
+              return i3 && s2.data.set(new Uint8ClampedArray(i3, 0, t3 * A3 * 4)), s2;
+            }
+            return i3 ? new ImageData(new Uint8ClampedArray(i3, 0, t3 * A3 * 4), t3, A3) : new ImageData(t3, A3);
+          }
+          static createImageBitmap(e3) {
+            return "function" != typeof createImageBitmap ? Promise.resolve(void 0) : createImageBitmap(e3);
+          }
+          constructor(e3) {
+            super(), this._terminal = e3, this._optionsRefresh = this._register(new s.MutableDisposable()), this._oldOpen = this._terminal._core.open, this._terminal._core.open = (e4) => {
+              var t3;
+              null === (t3 = this._oldOpen) || void 0 === t3 || t3.call(this._terminal._core, e4), this._open();
+            }, this._terminal._core.screenElement && this._open(), this._optionsRefresh.value = this._terminal._core.optionsService.onOptionChange((e4) => {
+              var t3;
+              "fontSize" === e4 && (this.rescaleCanvas(), null === (t3 = this._renderService) || void 0 === t3 || t3.refreshRows(0, this._terminal.rows));
+            }), this._register((0, s.toDisposable)(() => {
+              var e4;
+              this.removeLayerFromDom(), this._terminal._core && this._oldOpen && (this._terminal._core.open = this._oldOpen, this._oldOpen = void 0), this._renderService && this._oldSetRenderer && (this._renderService.setRenderer = this._oldSetRenderer, this._oldSetRenderer = void 0), this._renderService = void 0, this.canvas = void 0, this._ctx = void 0, null === (e4 = this._placeholderBitmap) || void 0 === e4 || e4.close(), this._placeholderBitmap = void 0, this._placeholder = void 0;
+            }));
+          }
+          showPlaceholder(e3) {
+            var t3, A3;
+            e3 ? this._placeholder || -1 === this.cellSize.height || this._createPlaceHolder(Math.max(this.cellSize.height + 1, 24)) : (null === (t3 = this._placeholderBitmap) || void 0 === t3 || t3.close(), this._placeholderBitmap = void 0, this._placeholder = void 0), null === (A3 = this._renderService) || void 0 === A3 || A3.refreshRows(0, this._terminal.rows);
+          }
+          get dimensions() {
+            var e3;
+            return null === (e3 = this._renderService) || void 0 === e3 ? void 0 : e3.dimensions;
+          }
+          get cellSize() {
+            var e3, t3;
+            return { width: (null === (e3 = this.dimensions) || void 0 === e3 ? void 0 : e3.css.cell.width) || -1, height: (null === (t3 = this.dimensions) || void 0 === t3 ? void 0 : t3.css.cell.height) || -1 };
+          }
+          clearLines(e3, t3) {
+            var A3, i3, s2, r2;
+            null === (A3 = this._ctx) || void 0 === A3 || A3.clearRect(0, e3 * ((null === (i3 = this.dimensions) || void 0 === i3 ? void 0 : i3.css.cell.height) || 0), (null === (s2 = this.dimensions) || void 0 === s2 ? void 0 : s2.css.canvas.width) || 0, (++t3 - e3) * ((null === (r2 = this.dimensions) || void 0 === r2 ? void 0 : r2.css.cell.height) || 0));
+          }
+          clearAll() {
+            var e3, t3, A3;
+            null === (e3 = this._ctx) || void 0 === e3 || e3.clearRect(0, 0, (null === (t3 = this.canvas) || void 0 === t3 ? void 0 : t3.width) || 0, (null === (A3 = this.canvas) || void 0 === A3 ? void 0 : A3.height) || 0);
+          }
+          draw(e3, t3, A3, i3, s2 = 1) {
+            if (!this._ctx)
+              return;
+            const { width: r2, height: n } = this.cellSize;
+            if (-1 === r2 || -1 === n)
+              return;
+            this._rescaleImage(e3, r2, n);
+            const o = e3.actual, a = Math.ceil(o.width / r2), h = t3 % a * r2, g = Math.floor(t3 / a) * n, l = A3 * r2, c = i3 * n, d = s2 * r2 + h > o.width ? o.width - h : s2 * r2, I = g + n > o.height ? o.height - g : n;
+            this._ctx.drawImage(o, Math.floor(h), Math.floor(g), Math.ceil(d), Math.ceil(I), Math.floor(l), Math.floor(c), Math.ceil(d), Math.ceil(I));
+          }
+          extractTile(e3, t3) {
+            const { width: A3, height: i3 } = this.cellSize;
+            if (-1 === A3 || -1 === i3)
+              return;
+            this._rescaleImage(e3, A3, i3);
+            const s2 = e3.actual, n = Math.ceil(s2.width / A3), o = t3 % n * A3, a = Math.floor(t3 / n) * i3, h = A3 + o > s2.width ? s2.width - o : A3, g = a + i3 > s2.height ? s2.height - a : i3, l = r.createCanvas(this.document, h, g), c = l.getContext("2d");
+            return c ? (c.drawImage(s2, Math.floor(o), Math.floor(a), Math.floor(h), Math.floor(g), 0, 0, Math.floor(h), Math.floor(g)), l) : void 0;
+          }
+          drawPlaceholder(e3, t3, A3 = 1) {
+            if (this._ctx) {
+              const { width: i3, height: s2 } = this.cellSize;
+              if (-1 === i3 || -1 === s2)
+                return;
+              if (this._placeholder ? s2 >= this._placeholder.height && this._createPlaceHolder(s2 + 1) : this._createPlaceHolder(Math.max(s2 + 1, 24)), !this._placeholder)
+                return;
+              this._ctx.drawImage(this._placeholderBitmap || this._placeholder, e3 * i3, t3 * s2 % 2 ? 0 : 1, i3 * A3, s2, e3 * i3, t3 * s2, i3 * A3, s2);
+            }
+          }
+          rescaleCanvas() {
+            this.canvas && (this.canvas.width === this.dimensions.css.canvas.width && this.canvas.height === this.dimensions.css.canvas.height || (this.canvas.width = this.dimensions.css.canvas.width || 0, this.canvas.height = this.dimensions.css.canvas.height || 0));
+          }
+          _rescaleImage(e3, t3, A3) {
+            if (t3 === e3.actualCellSize.width && A3 === e3.actualCellSize.height)
+              return;
+            const { width: i3, height: s2 } = e3.origCellSize;
+            if (t3 === i3 && A3 === s2)
+              return e3.actual = e3.orig, e3.actualCellSize.width = i3, void (e3.actualCellSize.height = s2);
+            const n = r.createCanvas(this.document, Math.ceil(e3.orig.width * t3 / i3), Math.ceil(e3.orig.height * A3 / s2)), o = n.getContext("2d");
+            o && (o.drawImage(e3.orig, 0, 0, n.width, n.height), e3.actual = n, e3.actualCellSize.width = t3, e3.actualCellSize.height = A3);
+          }
+          _open() {
+            this._renderService = this._terminal._core._renderService, this._oldSetRenderer = this._renderService.setRenderer.bind(this._renderService), this._renderService.setRenderer = (e3) => {
+              var t3;
+              this.removeLayerFromDom(), null === (t3 = this._oldSetRenderer) || void 0 === t3 || t3.call(this._renderService, e3);
+            };
+          }
+          insertLayerToDom() {
+            var e3, t3;
+            this.document && this._terminal._core.screenElement ? this.canvas || (this.canvas = r.createCanvas(this.document, (null === (e3 = this.dimensions) || void 0 === e3 ? void 0 : e3.css.canvas.width) || 0, (null === (t3 = this.dimensions) || void 0 === t3 ? void 0 : t3.css.canvas.height) || 0), this.canvas.classList.add("xterm-image-layer"), this._terminal._core.screenElement.appendChild(this.canvas), this._ctx = this.canvas.getContext("2d", { alpha: true, desynchronized: true }), this.clearAll()) : console.warn("image addon: cannot insert output canvas to DOM, missing document or screenElement");
+          }
+          removeLayerFromDom() {
+            this.canvas && (this._ctx = void 0, this.canvas.remove(), this.canvas = void 0);
+          }
+          _createPlaceHolder(e3 = 24) {
+            var t3;
+            null === (t3 = this._placeholderBitmap) || void 0 === t3 || t3.close(), this._placeholderBitmap = void 0;
+            const A3 = 32, s2 = r.createCanvas(this.document, A3, e3), n = s2.getContext("2d", { alpha: false });
+            if (!n)
+              return;
+            const o = r.createImageData(n, A3, e3), a = new Uint32Array(o.data.buffer), h = (0, i2.toRGBA8888)(0, 0, 0), g = (0, i2.toRGBA8888)(255, 255, 255);
+            a.fill(h);
+            for (let t4 = 0; t4 < e3; ++t4) {
+              const e4 = t4 % 2, i3 = t4 * A3;
+              for (let t5 = 0; t5 < A3; t5 += 2)
+                a[i3 + t5 + e4] = g;
+            }
+            n.putImageData(o, 0, 0);
+            const l = screen.width + A3 - 1 & -32 || 4096;
+            this._placeholder = r.createCanvas(this.document, l, e3);
+            const c = this._placeholder.getContext("2d", { alpha: false });
+            if (c) {
+              for (let e4 = 0; e4 < l; e4 += A3)
+                c.drawImage(s2, e4, 0);
+              r.createImageBitmap(this._placeholder).then((e4) => this._placeholderBitmap = e4);
+            } else
+              this._placeholder = void 0;
+          }
+          get document() {
+            var e3;
+            return null === (e3 = this._terminal._core._coreBrowserService) || void 0 === e3 ? void 0 : e3.window.document;
+          }
+        }
+        t2.ImageRenderer = r;
+      }, 699: (e2, t2, A2) => {
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.ImageStorage = t2.CELL_SIZE_DEFAULT = void 0;
+        const i2 = A2(463);
+        t2.CELL_SIZE_DEFAULT = { width: 7, height: 14 };
+        class s {
+          get ext() {
+            return this._urlId ? -469762049 & this._ext | this.underlineStyle << 26 : this._ext;
+          }
+          set ext(e3) {
+            this._ext = e3;
+          }
+          get underlineStyle() {
+            return this._urlId ? 5 : (469762048 & this._ext) >> 26;
+          }
+          set underlineStyle(e3) {
+            this._ext &= -469762049, this._ext |= e3 << 26 & 469762048;
+          }
+          get underlineColor() {
+            return 67108863 & this._ext;
+          }
+          set underlineColor(e3) {
+            this._ext &= -67108864, this._ext |= 67108863 & e3;
+          }
+          get underlineVariantOffset() {
+            const e3 = (3758096384 & this._ext) >> 29;
+            return e3 < 0 ? 4294967288 ^ e3 : e3;
+          }
+          set underlineVariantOffset(e3) {
+            this._ext &= 536870911, this._ext |= e3 << 29 & 3758096384;
+          }
+          get urlId() {
+            return this._urlId;
+          }
+          set urlId(e3) {
+            this._urlId = e3;
+          }
+          constructor(e3 = 0, t3 = 0, A3 = -1, i3 = -1) {
+            this.imageId = A3, this.tileId = i3, this._ext = 0, this._urlId = 0, this._ext = e3, this._urlId = t3;
+          }
+          clone() {
+            return new s(this._ext, this._urlId, this.imageId, this.tileId);
+          }
+          isEmpty() {
+            return 0 === this.underlineStyle && 0 === this._urlId && -1 === this.imageId;
+          }
+        }
+        const r = new s();
+        t2.ImageStorage = class {
+          constructor(e3, t3, A3) {
+            this._terminal = e3, this._renderer = t3, this._opts = A3, this._images = /* @__PURE__ */ new Map(), this._lastId = 0, this._lowestId = 0, this._fullyCleared = false, this._needsFullClear = false, this._pixelLimit = 25e5;
+            try {
+              this.setLimit(this._opts.storageLimit);
+            } catch (e4) {
+              console.error(e4.message), console.warn(`storageLimit is set to ${this.getLimit()} MB`);
+            }
+            this._viewportMetrics = { cols: this._terminal.cols, rows: this._terminal.rows };
+          }
+          dispose() {
+            this.reset();
+          }
+          reset() {
+            var e3;
+            for (const t3 of this._images.values())
+              null === (e3 = t3.marker) || void 0 === e3 || e3.dispose();
+            this._images.clear(), this._renderer.clearAll();
+          }
+          getLimit() {
+            return 4 * this._pixelLimit / 1e6;
+          }
+          setLimit(e3) {
+            if (e3 < 0.5 || e3 > 1e3)
+              throw RangeError("invalid storageLimit, should be at least 0.5 MB and not exceed 1G");
+            this._pixelLimit = e3 / 4 * 1e6 >>> 0, this._evictOldest(0);
+          }
+          getUsage() {
+            return 4 * this._getStoredPixels() / 1e6;
+          }
+          _getStoredPixels() {
+            let e3 = 0;
+            for (const t3 of this._images.values())
+              t3.orig && (e3 += t3.orig.width * t3.orig.height, t3.actual && t3.actual !== t3.orig && (e3 += t3.actual.width * t3.actual.height));
+            return e3;
+          }
+          _delImg(e3) {
+            const t3 = this._images.get(e3);
+            this._images.delete(e3), t3 && window.ImageBitmap && t3.orig instanceof ImageBitmap && t3.orig.close();
+          }
+          wipeAlternate() {
+            var e3;
+            const t3 = [];
+            for (const [A3, i3] of this._images.entries())
+              "alternate" === i3.bufferType && (null === (e3 = i3.marker) || void 0 === e3 || e3.dispose(), t3.push(A3));
+            for (const e4 of t3)
+              this._delImg(e4);
+            this._needsFullClear = true, this._fullyCleared = false;
+          }
+          advanceCursor(e3) {
+            if (this._opts.sixelScrolling) {
+              let A3 = this._renderer.cellSize;
+              -1 !== A3.width && -1 !== A3.height || (A3 = t2.CELL_SIZE_DEFAULT);
+              const i3 = Math.ceil(e3 / A3.height);
+              for (let e4 = 1; e4 < i3; ++e4)
+                this._terminal._core._inputHandler.lineFeed();
+            }
+          }
+          addImage(e3) {
+            var A3;
+            this._evictOldest(e3.width * e3.height);
+            let i3 = this._renderer.cellSize;
+            -1 !== i3.width && -1 !== i3.height || (i3 = t2.CELL_SIZE_DEFAULT);
+            const s2 = Math.ceil(e3.width / i3.width), r2 = Math.ceil(e3.height / i3.height), n = ++this._lastId, o = this._terminal._core.buffer, a = this._terminal.cols, h = this._terminal.rows, g = o.x, l = o.y;
+            let c = g, d = 0;
+            this._opts.sixelScrolling || (o.x = 0, o.y = 0, c = 0), this._terminal._core._inputHandler._dirtyRowTracker.markDirty(o.y);
+            for (let e4 = 0; e4 < r2; ++e4) {
+              const t3 = o.lines.get(o.y + o.ybase);
+              for (let A4 = 0; A4 < s2 && !(c + A4 >= a); ++A4)
+                this._writeToCell(t3, c + A4, n, e4 * s2 + A4), d++;
+              if (this._opts.sixelScrolling)
+                e4 < r2 - 1 && this._terminal._core._inputHandler.lineFeed();
+              else if (++o.y >= h)
+                break;
+              o.x = c;
+            }
+            this._terminal._core._inputHandler._dirtyRowTracker.markDirty(o.y), this._opts.sixelScrolling ? o.x = c : (o.x = g, o.y = l);
+            const I = [];
+            for (const [e4, t3] of this._images.entries())
+              t3.tileCount < 1 && (null === (A3 = t3.marker) || void 0 === A3 || A3.dispose(), I.push(e4));
+            for (const e4 of I)
+              this._delImg(e4);
+            const C = this._terminal.registerMarker(0);
+            null == C || C.onDispose(() => {
+              this._images.get(n) && this._delImg(n);
+            }), "alternate" === this._terminal.buffer.active.type && this._evictOnAlternate();
+            const u = { orig: e3, origCellSize: i3, actual: e3, actualCellSize: Object.assign({}, i3), marker: C || void 0, tileCount: d, bufferType: this._terminal.buffer.active.type };
+            this._images.set(n, u);
+          }
+          render(e3) {
+            if (!this._renderer.canvas && this._images.size && (this._renderer.insertLayerToDom(), !this._renderer.canvas))
+              return;
+            if (this._renderer.rescaleCanvas(), !this._images.size)
+              return this._fullyCleared || (this._renderer.clearAll(), this._fullyCleared = true, this._needsFullClear = false), void (this._renderer.canvas && this._renderer.removeLayerFromDom());
+            this._needsFullClear && (this._renderer.clearAll(), this._fullyCleared = true, this._needsFullClear = false);
+            const { start: t3, end: A3 } = e3, i3 = this._terminal._core.buffer, s2 = this._terminal._core.cols;
+            this._renderer.clearLines(t3, A3);
+            for (let e4 = t3; e4 <= A3; ++e4) {
+              const t4 = i3.lines.get(e4 + i3.ydisp);
+              if (!t4)
+                return;
+              for (let A4 = 0; A4 < s2; ++A4)
+                if (268435456 & t4.getBg(A4)) {
+                  let i4 = t4._extendedAttrs[A4] || r;
+                  const n = i4.imageId;
+                  if (void 0 === n || -1 === n)
+                    continue;
+                  const o = this._images.get(n);
+                  if (-1 !== i4.tileId) {
+                    const a = i4.tileId, h = A4;
+                    let g = 1;
+                    for (; ++A4 < s2 && 268435456 & t4.getBg(A4) && (i4 = t4._extendedAttrs[A4] || r) && i4.imageId === n && i4.tileId === a + g; )
+                      g++;
+                    A4--, o ? o.actual && this._renderer.draw(o, a, h, e4, g) : this._opts.showPlaceholder && this._renderer.drawPlaceholder(h, e4, g), this._fullyCleared = false;
+                  }
+                }
+            }
+          }
+          viewportResize(e3) {
+            var t3;
+            if (!this._images.size)
+              return void (this._viewportMetrics = e3);
+            if (this._viewportMetrics.cols >= e3.cols)
+              return void (this._viewportMetrics = e3);
+            const A3 = this._terminal._core.buffer, i3 = A3.lines.length, s2 = this._viewportMetrics.cols - 1;
+            for (let n = 0; n < i3; ++n) {
+              const i4 = A3.lines.get(n);
+              if (268435456 & i4.getBg(s2)) {
+                const A4 = i4._extendedAttrs[s2] || r, n2 = A4.imageId;
+                if (void 0 === n2 || -1 === n2)
+                  continue;
+                const o = this._images.get(n2);
+                if (!o)
+                  continue;
+                const a = Math.ceil(((null === (t3 = o.actual) || void 0 === t3 ? void 0 : t3.width) || 0) / o.actualCellSize.width);
+                if (A4.tileId % a + 1 >= a)
+                  continue;
+                let h = false;
+                for (let t4 = s2 + 1; t4 > e3.cols; ++t4)
+                  if (4194303 & i4._data[3 * t4 + 0]) {
+                    h = true;
+                    break;
+                  }
+                if (h)
+                  continue;
+                const g = Math.min(e3.cols, a - A4.tileId % a + s2);
+                let l = A4.tileId;
+                for (let e4 = s2 + 1; e4 < g; ++e4)
+                  this._writeToCell(i4, e4, n2, ++l), o.tileCount++;
+              }
+            }
+            this._viewportMetrics = e3;
+          }
+          getImageAtBufferCell(e3, t3) {
+            var A3, s2;
+            const n = this._terminal._core.buffer.lines.get(t3);
+            if (n && 268435456 & n.getBg(e3)) {
+              const t4 = n._extendedAttrs[e3] || r;
+              if (t4.imageId && -1 !== t4.imageId) {
+                const e4 = null === (A3 = this._images.get(t4.imageId)) || void 0 === A3 ? void 0 : A3.orig;
+                if (window.ImageBitmap && e4 instanceof ImageBitmap) {
+                  const t5 = i2.ImageRenderer.createCanvas(window.document, e4.width, e4.height);
+                  return null === (s2 = t5.getContext("2d")) || void 0 === s2 || s2.drawImage(e4, 0, 0, e4.width, e4.height), t5;
+                }
+                return e4;
+              }
+            }
+          }
+          extractTileAtBufferCell(e3, t3) {
+            const A3 = this._terminal._core.buffer.lines.get(t3);
+            if (A3 && 268435456 & A3.getBg(e3)) {
+              const t4 = A3._extendedAttrs[e3] || r;
+              if (t4.imageId && -1 !== t4.imageId && -1 !== t4.tileId) {
+                const e4 = this._images.get(t4.imageId);
+                if (e4)
+                  return this._renderer.extractTile(e4, t4.tileId);
+              }
+            }
+          }
+          _evictOldest(e3) {
+            var t3;
+            const A3 = this._getStoredPixels();
+            let i3 = A3;
+            for (; this._pixelLimit < i3 + e3 && this._images.size; ) {
+              const e4 = this._images.get(++this._lowestId);
+              e4 && e4.orig && (i3 -= e4.orig.width * e4.orig.height, e4.actual && e4.orig !== e4.actual && (i3 -= e4.actual.width * e4.actual.height), null === (t3 = e4.marker) || void 0 === t3 || t3.dispose(), this._delImg(this._lowestId));
+            }
+            return A3 - i3;
+          }
+          _writeToCell(e3, t3, A3, i3) {
+            if (268435456 & e3._data[3 * t3 + 2]) {
+              const r2 = e3._extendedAttrs[t3];
+              if (r2) {
+                if (void 0 !== r2.imageId) {
+                  const e4 = this._images.get(r2.imageId);
+                  return e4 && e4.tileCount--, r2.imageId = A3, void (r2.tileId = i3);
+                }
+                return void (e3._extendedAttrs[t3] = new s(r2.ext, r2.urlId, A3, i3));
+              }
+            }
+            e3._data[3 * t3 + 2] |= 268435456, e3._extendedAttrs[t3] = new s(0, 0, A3, i3);
+          }
+          _evictOnAlternate() {
+            var e3, t3;
+            for (const e4 of this._images.values())
+              "alternate" === e4.bufferType && (e4.tileCount = 0);
+            const A3 = this._terminal._core.buffer;
+            for (let t4 = 0; t4 < this._terminal.rows; ++t4) {
+              const i4 = A3.lines.get(t4);
+              if (i4) {
+                for (let t5 = 0; t5 < this._terminal.cols; ++t5)
+                  if (268435456 & i4._data[3 * t5 + 2]) {
+                    const A4 = null === (e3 = i4._extendedAttrs[t5]) || void 0 === e3 ? void 0 : e3.imageId;
+                    if (A4) {
+                      const e4 = this._images.get(A4);
+                      e4 && e4.tileCount++;
+                    }
+                  }
+              }
+            }
+            const i3 = [];
+            for (const [e4, A4] of this._images.entries())
+              "alternate" !== A4.bufferType || A4.tileCount || (null === (t3 = A4.marker) || void 0 === t3 || t3.dispose(), i3.push(e4));
+            for (const e4 of i3)
+              this._delImg(e4);
+          }
+        };
+      }, 566: (e2, t2, A2) => {
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.SixelHandler = void 0;
+        const i2 = A2(939), s = A2(463), r = A2(591), n = i2.PALETTE_ANSI_256;
+        function o(e3) {
+          return i2.BIG_ENDIAN ? e3 : (255 & e3) << 24 | (e3 >>> 8 & 255) << 16 | (e3 >>> 16 & 255) << 8 | e3 >>> 24 & 255;
+        }
+        n.set(i2.PALETTE_VT340_COLOR), t2.SixelHandler = class {
+          constructor(e3, t3, A3) {
+            this._opts = e3, this._storage = t3, this._coreTerminal = A3, this._size = 0, this._aborted = false, (0, r.DecoderAsync)({ memoryLimit: 4 * this._opts.pixelLimit, palette: n, paletteLimit: this._opts.sixelPaletteLimit }).then((e4) => this._dec = e4);
+          }
+          reset() {
+            this._dec && (this._dec.release(), this._dec._palette.fill(0), this._dec.init(0, n, this._opts.sixelPaletteLimit));
+          }
+          hook(e3) {
+            var t3;
+            if (this._size = 0, this._aborted = false, this._dec) {
+              const A3 = 1 === e3.params[1] ? 0 : function(e4, t4) {
+                let A4 = 0;
+                if (!t4)
+                  return A4;
+                if (e4.isInverse())
+                  if (e4.isFgDefault())
+                    A4 = o(t4.foreground.rgba);
+                  else if (e4.isFgRGB()) {
+                    const t5 = e4.constructor.toColorRGB(e4.getFgColor());
+                    A4 = (0, i2.toRGBA8888)(...t5);
+                  } else
+                    A4 = o(t4.ansi[e4.getFgColor()].rgba);
+                else if (e4.isBgDefault())
+                  A4 = o(t4.background.rgba);
+                else if (e4.isBgRGB()) {
+                  const t5 = e4.constructor.toColorRGB(e4.getBgColor());
+                  A4 = (0, i2.toRGBA8888)(...t5);
+                } else
+                  A4 = o(t4.ansi[e4.getBgColor()].rgba);
+                return A4;
+              }(this._coreTerminal._core._inputHandler._curAttrData, null === (t3 = this._coreTerminal._core._themeService) || void 0 === t3 ? void 0 : t3.colors);
+              this._dec.init(A3, null, this._opts.sixelPaletteLimit);
+            }
+          }
+          put(e3, t3, A3) {
+            if (!this._aborted && this._dec) {
+              if (this._size += A3 - t3, this._size > this._opts.sixelSizeLimit)
+                return console.warn("SIXEL: too much data, aborting"), this._aborted = true, void this._dec.release();
+              try {
+                this._dec.decode(e3, t3, A3);
+              } catch (e4) {
+                console.warn(`SIXEL: error while decoding image - ${e4}`), this._aborted = true, this._dec.release();
+              }
+            }
+          }
+          unhook(e3) {
+            var t3;
+            if (this._aborted || !e3 || !this._dec)
+              return true;
+            const A3 = this._dec.width, i3 = this._dec.height;
+            if (!A3 || !i3)
+              return i3 && this._storage.advanceCursor(i3), true;
+            const r2 = s.ImageRenderer.createCanvas(void 0, A3, i3);
+            return null === (t3 = r2.getContext("2d")) || void 0 === t3 || t3.putImageData(new ImageData(this._dec.data8, A3, i3), 0, 0), this._dec.memoryUsage > 4194304 && this._dec.release(), this._storage.addImage(r2), true;
+          }
+        };
+      }, 732: (e2, t2, A2) => {
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.Permutation = t2.CallbackIterable = t2.ArrayQueue = t2.booleanComparator = t2.numberComparator = t2.CompareResult = void 0, t2.tail = function(e3, t3 = 0) {
+          return e3[e3.length - (1 + t3)];
+        }, t2.tail2 = function(e3) {
+          if (0 === e3.length)
+            throw new Error("Invalid tail call");
+          return [e3.slice(0, e3.length - 1), e3[e3.length - 1]];
+        }, t2.equals = function(e3, t3, A3 = (e4, t4) => e4 === t4) {
+          if (e3 === t3)
+            return true;
+          if (!e3 || !t3)
+            return false;
+          if (e3.length !== t3.length)
+            return false;
+          for (let i3 = 0, s2 = e3.length; i3 < s2; i3++)
+            if (!A3(e3[i3], t3[i3]))
+              return false;
+          return true;
+        }, t2.removeFastWithoutKeepingOrder = function(e3, t3) {
+          const A3 = e3.length - 1;
+          t3 < A3 && (e3[t3] = e3[A3]), e3.pop();
+        }, t2.binarySearch = function(e3, t3, A3) {
+          return r(e3.length, (i3) => A3(e3[i3], t3));
+        }, t2.binarySearch2 = r, t2.quickSelect = function e3(t3, A3, i3) {
+          if ((t3 |= 0) >= A3.length)
+            throw new TypeError("invalid index");
+          const s2 = A3[Math.floor(A3.length * Math.random())], r2 = [], n2 = [], o2 = [];
+          for (const e4 of A3) {
+            const t4 = i3(e4, s2);
+            t4 < 0 ? r2.push(e4) : t4 > 0 ? n2.push(e4) : o2.push(e4);
+          }
+          return t3 < r2.length ? e3(t3, r2, i3) : t3 < r2.length + o2.length ? o2[0] : e3(t3 - (r2.length + o2.length), n2, i3);
+        }, t2.groupBy = function(e3, t3) {
+          const A3 = [];
+          let i3;
+          for (const s2 of e3.slice(0).sort(t3))
+            i3 && 0 === t3(i3[0], s2) ? i3.push(s2) : (i3 = [s2], A3.push(i3));
+          return A3;
+        }, t2.groupAdjacentBy = function* (e3, t3) {
+          let A3, i3;
+          for (const s2 of e3)
+            void 0 !== i3 && t3(i3, s2) ? A3.push(s2) : (A3 && (yield A3), A3 = [s2]), i3 = s2;
+          A3 && (yield A3);
+        }, t2.forEachAdjacent = function(e3, t3) {
+          for (let A3 = 0; A3 <= e3.length; A3++)
+            t3(0 === A3 ? void 0 : e3[A3 - 1], A3 === e3.length ? void 0 : e3[A3]);
+        }, t2.forEachWithNeighbors = function(e3, t3) {
+          for (let A3 = 0; A3 < e3.length; A3++)
+            t3(0 === A3 ? void 0 : e3[A3 - 1], e3[A3], A3 + 1 === e3.length ? void 0 : e3[A3 + 1]);
+        }, t2.sortedDiff = n, t2.delta = function(e3, t3, A3) {
+          const i3 = n(e3, t3, A3), s2 = [], r2 = [];
+          for (const t4 of i3)
+            s2.push(...e3.slice(t4.start, t4.start + t4.deleteCount)), r2.push(...t4.toInsert);
+          return { removed: s2, added: r2 };
+        }, t2.top = function(e3, t3, A3) {
+          if (0 === A3)
+            return [];
+          const i3 = e3.slice(0, A3).sort(t3);
+          return o(e3, t3, i3, A3, e3.length), i3;
+        }, t2.topAsync = function(e3, t3, A3, s2, r2) {
+          return 0 === A3 ? Promise.resolve([]) : new Promise((n2, a2) => {
+            (async () => {
+              const n3 = e3.length, a3 = e3.slice(0, A3).sort(t3);
+              for (let h2 = A3, g2 = Math.min(A3 + s2, n3); h2 < n3; h2 = g2, g2 = Math.min(g2 + s2, n3)) {
+                if (h2 > A3 && await new Promise((e4) => setTimeout(e4)), r2 && r2.isCancellationRequested)
+                  throw new i2.CancellationError();
+                o(e3, t3, a3, h2, g2);
+              }
+              return a3;
+            })().then(n2, a2);
+          });
+        }, t2.coalesce = function(e3) {
+          return e3.filter((e4) => !!e4);
+        }, t2.coalesceInPlace = function(e3) {
+          let t3 = 0;
+          for (let A3 = 0; A3 < e3.length; A3++)
+            e3[A3] && (e3[t3] = e3[A3], t3 += 1);
+          e3.length = t3;
+        }, t2.move = function(e3, t3, A3) {
+          e3.splice(A3, 0, e3.splice(t3, 1)[0]);
+        }, t2.isFalsyOrEmpty = function(e3) {
+          return !Array.isArray(e3) || 0 === e3.length;
+        }, t2.isNonEmptyArray = function(e3) {
+          return Array.isArray(e3) && e3.length > 0;
+        }, t2.distinct = function(e3, t3 = (e4) => e4) {
+          const A3 = /* @__PURE__ */ new Set();
+          return e3.filter((e4) => {
+            const i3 = t3(e4);
+            return !A3.has(i3) && (A3.add(i3), true);
+          });
+        }, t2.uniqueFilter = function(e3) {
+          const t3 = /* @__PURE__ */ new Set();
+          return (A3) => {
+            const i3 = e3(A3);
+            return !t3.has(i3) && (t3.add(i3), true);
+          };
+        }, t2.firstOrDefault = function(e3, t3) {
+          return e3.length > 0 ? e3[0] : t3;
+        }, t2.lastOrDefault = function(e3, t3) {
+          return e3.length > 0 ? e3[e3.length - 1] : t3;
+        }, t2.commonPrefixLength = function(e3, t3, A3 = (e4, t4) => e4 === t4) {
+          let i3 = 0;
+          for (let s2 = 0, r2 = Math.min(e3.length, t3.length); s2 < r2 && A3(e3[s2], t3[s2]); s2++)
+            i3++;
+          return i3;
+        }, t2.range = function(e3, t3) {
+          let A3 = "number" == typeof t3 ? e3 : 0;
+          "number" == typeof t3 ? A3 = e3 : (A3 = 0, t3 = e3);
+          const i3 = [];
+          if (A3 <= t3)
+            for (let e4 = A3; e4 < t3; e4++)
+              i3.push(e4);
+          else
+            for (let e4 = A3; e4 > t3; e4--)
+              i3.push(e4);
+          return i3;
+        }, t2.index = function(e3, t3, A3) {
+          return e3.reduce((e4, i3) => (e4[t3(i3)] = A3 ? A3(i3) : i3, e4), /* @__PURE__ */ Object.create(null));
+        }, t2.insert = function(e3, t3) {
+          return e3.push(t3), () => a(e3, t3);
+        }, t2.remove = a, t2.arrayInsert = function(e3, t3, A3) {
+          const i3 = e3.slice(0, t3), s2 = e3.slice(t3);
+          return i3.concat(A3, s2);
+        }, t2.shuffle = function(e3, t3) {
+          let A3;
+          if ("number" == typeof t3) {
+            let e4 = t3;
+            A3 = () => {
+              const t4 = 179426549 * Math.sin(e4++);
+              return t4 - Math.floor(t4);
+            };
+          } else
+            A3 = Math.random;
+          for (let t4 = e3.length - 1; t4 > 0; t4 -= 1) {
+            const i3 = Math.floor(A3() * (t4 + 1)), s2 = e3[t4];
+            e3[t4] = e3[i3], e3[i3] = s2;
+          }
+        }, t2.pushToStart = function(e3, t3) {
+          const A3 = e3.indexOf(t3);
+          A3 > -1 && (e3.splice(A3, 1), e3.unshift(t3));
+        }, t2.pushToEnd = function(e3, t3) {
+          const A3 = e3.indexOf(t3);
+          A3 > -1 && (e3.splice(A3, 1), e3.push(t3));
+        }, t2.pushMany = function(e3, t3) {
+          for (const A3 of t3)
+            e3.push(A3);
+        }, t2.mapArrayOrNot = function(e3, t3) {
+          return Array.isArray(e3) ? e3.map(t3) : t3(e3);
+        }, t2.asArray = function(e3) {
+          return Array.isArray(e3) ? e3 : [e3];
+        }, t2.getRandomElement = function(e3) {
+          return e3[Math.floor(Math.random() * e3.length)];
+        }, t2.insertInto = h, t2.splice = function(e3, t3, A3, i3) {
+          const s2 = g(e3, t3);
+          let r2 = e3.splice(s2, A3);
+          return void 0 === r2 && (r2 = []), h(e3, s2, i3), r2;
+        }, t2.compareBy = function(e3, t3) {
+          return (A3, i3) => t3(e3(A3), e3(i3));
+        }, t2.tieBreakComparators = function(...e3) {
+          return (t3, A3) => {
+            for (const i3 of e3) {
+              const e4 = i3(t3, A3);
+              if (!l.isNeitherLessOrGreaterThan(e4))
+                return e4;
+            }
+            return l.neitherLessOrGreaterThan;
+          };
+        }, t2.reverseOrder = function(e3) {
+          return (t3, A3) => -e3(t3, A3);
+        };
+        const i2 = A2(577), s = A2(411);
+        function r(e3, t3) {
+          let A3 = 0, i3 = e3 - 1;
+          for (; A3 <= i3; ) {
+            const e4 = (A3 + i3) / 2 | 0, s2 = t3(e4);
+            if (s2 < 0)
+              A3 = e4 + 1;
+            else {
+              if (!(s2 > 0))
+                return e4;
+              i3 = e4 - 1;
+            }
+          }
+          return -(A3 + 1);
+        }
+        function n(e3, t3, A3) {
+          const i3 = [];
+          function s2(e4, t4, A4) {
+            if (0 === t4 && 0 === A4.length)
+              return;
+            const s3 = i3[i3.length - 1];
+            s3 && s3.start + s3.deleteCount === e4 ? (s3.deleteCount += t4, s3.toInsert.push(...A4)) : i3.push({ start: e4, deleteCount: t4, toInsert: A4 });
+          }
+          let r2 = 0, n2 = 0;
+          for (; ; ) {
+            if (r2 === e3.length) {
+              s2(r2, 0, t3.slice(n2));
+              break;
+            }
+            if (n2 === t3.length) {
+              s2(r2, e3.length - r2, []);
+              break;
+            }
+            const i4 = e3[r2], o2 = t3[n2], a2 = A3(i4, o2);
+            0 === a2 ? (r2 += 1, n2 += 1) : a2 < 0 ? (s2(r2, 1, []), r2 += 1) : a2 > 0 && (s2(r2, 0, [o2]), n2 += 1);
+          }
+          return i3;
+        }
+        function o(e3, t3, A3, i3, r2) {
+          for (const n2 = A3.length; i3 < r2; i3++) {
+            const r3 = e3[i3];
+            if (t3(r3, A3[n2 - 1]) < 0) {
+              A3.pop();
+              const e4 = (0, s.findFirstIdxMonotonousOrArrLen)(A3, (e5) => t3(r3, e5) < 0);
+              A3.splice(e4, 0, r3);
+            }
+          }
+        }
+        function a(e3, t3) {
+          const A3 = e3.indexOf(t3);
+          if (A3 > -1)
+            return e3.splice(A3, 1), t3;
+        }
+        function h(e3, t3, A3) {
+          const i3 = g(e3, t3), s2 = e3.length, r2 = A3.length;
+          e3.length = s2 + r2;
+          for (let t4 = s2 - 1; t4 >= i3; t4--)
+            e3[t4 + r2] = e3[t4];
+          for (let t4 = 0; t4 < r2; t4++)
+            e3[t4 + i3] = A3[t4];
+        }
+        function g(e3, t3) {
+          return t3 < 0 ? Math.max(t3 + e3.length, 0) : Math.min(t3, e3.length);
+        }
+        var l;
+        !function(e3) {
+          e3.isLessThan = function(e4) {
+            return e4 < 0;
+          }, e3.isLessThanOrEqual = function(e4) {
+            return e4 <= 0;
+          }, e3.isGreaterThan = function(e4) {
+            return e4 > 0;
+          }, e3.isNeitherLessOrGreaterThan = function(e4) {
+            return 0 === e4;
+          }, e3.greaterThan = 1, e3.lessThan = -1, e3.neitherLessOrGreaterThan = 0;
+        }(l || (t2.CompareResult = l = {})), t2.numberComparator = (e3, t3) => e3 - t3, t2.booleanComparator = (e3, A3) => (0, t2.numberComparator)(e3 ? 1 : 0, A3 ? 1 : 0), t2.ArrayQueue = class {
+          constructor(e3) {
+            this.items = e3, this.firstIdx = 0, this.lastIdx = this.items.length - 1;
+          }
+          get length() {
+            return this.lastIdx - this.firstIdx + 1;
+          }
+          takeWhile(e3) {
+            let t3 = this.firstIdx;
+            for (; t3 < this.items.length && e3(this.items[t3]); )
+              t3++;
+            const A3 = t3 === this.firstIdx ? null : this.items.slice(this.firstIdx, t3);
+            return this.firstIdx = t3, A3;
+          }
+          takeFromEndWhile(e3) {
+            let t3 = this.lastIdx;
+            for (; t3 >= 0 && e3(this.items[t3]); )
+              t3--;
+            const A3 = t3 === this.lastIdx ? null : this.items.slice(t3 + 1, this.lastIdx + 1);
+            return this.lastIdx = t3, A3;
+          }
+          peek() {
+            if (0 !== this.length)
+              return this.items[this.firstIdx];
+          }
+          peekLast() {
+            if (0 !== this.length)
+              return this.items[this.lastIdx];
+          }
+          dequeue() {
+            const e3 = this.items[this.firstIdx];
+            return this.firstIdx++, e3;
+          }
+          removeLast() {
+            const e3 = this.items[this.lastIdx];
+            return this.lastIdx--, e3;
+          }
+          takeCount(e3) {
+            const t3 = this.items.slice(this.firstIdx, this.firstIdx + e3);
+            return this.firstIdx += e3, t3;
+          }
+        };
+        const _c = class {
+          constructor(e3) {
+            this.iterate = e3;
+          }
+          forEach(e3) {
+            this.iterate((t3) => (e3(t3), true));
+          }
+          toArray() {
+            const e3 = [];
+            return this.iterate((t3) => (e3.push(t3), true)), e3;
+          }
+          filter(e3) {
+            return new _c((t3) => this.iterate((A3) => !e3(A3) || t3(A3)));
+          }
+          map(e3) {
+            return new _c((t3) => this.iterate((A3) => t3(e3(A3))));
+          }
+          some(e3) {
+            let t3 = false;
+            return this.iterate((A3) => (t3 = e3(A3), !t3)), t3;
+          }
+          findFirst(e3) {
+            let t3;
+            return this.iterate((A3) => !e3(A3) || (t3 = A3, false)), t3;
+          }
+          findLast(e3) {
+            let t3;
+            return this.iterate((A3) => (e3(A3) && (t3 = A3), true)), t3;
+          }
+          findLastMaxBy(e3) {
+            let t3, A3 = true;
+            return this.iterate((i3) => ((A3 || l.isGreaterThan(e3(i3, t3))) && (A3 = false, t3 = i3), true)), t3;
+          }
+        };
+        let c = _c;
+        (() => {
+          _c.empty = new _c((e3) => {
+          });
+        })();
+        t2.CallbackIterable = c;
+        class d {
+          constructor(e3) {
+            this._indexMap = e3;
+          }
+          static createSortPermutation(e3, t3) {
+            const A3 = Array.from(e3.keys()).sort((A4, i3) => t3(e3[A4], e3[i3]));
+            return new d(A3);
+          }
+          apply(e3) {
+            return e3.map((t3, A3) => e3[this._indexMap[A3]]);
+          }
+          inverse() {
+            const e3 = this._indexMap.slice();
+            for (let t3 = 0; t3 < this._indexMap.length; t3++)
+              e3[this._indexMap[t3]] = t3;
+            return new d(e3);
+          }
+        }
+        t2.Permutation = d;
+      }, 411: (e2, t2) => {
+        function A2(e3, t3, A3 = e3.length - 1) {
+          for (let i3 = A3; i3 >= 0; i3--)
+            if (t3(e3[i3]))
+              return i3;
+          return -1;
+        }
+        function i2(e3, t3, A3 = 0, i3 = e3.length) {
+          let s2 = A3, r2 = i3;
+          for (; s2 < r2; ) {
+            const A4 = Math.floor((s2 + r2) / 2);
+            t3(e3[A4]) ? s2 = A4 + 1 : r2 = A4;
+          }
+          return s2 - 1;
+        }
+        function s(e3, t3, A3 = 0, i3 = e3.length) {
+          let s2 = A3, r2 = i3;
+          for (; s2 < r2; ) {
+            const A4 = Math.floor((s2 + r2) / 2);
+            t3(e3[A4]) ? r2 = A4 : s2 = A4 + 1;
+          }
+          return s2;
+        }
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.MonotonousArray = void 0, t2.findLast = function(e3, t3) {
+          const i3 = A2(e3, t3);
+          if (-1 !== i3)
+            return e3[i3];
+        }, t2.findLastIdx = A2, t2.findLastMonotonous = function(e3, t3) {
+          const A3 = i2(e3, t3);
+          return -1 === A3 ? void 0 : e3[A3];
+        }, t2.findLastIdxMonotonous = i2, t2.findFirstMonotonous = function(e3, t3) {
+          const A3 = s(e3, t3);
+          return A3 === e3.length ? void 0 : e3[A3];
+        }, t2.findFirstIdxMonotonousOrArrLen = s, t2.findFirstIdxMonotonous = function(e3, t3, A3 = 0, i3 = e3.length) {
+          const r2 = s(e3, t3, A3, i3);
+          return r2 === e3.length ? -1 : r2;
+        }, t2.findFirstMax = n, t2.findLastMax = function(e3, t3) {
+          if (0 === e3.length)
+            return;
+          let A3 = e3[0];
+          for (let i3 = 1; i3 < e3.length; i3++) {
+            const s2 = e3[i3];
+            t3(s2, A3) >= 0 && (A3 = s2);
+          }
+          return A3;
+        }, t2.findFirstMin = function(e3, t3) {
+          return n(e3, (e4, A3) => -t3(e4, A3));
+        }, t2.findMaxIdx = function(e3, t3) {
+          if (0 === e3.length)
+            return -1;
+          let A3 = 0;
+          for (let i3 = 1; i3 < e3.length; i3++)
+            t3(e3[i3], e3[A3]) > 0 && (A3 = i3);
+          return A3;
+        }, t2.mapFindFirst = function(e3, t3) {
+          for (const A3 of e3) {
+            const e4 = t3(A3);
+            if (void 0 !== e4)
+              return e4;
+          }
+        };
+        const _r = class {
+          constructor(e3) {
+            this._array = e3, this._findLastMonotonousLastIdx = 0;
+          }
+          findLastMonotonous(e3) {
+            if (_r.assertInvariants) {
+              if (this._prevFindLastPredicate) {
+                for (const t4 of this._array)
+                  if (this._prevFindLastPredicate(t4) && !e3(t4))
+                    throw new Error("MonotonousArray: current predicate must be weaker than (or equal to) the previous predicate.");
+              }
+              this._prevFindLastPredicate = e3;
+            }
+            const t3 = i2(this._array, e3, this._findLastMonotonousLastIdx);
+            return this._findLastMonotonousLastIdx = t3 + 1, -1 === t3 ? void 0 : this._array[t3];
+          }
+        };
+        let r = _r;
+        (() => {
+          _r.assertInvariants = false;
+        })();
+        function n(e3, t3) {
+          if (0 === e3.length)
+            return;
+          let A3 = e3[0];
+          for (let i3 = 1; i3 < e3.length; i3++) {
+            const s2 = e3[i3];
+            t3(s2, A3) > 0 && (A3 = s2);
+          }
+          return A3;
+        }
+        t2.MonotonousArray = r;
+      }, 33: (e2, t2) => {
+        var A2;
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.SetWithKey = void 0, t2.groupBy = function(e3, t3) {
+          const A3 = /* @__PURE__ */ Object.create(null);
+          for (const i3 of e3) {
+            const e4 = t3(i3);
+            let s = A3[e4];
+            s || (s = A3[e4] = []), s.push(i3);
+          }
+          return A3;
+        }, t2.diffSets = function(e3, t3) {
+          const A3 = [], i3 = [];
+          for (const i4 of e3)
+            t3.has(i4) || A3.push(i4);
+          for (const A4 of t3)
+            e3.has(A4) || i3.push(A4);
+          return { removed: A3, added: i3 };
+        }, t2.diffMaps = function(e3, t3) {
+          const A3 = [], i3 = [];
+          for (const [i4, s] of e3)
+            t3.has(i4) || A3.push(s);
+          for (const [A4, s] of t3)
+            e3.has(A4) || i3.push(s);
+          return { removed: A3, added: i3 };
+        }, t2.intersection = function(e3, t3) {
+          const A3 = /* @__PURE__ */ new Set();
+          for (const i3 of t3)
+            e3.has(i3) && A3.add(i3);
+          return A3;
+        };
+        class i2 {
+          constructor(e3, t3) {
+            this.toKey = t3, this._map = /* @__PURE__ */ new Map(), this[A2] = "SetWithKey";
+            for (const t4 of e3)
+              this.add(t4);
+          }
+          get size() {
+            return this._map.size;
+          }
+          add(e3) {
+            const t3 = this.toKey(e3);
+            return this._map.set(t3, e3), this;
+          }
+          delete(e3) {
+            return this._map.delete(this.toKey(e3));
+          }
+          has(e3) {
+            return this._map.has(this.toKey(e3));
+          }
+          *entries() {
+            for (const e3 of this._map.values())
+              yield [e3, e3];
+          }
+          keys() {
+            return this.values();
+          }
+          *values() {
+            for (const e3 of this._map.values())
+              yield e3;
+          }
+          clear() {
+            this._map.clear();
+          }
+          forEach(e3, t3) {
+            this._map.forEach((A3) => e3.call(t3, A3, A3, this));
+          }
+          [Symbol.iterator]() {
+            return this.values();
+          }
+        }
+        (() => {
+          A2 = Symbol.toStringTag;
+        })();
+        t2.SetWithKey = i2;
+      }, 577: (e2, t2) => {
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.BugIndicatingError = t2.ErrorNoTelemetry = t2.ExpectedError = t2.NotSupportedError = t2.NotImplementedError = t2.ReadonlyError = t2.CancellationError = t2.errorHandler = t2.ErrorHandler = void 0, t2.setUnexpectedErrorHandler = function(e3) {
+          t2.errorHandler.setUnexpectedErrorHandler(e3);
+        }, t2.isSigPipeError = function(e3) {
+          var _a;
+          if (!e3 || "object" != typeof e3)
+            return false;
+          const t3 = e3;
+          return "EPIPE" === t3.code && "WRITE" === ((_a = t3.syscall) == null ? void 0 : _a.toUpperCase());
+        }, t2.onUnexpectedError = function(e3) {
+          s(e3) || t2.errorHandler.onUnexpectedError(e3);
+        }, t2.onUnexpectedExternalError = function(e3) {
+          s(e3) || t2.errorHandler.onUnexpectedExternalError(e3);
+        }, t2.transformErrorForSerialization = function(e3) {
+          if (e3 instanceof Error) {
+            const { name: t3, message: A3 } = e3;
+            return { $isError: true, name: t3, message: A3, stack: e3.stacktrace || e3.stack, noTelemetry: g.isErrorNoTelemetry(e3) };
+          }
+          return e3;
+        }, t2.transformErrorFromSerialization = function(e3) {
+          let t3;
+          return e3.noTelemetry ? t3 = new g() : (t3 = new Error(), t3.name = e3.name), t3.message = e3.message, t3.stack = e3.stack, t3;
+        }, t2.isCancellationError = s, t2.canceled = function() {
+          const e3 = new Error(i2);
+          return e3.name = e3.message, e3;
+        }, t2.illegalArgument = function(e3) {
+          return e3 ? new Error(`Illegal argument: ${e3}`) : new Error("Illegal argument");
+        }, t2.illegalState = function(e3) {
+          return e3 ? new Error(`Illegal state: ${e3}`) : new Error("Illegal state");
+        }, t2.getErrorMessage = function(e3) {
+          return e3 ? e3.message ? e3.message : e3.stack ? e3.stack.split("\n")[0] : String(e3) : "Error";
+        };
+        class A2 {
+          constructor() {
+            this.listeners = [], this.unexpectedErrorHandler = function(e3) {
+              setTimeout(() => {
+                if (e3.stack) {
+                  if (g.isErrorNoTelemetry(e3))
+                    throw new g(e3.message + "\n\n" + e3.stack);
+                  throw new Error(e3.message + "\n\n" + e3.stack);
+                }
+                throw e3;
+              }, 0);
+            };
+          }
+          addListener(e3) {
+            return this.listeners.push(e3), () => {
+              this._removeListener(e3);
+            };
+          }
+          emit(e3) {
+            this.listeners.forEach((t3) => {
+              t3(e3);
+            });
+          }
+          _removeListener(e3) {
+            this.listeners.splice(this.listeners.indexOf(e3), 1);
+          }
+          setUnexpectedErrorHandler(e3) {
+            this.unexpectedErrorHandler = e3;
+          }
+          getUnexpectedErrorHandler() {
+            return this.unexpectedErrorHandler;
+          }
+          onUnexpectedError(e3) {
+            this.unexpectedErrorHandler(e3), this.emit(e3);
+          }
+          onUnexpectedExternalError(e3) {
+            this.unexpectedErrorHandler(e3);
+          }
+        }
+        t2.ErrorHandler = A2, t2.errorHandler = new A2();
+        const i2 = "Canceled";
+        function s(e3) {
+          return e3 instanceof r || e3 instanceof Error && e3.name === i2 && e3.message === i2;
+        }
+        class r extends Error {
+          constructor() {
+            super(i2), this.name = this.message;
+          }
+        }
+        t2.CancellationError = r;
+        class n extends TypeError {
+          constructor(e3) {
+            super(e3 ? `${e3} is read-only and cannot be changed` : "Cannot change read-only property");
+          }
+        }
+        t2.ReadonlyError = n;
+        class o extends Error {
+          constructor(e3) {
+            super("NotImplemented"), e3 && (this.message = e3);
+          }
+        }
+        t2.NotImplementedError = o;
+        class a extends Error {
+          constructor(e3) {
+            super("NotSupported"), e3 && (this.message = e3);
+          }
+        }
+        t2.NotSupportedError = a;
+        class h extends Error {
+          constructor() {
+            super(...arguments), this.isExpected = true;
+          }
+        }
+        t2.ExpectedError = h;
+        class g extends Error {
+          constructor(e3) {
+            super(e3), this.name = "CodeExpectedError";
+          }
+          static fromError(e3) {
+            if (e3 instanceof g)
+              return e3;
+            const t3 = new g();
+            return t3.message = e3.message, t3.stack = e3.stack, t3;
+          }
+          static isErrorNoTelemetry(e3) {
+            return "CodeExpectedError" === e3.name;
+          }
+        }
+        t2.ErrorNoTelemetry = g;
+        class l extends Error {
+          constructor(e3) {
+            super(e3 || "An unexpected bug occurred."), Object.setPrototypeOf(this, l.prototype);
+          }
+        }
+        t2.BugIndicatingError = l;
+      }, 355: (e2, t2) => {
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.createSingleCallFunction = function(e3, t3) {
+          const A2 = this;
+          let i2, s = false;
+          return function() {
+            if (s)
+              return i2;
+            if (s = true, t3)
+              try {
+                i2 = e3.apply(A2, arguments);
+              } finally {
+                t3();
+              }
+            else
+              i2 = e3.apply(A2, arguments);
+            return i2;
+          };
+        };
+      }, 956: (e2, t2) => {
+        var A2;
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.Iterable = void 0, function(e3) {
+          function t3(e4) {
+            return e4 && "object" == typeof e4 && "function" == typeof e4[Symbol.iterator];
+          }
+          e3.is = t3;
+          const A3 = Object.freeze([]);
+          function* i2(e4) {
+            yield e4;
+          }
+          e3.empty = function() {
+            return A3;
+          }, e3.single = i2, e3.wrap = function(e4) {
+            return t3(e4) ? e4 : i2(e4);
+          }, e3.from = function(e4) {
+            return e4 || A3;
+          }, e3.reverse = function* (e4) {
+            for (let t4 = e4.length - 1; t4 >= 0; t4--)
+              yield e4[t4];
+          }, e3.isEmpty = function(e4) {
+            return !e4 || true === e4[Symbol.iterator]().next().done;
+          }, e3.first = function(e4) {
+            return e4[Symbol.iterator]().next().value;
+          }, e3.some = function(e4, t4) {
+            let A4 = 0;
+            for (const i3 of e4)
+              if (t4(i3, A4++))
+                return true;
+            return false;
+          }, e3.find = function(e4, t4) {
+            for (const A4 of e4)
+              if (t4(A4))
+                return A4;
+          }, e3.filter = function* (e4, t4) {
+            for (const A4 of e4)
+              t4(A4) && (yield A4);
+          }, e3.map = function* (e4, t4) {
+            let A4 = 0;
+            for (const i3 of e4)
+              yield t4(i3, A4++);
+          }, e3.flatMap = function* (e4, t4) {
+            let A4 = 0;
+            for (const i3 of e4)
+              yield* t4(i3, A4++);
+          }, e3.concat = function* (...e4) {
+            for (const t4 of e4)
+              yield* t4;
+          }, e3.reduce = function(e4, t4, A4) {
+            let i3 = A4;
+            for (const A5 of e4)
+              i3 = t4(i3, A5);
+            return i3;
+          }, e3.slice = function* (e4, t4, A4 = e4.length) {
+            for (t4 < 0 && (t4 += e4.length), A4 < 0 ? A4 += e4.length : A4 > e4.length && (A4 = e4.length); t4 < A4; t4++)
+              yield e4[t4];
+          }, e3.consume = function(t4, A4 = Number.POSITIVE_INFINITY) {
+            const i3 = [];
+            if (0 === A4)
+              return [i3, t4];
+            const s = t4[Symbol.iterator]();
+            for (let t5 = 0; t5 < A4; t5++) {
+              const t6 = s.next();
+              if (t6.done)
+                return [i3, e3.empty()];
+              i3.push(t6.value);
+            }
+            return [i3, { [Symbol.iterator]: () => s }];
+          }, e3.asyncToArray = async function(e4) {
+            const t4 = [];
+            for await (const A4 of e4)
+              t4.push(A4);
+            return Promise.resolve(t4);
+          };
+        }(A2 || (t2.Iterable = A2 = {}));
+      }, 540: (e2, t2, A2) => {
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.DisposableMap = t2.ImmortalReference = t2.AsyncReferenceCollection = t2.ReferenceCollection = t2.SafeDisposable = t2.RefCountedDisposable = t2.MandatoryMutableDisposable = t2.MutableDisposable = t2.Disposable = t2.DisposableStore = t2.DisposableTracker = void 0, t2.setDisposableTracker = function(e3) {
+          a = e3;
+        }, t2.trackDisposable = g, t2.markAsDisposed = l, t2.markAsSingleton = function(e3) {
+          return a == null ? void 0 : a.markAsSingleton(e3), e3;
+        }, t2.isDisposable = d, t2.dispose = I, t2.disposeIfDisposable = function(e3) {
+          for (const t3 of e3)
+            d(t3) && t3.dispose();
+          return [];
+        }, t2.combinedDisposable = function(...e3) {
+          const t3 = C(() => I(e3));
+          return function(e4, t4) {
+            if (a)
+              for (const A3 of e4)
+                a.setParent(A3, t4);
+          }(e3, t3), t3;
+        }, t2.toDisposable = C, t2.disposeOnReturn = function(e3) {
+          const t3 = new u();
+          try {
+            e3(t3);
+          } finally {
+            t3.dispose();
+          }
+        };
+        const i2 = A2(732), s = A2(33), r = A2(714), n = A2(355), o = A2(956);
+        let a = null;
+        const _h = class {
+          constructor() {
+            this.livingDisposables = /* @__PURE__ */ new Map();
+          }
+          getDisposableData(e3) {
+            let t3 = this.livingDisposables.get(e3);
+            return t3 || (t3 = { parent: null, source: null, isSingleton: false, value: e3, idx: _h.idx++ }, this.livingDisposables.set(e3, t3)), t3;
+          }
+          trackDisposable(e3) {
+            const t3 = this.getDisposableData(e3);
+            t3.source || (t3.source = new Error().stack);
+          }
+          setParent(e3, t3) {
+            this.getDisposableData(e3).parent = t3;
+          }
+          markAsDisposed(e3) {
+            this.livingDisposables.delete(e3);
+          }
+          markAsSingleton(e3) {
+            this.getDisposableData(e3).isSingleton = true;
+          }
+          getRootParent(e3, t3) {
+            const A3 = t3.get(e3);
+            if (A3)
+              return A3;
+            const i3 = e3.parent ? this.getRootParent(this.getDisposableData(e3.parent), t3) : e3;
+            return t3.set(e3, i3), i3;
+          }
+          getTrackedDisposables() {
+            const e3 = /* @__PURE__ */ new Map();
+            return [...this.livingDisposables.entries()].filter(([, t3]) => null !== t3.source && !this.getRootParent(t3, e3).isSingleton).flatMap(([e4]) => e4);
+          }
+          computeLeakingDisposables(e3 = 10, t3) {
+            let A3;
+            if (t3)
+              A3 = t3;
+            else {
+              const e4 = /* @__PURE__ */ new Map(), t4 = [...this.livingDisposables.values()].filter((t5) => null !== t5.source && !this.getRootParent(t5, e4).isSingleton);
+              if (0 === t4.length)
+                return;
+              const i3 = new Set(t4.map((e5) => e5.value));
+              if (A3 = t4.filter((e5) => !(e5.parent && i3.has(e5.parent))), 0 === A3.length)
+                throw new Error("There are cyclic diposable chains!");
+            }
+            if (!A3)
+              return;
+            function n2(e4) {
+              const t4 = e4.source.split("\n").map((e5) => e5.trim().replace("at ", "")).filter((e5) => "" !== e5);
+              return function(e5, t5) {
+                for (; e5.length > 0 && t5.some((t6) => "string" == typeof t6 ? t6 === e5[0] : e5[0].match(t6)); )
+                  e5.shift();
+              }(t4, ["Error", /^trackDisposable \(.*\)$/, /^DisposableTracker.trackDisposable \(.*\)$/]), t4.reverse();
+            }
+            const o2 = new r.SetMap();
+            for (const e4 of A3) {
+              const t4 = n2(e4);
+              for (let A4 = 0; A4 <= t4.length; A4++)
+                o2.add(t4.slice(0, A4).join("\n"), e4);
+            }
+            A3.sort((0, i2.compareBy)((e4) => e4.idx, i2.numberComparator));
+            let a2 = "", h2 = 0;
+            for (const t4 of A3.slice(0, e3)) {
+              h2++;
+              const e4 = n2(t4), i3 = [];
+              for (let t5 = 0; t5 < e4.length; t5++) {
+                let r2 = e4[t5];
+                r2 = `(shared with ${o2.get(e4.slice(0, t5 + 1).join("\n")).size}/${A3.length} leaks) at ${r2}`;
+                const a3 = o2.get(e4.slice(0, t5).join("\n")), h3 = (0, s.groupBy)([...a3].map((e5) => n2(e5)[t5]), (e5) => e5);
+                delete h3[e4[t5]];
+                for (const [e5, t6] of Object.entries(h3))
+                  i3.unshift(`    - stacktraces of ${t6.length} other leaks continue with ${e5}`);
+                i3.unshift(r2);
+              }
+              a2 += `
+
+
+==================== Leaking disposable ${h2}/${A3.length}: ${t4.value.constructor.name} ====================
+${i3.join("\n")}
+============================================================
+
+`;
+            }
+            return A3.length > e3 && (a2 += `
+
+
+... and ${A3.length - e3} more leaking disposables
+
+`), { leaks: A3, details: a2 };
+          }
+        };
+        let h = _h;
+        (() => {
+          _h.idx = 0;
+        })();
+        function g(e3) {
+          return a == null ? void 0 : a.trackDisposable(e3), e3;
+        }
+        function l(e3) {
+          a == null ? void 0 : a.markAsDisposed(e3);
+        }
+        function c(e3, t3) {
+          a == null ? void 0 : a.setParent(e3, t3);
+        }
+        function d(e3) {
+          return "object" == typeof e3 && null !== e3 && "function" == typeof e3.dispose && 0 === e3.dispose.length;
+        }
+        function I(e3) {
+          if (o.Iterable.is(e3)) {
+            const t3 = [];
+            for (const A3 of e3)
+              if (A3)
+                try {
+                  A3.dispose();
+                } catch (e4) {
+                  t3.push(e4);
+                }
+            if (1 === t3.length)
+              throw t3[0];
+            if (t3.length > 1)
+              throw new AggregateError(t3, "Encountered errors while disposing of store");
+            return Array.isArray(e3) ? [] : e3;
+          }
+          if (e3)
+            return e3.dispose(), e3;
+        }
+        function C(e3) {
+          const t3 = g({ dispose: (0, n.createSingleCallFunction)(() => {
+            l(t3), e3();
+          }) });
+          return t3;
+        }
+        t2.DisposableTracker = h;
+        const _u = class {
+          constructor() {
+            this._toDispose = /* @__PURE__ */ new Set(), this._isDisposed = false, g(this);
+          }
+          dispose() {
+            this._isDisposed || (l(this), this._isDisposed = true, this.clear());
+          }
+          get isDisposed() {
+            return this._isDisposed;
+          }
+          clear() {
+            if (0 !== this._toDispose.size)
+              try {
+                I(this._toDispose);
+              } finally {
+                this._toDispose.clear();
+              }
+          }
+          add(e3) {
+            if (!e3)
+              return e3;
+            if (e3 === this)
+              throw new Error("Cannot register a disposable on itself!");
+            return c(e3, this), this._isDisposed ? _u.DISABLE_DISPOSED_WARNING || console.warn(new Error("Trying to add a disposable to a DisposableStore that has already been disposed of. The added object will be leaked!").stack) : this._toDispose.add(e3), e3;
+          }
+          delete(e3) {
+            if (e3) {
+              if (e3 === this)
+                throw new Error("Cannot dispose a disposable on itself!");
+              this._toDispose.delete(e3), e3.dispose();
+            }
+          }
+          deleteAndLeak(e3) {
+            e3 && this._toDispose.has(e3) && (this._toDispose.delete(e3), c(e3, null));
+          }
+        };
+        let u = _u;
+        (() => {
+          _u.DISABLE_DISPOSED_WARNING = false;
+        })();
+        t2.DisposableStore = u;
+        const _B = class {
+          constructor() {
+            this._store = new u(), g(this), c(this._store, this);
+          }
+          dispose() {
+            l(this), this._store.dispose();
+          }
+          _register(e3) {
+            if (e3 === this)
+              throw new Error("Cannot register a disposable on itself!");
+            return this._store.add(e3);
+          }
+        };
+        let B = _B;
+        (() => {
+          _B.None = Object.freeze({ dispose() {
+          } });
+        })();
+        t2.Disposable = B;
+        class Q {
+          constructor() {
+            this._isDisposed = false, g(this);
+          }
+          get value() {
+            return this._isDisposed ? void 0 : this._value;
+          }
+          set value(e3) {
+            var _a;
+            this._isDisposed || e3 === this._value || ((_a = this._value) == null ? void 0 : _a.dispose(), e3 && c(e3, this), this._value = e3);
+          }
+          clear() {
+            this.value = void 0;
+          }
+          dispose() {
+            var _a;
+            this._isDisposed = true, l(this), (_a = this._value) == null ? void 0 : _a.dispose(), this._value = void 0;
+          }
+          clearAndLeak() {
+            const e3 = this._value;
+            return this._value = void 0, e3 && c(e3, null), e3;
+          }
+        }
+        t2.MutableDisposable = Q, t2.MandatoryMutableDisposable = class {
+          constructor(e3) {
+            this._disposable = new Q(), this._isDisposed = false, this._disposable.value = e3;
+          }
+          get value() {
+            return this._disposable.value;
+          }
+          set value(e3) {
+            this._isDisposed || e3 === this._disposable.value || (this._disposable.value = e3);
+          }
+          dispose() {
+            this._isDisposed = true, this._disposable.dispose();
+          }
+        }, t2.RefCountedDisposable = class {
+          constructor(e3) {
+            this._disposable = e3, this._counter = 1;
+          }
+          acquire() {
+            return this._counter++, this;
+          }
+          release() {
+            return 0 == --this._counter && this._disposable.dispose(), this;
+          }
+        }, t2.SafeDisposable = class {
+          constructor() {
+            this.dispose = () => {
+            }, this.unset = () => {
+            }, this.isset = () => false, g(this);
+          }
+          set(e3) {
+            let t3 = e3;
+            return this.unset = () => t3 = void 0, this.isset = () => void 0 !== t3, this.dispose = () => {
+              t3 && (t3(), t3 = void 0, l(this));
+            }, this;
+          }
+        }, t2.ReferenceCollection = class {
+          constructor() {
+            this.references = /* @__PURE__ */ new Map();
+          }
+          acquire(e3, ...t3) {
+            let A3 = this.references.get(e3);
+            A3 || (A3 = { counter: 0, object: this.createReferencedObject(e3, ...t3) }, this.references.set(e3, A3));
+            const { object: i3 } = A3, s2 = (0, n.createSingleCallFunction)(() => {
+              0 == --A3.counter && (this.destroyReferencedObject(e3, A3.object), this.references.delete(e3));
+            });
+            return A3.counter++, { object: i3, dispose: s2 };
+          }
+        }, t2.AsyncReferenceCollection = class {
+          constructor(e3) {
+            this.referenceCollection = e3;
+          }
+          async acquire(e3, ...t3) {
+            const A3 = this.referenceCollection.acquire(e3, ...t3);
+            try {
+              return { object: await A3.object, dispose: () => A3.dispose() };
+            } catch (e4) {
+              throw A3.dispose(), e4;
+            }
+          }
+        }, t2.ImmortalReference = class {
+          constructor(e3) {
+            this.object = e3;
+          }
+          dispose() {
+          }
+        };
+        class _ {
+          constructor() {
+            this._store = /* @__PURE__ */ new Map(), this._isDisposed = false, g(this);
+          }
+          dispose() {
+            l(this), this._isDisposed = true, this.clearAndDisposeAll();
+          }
+          clearAndDisposeAll() {
+            if (this._store.size)
+              try {
+                I(this._store.values());
+              } finally {
+                this._store.clear();
+              }
+          }
+          has(e3) {
+            return this._store.has(e3);
+          }
+          get size() {
+            return this._store.size;
+          }
+          get(e3) {
+            return this._store.get(e3);
+          }
+          set(e3, t3, A3 = false) {
+            var _a;
+            this._isDisposed && console.warn(new Error("Trying to add a disposable to a DisposableMap that has already been disposed of. The added object will be leaked!").stack), A3 || ((_a = this._store.get(e3)) == null ? void 0 : _a.dispose()), this._store.set(e3, t3);
+          }
+          deleteAndDispose(e3) {
+            var _a;
+            (_a = this._store.get(e3)) == null ? void 0 : _a.dispose(), this._store.delete(e3);
+          }
+          deleteAndLeak(e3) {
+            const t3 = this._store.get(e3);
+            return this._store.delete(e3), t3;
+          }
+          keys() {
+            return this._store.keys();
+          }
+          values() {
+            return this._store.values();
+          }
+          [Symbol.iterator]() {
+            return this._store[Symbol.iterator]();
+          }
+        }
+        t2.DisposableMap = _;
+      }, 714: (e2, t2) => {
+        var A2;
+        Object.defineProperty(t2, "__esModule", { value: true }), t2.SetMap = t2.BidirectionalMap = t2.CounterSet = t2.Touch = void 0, t2.getOrSet = function(e3, t3, A3) {
+          let i2 = e3.get(t3);
+          return void 0 === i2 && (i2 = A3, e3.set(t3, i2)), i2;
+        }, t2.mapToString = function(e3) {
+          const t3 = [];
+          return e3.forEach((e4, A3) => {
+            t3.push(`${A3} => ${e4}`);
+          }), `Map(${e3.size}) {${t3.join(", ")}}`;
+        }, t2.setToString = function(e3) {
+          const t3 = [];
+          return e3.forEach((e4) => {
+            t3.push(e4);
+          }), `Set(${e3.size}) {${t3.join(", ")}}`;
+        }, t2.mapsStrictEqualIgnoreOrder = function(e3, t3) {
+          if (e3 === t3)
+            return true;
+          if (e3.size !== t3.size)
+            return false;
+          for (const [A3, i2] of e3)
+            if (!t3.has(A3) || t3.get(A3) !== i2)
+              return false;
+          for (const [A3] of t3)
+            if (!e3.has(A3))
+              return false;
+          return true;
+        }, function(e3) {
+          e3[e3.None = 0] = "None", e3[e3.AsOld = 1] = "AsOld", e3[e3.AsNew = 2] = "AsNew";
+        }(A2 || (t2.Touch = A2 = {})), t2.CounterSet = class {
+          constructor() {
+            this.map = /* @__PURE__ */ new Map();
+          }
+          add(e3) {
+            return this.map.set(e3, (this.map.get(e3) || 0) + 1), this;
+          }
+          delete(e3) {
+            let t3 = this.map.get(e3) || 0;
+            return 0 !== t3 && (t3--, 0 === t3 ? this.map.delete(e3) : this.map.set(e3, t3), true);
+          }
+          has(e3) {
+            return this.map.has(e3);
+          }
+        }, t2.BidirectionalMap = class {
+          constructor(e3) {
+            if (this._m1 = /* @__PURE__ */ new Map(), this._m2 = /* @__PURE__ */ new Map(), e3)
+              for (const [t3, A3] of e3)
+                this.set(t3, A3);
+          }
+          clear() {
+            this._m1.clear(), this._m2.clear();
+          }
+          set(e3, t3) {
+            this._m1.set(e3, t3), this._m2.set(t3, e3);
+          }
+          get(e3) {
+            return this._m1.get(e3);
+          }
+          getKey(e3) {
+            return this._m2.get(e3);
+          }
+          delete(e3) {
+            const t3 = this._m1.get(e3);
+            return void 0 !== t3 && (this._m1.delete(e3), this._m2.delete(t3), true);
+          }
+          forEach(e3, t3) {
+            this._m1.forEach((A3, i2) => {
+              e3.call(t3, A3, i2, this);
+            });
+          }
+          keys() {
+            return this._m1.keys();
+          }
+          values() {
+            return this._m1.values();
+          }
+        }, t2.SetMap = class {
+          constructor() {
+            this.map = /* @__PURE__ */ new Map();
+          }
+          add(e3, t3) {
+            let A3 = this.map.get(e3);
+            A3 || (A3 = /* @__PURE__ */ new Set(), this.map.set(e3, A3)), A3.add(t3);
+          }
+          delete(e3, t3) {
+            const A3 = this.map.get(e3);
+            A3 && (A3.delete(t3), 0 === A3.size && this.map.delete(e3));
+          }
+          forEach(e3, t3) {
+            const A3 = this.map.get(e3);
+            A3 && A3.forEach(t3);
+          }
+          get(e3) {
+            return this.map.get(e3) || /* @__PURE__ */ new Set();
+          }
+        };
+      }, 669: (e2, t2, A2) => {
+        Object.defineProperty(t2, "__esModule", { value: true });
+        const i2 = (0, A2(65).InWasm)({ s: 1, t: 0, d: "AGFzbQEAAAABBQFgAAF/Ag8BA2VudgZtZW1vcnkCAAEDAwIAAAcNAgNkZWMAAANlbmQAAQqxAwKuAQEFf0GIKCgCAEGgKGohAUGEKCgCACIAQYAoKAIAQQFrQXxxIgJIBEAgAkGgKGohAyAAQaAoaiEAA0AgAC0AA0ECdCgCgCAgAC0AAkECdCgCgBggAC0AAUECdCgCgBAgAC0AAEECdCgCgAhycnIiBEH///8HSwRAQQEPCyABIAQ2AgAgAUEDaiEBIABBBGoiACADSQ0ACwtBhCggAjYCAEGIKCABQaAoazYCAEEAC/4BAQZ/AkBBgCgoAgAiAUGEKCgCACIAa0EFTgRAQQEhAxAADQFBgCgoAgAhAUGEKCgCACEAC0EBIQMgASAAayIEQQJIDQAgAEGhKGotAABBAnQoAoAQIABBoChqLQAAQQJ0KAKACHIhAQJAIARBAkYEQEEBIQIMAQtBASECIAAtAKIoIgVBPUcEQEECIQIgBUECdCgCgBggAXIhAQsgBEEERw0AIAAtAKMoIgBBPUYNACACQQFqIQIgAEECdCgCgCAgAXIhAQsgAUH///8HSw0AQYgoKAIAQaAoaiABNgIAQYgoQYgoKAIAIAJqIgA2AgAgAEGQKCgCAEchAwsgAwsAdglwcm9kdWNlcnMBDHByb2Nlc3NlZC1ieQEFY2xhbmdWMTguMC4wIChodHRwczovL2dpdGh1Yi5jb20vbGx2bS9sbHZtLXByb2plY3QgZDFlNjg1ZGY0NWRjNTk0NGI0M2QyNTQ3ZDAxMzhjZDRhM2VlNGVmZSkALA90YXJnZXRfZmVhdHVyZXMCKw9tdXRhYmxlLWdsb2JhbHMrCHNpZ24tZXh0" }), s = new Uint8Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/".split("").map((e3) => e3.charCodeAt(0))), r = new Uint32Array(1024);
+        r.fill(4278190080);
+        for (let e3 = 0; e3 < s.length; ++e3)
+          r[s[e3]] = e3 << 2;
+        for (let e3 = 0; e3 < s.length; ++e3)
+          r[256 + s[e3]] = e3 >> 4 | (e3 << 4 & 255) << 8;
+        for (let e3 = 0; e3 < s.length; ++e3)
+          r[512 + s[e3]] = e3 >> 2 << 8 | (e3 << 6 & 255) << 16;
+        for (let e3 = 0; e3 < s.length; ++e3)
+          r[768 + s[e3]] = e3 << 16;
+        const n = new Uint8Array(0);
+        t2.default = class {
+          constructor(e3) {
+            this.keepSize = e3;
+          }
+          get data8() {
+            return this._inst ? this._d.subarray(0, this._m32[1282]) : n;
+          }
+          release() {
+            this._inst && (this._mem.buffer.byteLength > this.keepSize ? this._inst = this._m32 = this._d = this._mem = null : (this._m32[1280] = 0, this._m32[1281] = 0, this._m32[1282] = 0));
+          }
+          init(e3) {
+            let t3 = this._m32;
+            const A3 = 4 * (Math.ceil(e3 / 3) + 1288);
+            this._inst ? this._mem.buffer.byteLength < A3 && (this._mem.grow(Math.ceil((A3 - this._mem.buffer.byteLength) / 65536)), t3 = new Uint32Array(this._mem.buffer, 0), this._d = new Uint8Array(this._mem.buffer, 5152)) : (this._mem = new WebAssembly.Memory({ initial: Math.ceil(A3 / 65536) }), this._inst = i2({ env: { memory: this._mem } }), t3 = new Uint32Array(this._mem.buffer, 0), t3.set(r, 256), this._d = new Uint8Array(this._mem.buffer, 5152)), t3[1284] = e3, t3[1283] = 4 * Math.ceil(e3 / 3), t3[1280] = 0, t3[1281] = 0, t3[1282] = 0, this._m32 = t3;
+          }
+          put(e3, t3, A3) {
+            if (!this._inst)
+              return 1;
+            const i3 = this._m32;
+            return A3 - t3 + i3[1280] > i3[1283] ? 1 : (this._d.set(e3.subarray(t3, A3), i3[1280]), i3[1280] += A3 - t3, i3[1280] - i3[1281] >= 131072 ? this._inst.exports.dec() : 0);
+          }
+          end() {
+            return this._inst ? this._inst.exports.end() : 1;
+          }
+        };
+      } }, t = {};
+      function A(i2) {
+        var s = t[i2];
+        if (void 0 !== s)
+          return s.exports;
+        var r = t[i2] = { exports: {} };
+        return e[i2](r, r.exports, A), r.exports;
+      }
+      var i = {};
+      return (() => {
+        var e2 = i;
+        Object.defineProperty(e2, "__esModule", { value: true }), e2.ImageAddon = void 0;
+        const t2 = A(795), s = A(463), r = A(699), n = A(566), o = { enableSizeReports: true, pixelLimit: 16777216, sixelSupport: true, sixelScrolling: true, sixelPaletteLimit: 256, sixelSizeLimit: 25e6, storageLimit: 128, showPlaceholder: true, iipSupport: true, iipSizeLimit: 2e7 };
+        e2.ImageAddon = class {
+          constructor(e3) {
+            this._disposables = [], this._handlers = /* @__PURE__ */ new Map(), this._opts = Object.assign({}, o, e3), this._defaultOpts = Object.assign({}, o, e3);
+          }
+          dispose() {
+            for (const e3 of this._disposables)
+              e3.dispose();
+            this._disposables.length = 0, this._handlers.clear();
+          }
+          _disposeLater(...e3) {
+            for (const t3 of e3)
+              this._disposables.push(t3);
+          }
+          activate(e3) {
+            if (this._terminal = e3, this._renderer = new s.ImageRenderer(e3), this._storage = new r.ImageStorage(e3, this._renderer, this._opts), this._opts.enableSizeReports) {
+              const t3 = e3.options.windowOptions || {};
+              t3.getWinSizePixels = true, t3.getCellSizePixels = true, t3.getWinSizeChars = true, e3.options.windowOptions = t3;
+            }
+            if (this._disposeLater(this._renderer, this._storage, e3.parser.registerCsiHandler({ prefix: "?", final: "h" }, (e4) => this._decset(e4)), e3.parser.registerCsiHandler({ prefix: "?", final: "l" }, (e4) => this._decrst(e4)), e3.parser.registerCsiHandler({ final: "c" }, (e4) => this._da1(e4)), e3.parser.registerCsiHandler({ prefix: "?", final: "S" }, (e4) => this._xtermGraphicsAttributes(e4)), e3.onRender((e4) => {
+              var t3;
+              return null === (t3 = this._storage) || void 0 === t3 ? void 0 : t3.render(e4);
+            }), e3.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => this.reset()), e3.parser.registerEscHandler({ final: "c" }, () => this.reset()), e3._core._inputHandler.onRequestReset(() => this.reset()), e3.buffer.onBufferChange(() => {
+              var e4;
+              return null === (e4 = this._storage) || void 0 === e4 ? void 0 : e4.wipeAlternate();
+            }), e3.onResize((e4) => {
+              var t3;
+              return null === (t3 = this._storage) || void 0 === t3 ? void 0 : t3.viewportResize(e4);
+            })), this._opts.sixelSupport) {
+              const t3 = new n.SixelHandler(this._opts, this._storage, e3);
+              this._handlers.set("sixel", t3), this._disposeLater(e3._core._inputHandler._parser.registerDcsHandler({ final: "q" }, t3));
+            }
+            if (this._opts.iipSupport) {
+              const A2 = new t2.IIPHandler(this._opts, this._renderer, this._storage, e3);
+              this._handlers.set("iip", A2), this._disposeLater(e3._core._inputHandler._parser.registerOscHandler(1337, A2));
+            }
+          }
+          reset() {
+            var e3;
+            this._opts.sixelScrolling = this._defaultOpts.sixelScrolling, this._opts.sixelPaletteLimit = this._defaultOpts.sixelPaletteLimit, null === (e3 = this._storage) || void 0 === e3 || e3.reset();
+            for (const e4 of this._handlers.values())
+              e4.reset();
+            return false;
+          }
+          get storageLimit() {
+            var e3;
+            return (null === (e3 = this._storage) || void 0 === e3 ? void 0 : e3.getLimit()) || -1;
+          }
+          set storageLimit(e3) {
+            var t3;
+            null === (t3 = this._storage) || void 0 === t3 || t3.setLimit(e3), this._opts.storageLimit = e3;
+          }
+          get storageUsage() {
+            return this._storage ? this._storage.getUsage() : -1;
+          }
+          get showPlaceholder() {
+            return this._opts.showPlaceholder;
+          }
+          set showPlaceholder(e3) {
+            var t3;
+            this._opts.showPlaceholder = e3, null === (t3 = this._renderer) || void 0 === t3 || t3.showPlaceholder(e3);
+          }
+          getImageAtBufferCell(e3, t3) {
+            var A2;
+            return null === (A2 = this._storage) || void 0 === A2 ? void 0 : A2.getImageAtBufferCell(e3, t3);
+          }
+          extractTileAtBufferCell(e3, t3) {
+            var A2;
+            return null === (A2 = this._storage) || void 0 === A2 ? void 0 : A2.extractTileAtBufferCell(e3, t3);
+          }
+          _report(e3) {
+            var t3;
+            null === (t3 = this._terminal) || void 0 === t3 || t3._core.coreService.triggerDataEvent(e3);
+          }
+          _decset(e3) {
+            for (let t3 = 0; t3 < e3.length; ++t3)
+              80 === e3[t3] && (this._opts.sixelScrolling = false);
+            return false;
+          }
+          _decrst(e3) {
+            for (let t3 = 0; t3 < e3.length; ++t3)
+              80 === e3[t3] && (this._opts.sixelScrolling = true);
+            return false;
+          }
+          _da1(e3) {
+            return !!e3[0] || !!this._opts.sixelSupport && (this._report("\x1B[?62;4;9;22c"), true);
+          }
+          _xtermGraphicsAttributes(e3) {
+            var t3, A2, i2, s2, n2, o2;
+            if (e3.length < 2)
+              return true;
+            if (1 === e3[0])
+              switch (e3[1]) {
+                case 1:
+                  return this._report(`\x1B[?${e3[0]};0;${this._opts.sixelPaletteLimit}S`), true;
+                case 2:
+                  this._opts.sixelPaletteLimit = this._defaultOpts.sixelPaletteLimit, this._report(`\x1B[?${e3[0]};0;${this._opts.sixelPaletteLimit}S`);
+                  for (const e4 of this._handlers.values())
+                    e4.reset();
+                  return true;
+                case 3:
+                  return e3.length > 2 && !(e3[2] instanceof Array) && e3[2] <= 4096 ? (this._opts.sixelPaletteLimit = e3[2], this._report(`\x1B[?${e3[0]};0;${this._opts.sixelPaletteLimit}S`)) : this._report(`\x1B[?${e3[0]};2S`), true;
+                case 4:
+                  return this._report(`\x1B[?${e3[0]};0;4096S`), true;
+                default:
+                  return this._report(`\x1B[?${e3[0]};2S`), true;
+              }
+            if (2 === e3[0])
+              switch (e3[1]) {
+                case 1:
+                  let a = null === (A2 = null === (t3 = this._renderer) || void 0 === t3 ? void 0 : t3.dimensions) || void 0 === A2 ? void 0 : A2.css.canvas.width, h = null === (s2 = null === (i2 = this._renderer) || void 0 === i2 ? void 0 : i2.dimensions) || void 0 === s2 ? void 0 : s2.css.canvas.height;
+                  if (!a || !h) {
+                    const e4 = r.CELL_SIZE_DEFAULT;
+                    a = ((null === (n2 = this._terminal) || void 0 === n2 ? void 0 : n2.cols) || 80) * e4.width, h = ((null === (o2 = this._terminal) || void 0 === o2 ? void 0 : o2.rows) || 24) * e4.height;
+                  }
+                  if (a * h < this._opts.pixelLimit)
+                    this._report(`\x1B[?${e3[0]};0;${a.toFixed(0)};${h.toFixed(0)}S`);
+                  else {
+                    const t4 = Math.floor(Math.sqrt(this._opts.pixelLimit));
+                    this._report(`\x1B[?${e3[0]};0;${t4};${t4}S`);
+                  }
+                  return true;
+                case 4:
+                  const g = Math.floor(Math.sqrt(this._opts.pixelLimit));
+                  return this._report(`\x1B[?${e3[0]};0;${g};${g}S`), true;
+                default:
+                  return this._report(`\x1B[?${e3[0]};2S`), true;
+              }
+            return this._report(`\x1B[?${e3[0]};1S`), true;
+          }
+        };
+      })(), i;
+    })());
+  }
+});
+
 // node_modules/ws/lib/constants.js
 var require_constants = __commonJS({
   "node_modules/ws/lib/constants.js"(exports, module2) {
@@ -16985,14 +19301,14 @@ var require_receiver = __commonJS({
        * @return {(Error|RangeError)} The error
        * @private
        */
-      createError(ErrorCtor, message, prefix, statusCode, errorCode) {
+      createError(ErrorCtor, message, prefix, statusCode, errorCode2) {
         this._loop = false;
         this._errored = true;
         const err = new ErrorCtor(
           prefix ? `Invalid WebSocket frame: ${message}` : message
         );
         Error.captureStackTrace(err, this.createError);
-        err.code = errorCode;
+        err.code = errorCode2;
         err[kStatusCode] = statusCode;
         return err;
       }
@@ -19398,7 +21714,7 @@ var import_obsidian9 = require("obsidian");
 
 // src/settings.ts
 var DEFAULT_SETTINGS = {
-  opencodePath: "opencode",
+  opencodePath: "",
   defaultWorkingDirectory: "",
   environmentVariables: {},
   terminalFontSize: 14,
@@ -19487,7 +21803,12 @@ function flatpakEnvironmentArgs(variables) {
 
 // src/settingsTab.ts
 var environmentVariableFormat = "NAME=value";
-var environmentVariableExample = "OPENCODE_CONFIG_DIR=/home/user/.config/opencode-vault";
+var environmentVariableExample = [
+  "EDITOR=/usr/bin/nvim",
+  "VISUAL=/usr/bin/nvim",
+  "GIT_EDITOR=/usr/bin/nvim",
+  "OPENCODE_DISABLE_TERMINAL_TITLE=1"
+].join("\n");
 var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -19496,9 +21817,9 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("Opencode path").setDesc("Full absolute path to the opencode executable. Obsidian may not inherit your shell path.").addText(
+    new import_obsidian.Setting(containerEl).setName("Opencode path").setDesc("Leave empty to auto-detect OpenCode, or enter an executable name, ~/ path, or full path.").addText(
       (text) => text.setPlaceholder("Opencode").setValue(this.plugin.settings.opencodePath).onChange(async (value) => {
-        this.plugin.settings.opencodePath = value || "opencode";
+        this.plugin.settings.opencodePath = value.trim();
         await this.plugin.saveSettings();
       })
     );
@@ -19544,13 +21865,16 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
 };
 
 // src/views/opencodeTerminalView.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 var import_xterm = __toESM(require_xterm());
 var import_addon_fit = __toESM(require_addon_fit());
 var import_addon_web_links = __toESM(require_addon_web_links());
 var import_addon_canvas = __toESM(require_addon_canvas());
 var import_addon_webgl = __toESM(require_addon_webgl());
-var import_node_os = require("os");
+var import_addon_image = __toESM(require_addon_image());
+var import_node_os2 = require("os");
+var import_node_fs = require("fs");
+var import_node_path = require("path");
 
 // src/terminalDrop.ts
 function isDragManagerDraggable(val) {
@@ -19582,11 +21906,31 @@ function handleTerminalDrop(context) {
   }
   if (filesToProcess.length === 0)
     return;
+  const processTerminalDrop = (index) => {
+    if (index >= filesToProcess.length || !context.terminalInput)
+      return;
+    const filePath = filesToProcess[index];
+    context.terminalInput(`@${filePath}`);
+    window.setTimeout(() => {
+      var _a2;
+      if (index < filesToProcess.length - 1) {
+        (_a2 = context.terminalInput) == null ? void 0 : _a2.call(context, " ");
+      }
+      window.setTimeout(() => {
+        processTerminalDrop(index + 1);
+      }, 50);
+    }, 100);
+  };
   if (context.onFileDrop) {
     const sendNext = (index) => {
+      var _a2, _b2;
       if (index >= filesToProcess.length)
         return;
-      context.onFileDrop(filesToProcess[index]);
+      const queued = (_b2 = (_a2 = context.onFileDrop) == null ? void 0 : _a2.call(context, filesToProcess[index])) != null ? _b2 : false;
+      if (!queued) {
+        processTerminalDrop(index);
+        return;
+      }
       if (index < filesToProcess.length - 1) {
         window.setTimeout(() => sendNext(index + 1), 75);
       }
@@ -19596,21 +21940,7 @@ function handleTerminalDrop(context) {
   }
   if (!context.terminalInput)
     return;
-  const processNext = (index) => {
-    if (index >= filesToProcess.length)
-      return;
-    const filePath = filesToProcess[index];
-    context.terminalInput(`@${filePath}`);
-    window.setTimeout(() => {
-      if (index < filesToProcess.length - 1) {
-        context.terminalInput(" ");
-      }
-      window.setTimeout(() => {
-        processNext(index + 1);
-      }, 50);
-    }, 100);
-  };
-  processNext(0);
+  processTerminalDrop(0);
 }
 
 // node_modules/ws/wrapper.mjs
@@ -19624,7 +21954,7 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // manifest.json
-var version = "1.5.3";
+var version = "2.0.0-beta.1";
 
 // src/editorServer.ts
 var fs = __toESM(require("fs"));
@@ -19738,11 +22068,17 @@ var EditorServer = class {
       }
     };
     const payload = JSON.stringify(msg);
+    let queued = false;
     for (const client of this.clients) {
       if (client.readyState === import_websocket.default.OPEN) {
-        client.send(payload);
+        try {
+          client.send(payload);
+          queued = true;
+        } catch (e) {
+        }
       }
     }
+    return queued;
   }
 };
 
@@ -20051,7 +22387,7 @@ function parseJsonc(text) {
   }
   return JSON.parse(withoutTrailingCommas);
 }
-function readOverrides(file, env) {
+function readConfig(file, env) {
   try {
     let source = fs2.readFileSync(file, "utf8").replace(/\{env:([^}]+)\}/g, (_, name) => {
       var _a;
@@ -20069,15 +22405,24 @@ function readOverrides(file, env) {
       }
     });
     const parsed = parseJsonc(source);
-    return parsed && typeof parsed.keybinds === "object" && parsed.keybinds ? parsed.keybinds : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
   } catch (e) {
     return {};
   }
 }
+function readOverrides(file, env) {
+  const keybinds = readConfig(file, env).keybinds;
+  return keybinds && typeof keybinds === "object" ? keybinds : {};
+}
 function configFiles(cwd, env) {
   var _a;
   const configHome = env.XDG_CONFIG_HOME || path4.join(os3.homedir(), ".config");
-  const files = [path4.join(configHome, "opencode", "tui.json"), path4.join(configHome, "opencode", "tui.jsonc")];
+  const files = [
+    path4.join(configHome, "opencode", "cli.json"),
+    path4.join(configHome, "opencode", "cli.jsonc"),
+    path4.join(configHome, "opencode", "tui.json"),
+    path4.join(configHome, "opencode", "tui.jsonc")
+  ];
   if (env.OPENCODE_TUI_CONFIG)
     files.push(env.OPENCODE_TUI_CONFIG);
   const ancestors = [];
@@ -20108,6 +22453,304 @@ function loadOpenCodeHotkeys(cwd, env = process.env) {
     Object.assign(overrides, readOverrides(file, env));
   return resolveOpenCodeHotkeys(overrides);
 }
+function loadOpenCodeManualCopy(cwd, env = process.env, generation = "stable") {
+  var _a, _b;
+  const legacyFlag = /^(1|true)$/i.test((_a = env.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) != null ? _a : "");
+  if (generation === "stable")
+    return legacyFlag;
+  const configHome = env.XDG_CONFIG_HOME || path4.join(os3.homedir(), ".config");
+  const cliFiles = [
+    path4.join(configHome, "opencode", "cli.json"),
+    path4.join(configHome, "opencode", "cli.jsonc")
+  ];
+  const files = cliFiles.some((file) => fs2.existsSync(file)) ? cliFiles : configFiles(cwd, env).filter((file) => !cliFiles.includes(file));
+  let copyMode;
+  for (const file of files) {
+    const configured = (_b = readConfig(file, env).terminal) == null ? void 0 : _b.copy;
+    if (configured === "manual" || configured === "select")
+      copyMode = configured;
+  }
+  if (copyMode)
+    return copyMode === "manual";
+  return legacyFlag;
+}
+
+// src/modules/wslWindowsClipboard.ts
+var import_node_child_process = require("child_process");
+var import_node_os = require("os");
+var import_node_util = require("util");
+
+// src/utils/opencodeExecutable.ts
+var fs3 = __toESM(require("fs"));
+var os4 = __toESM(require("os"));
+var path5 = __toESM(require("path"));
+var DEFAULT_EXECUTABLE = "opencode";
+var COMMON_BIN_DIRS2 = [".opencode/bin", ".local/bin", "bin"];
+function identifyOpenCodeCli(helpOutput) {
+  if (/\bOpenCode command line interface\b/i.test(helpOutput))
+    return "v2";
+  if (/OpenCode 2\.0 preview command line interface/i.test(helpOutput))
+    return "v2-preview";
+  if (/start opencode tui/i.test(helpOutput))
+    return "stable";
+  return null;
+}
+function isAbsoluteExecutablePath(executable, platform = process.platform) {
+  return (platform === "win32" ? path5.win32 : path5.posix).isAbsolute(executable);
+}
+function executableNames(executable, platform, environment) {
+  if (platform !== "win32" || path5.win32.extname(executable))
+    return [executable];
+  const extensions = (environment.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
+  return extensions.map((extension2) => `${executable}${extension2}`);
+}
+function firstExecutable(candidates) {
+  for (const candidate of candidates) {
+    try {
+      if (!fs3.statSync(candidate).isFile())
+        continue;
+      fs3.accessSync(candidate, fs3.constants.X_OK);
+      return candidate;
+    } catch (e) {
+      continue;
+    }
+  }
+  return null;
+}
+function findExecutableOnPath(executable, options = {}) {
+  var _a, _b;
+  const platform = (_a = options.platform) != null ? _a : process.platform;
+  const environment = (_b = options.environment) != null ? _b : process.env;
+  const pathApi = platform === "win32" ? path5.win32 : path5.posix;
+  const names = executableNames(executable, platform, environment);
+  if (isAbsoluteExecutablePath(executable, platform))
+    return firstExecutable(names);
+  const environmentPath = environment.PATH || (platform === "win32" ? environment.Path : void 0) || "";
+  const candidates = environmentPath.split(pathApi.delimiter).filter(Boolean).flatMap((directory) => names.map((name) => pathApi.join(directory, name)));
+  return firstExecutable(candidates);
+}
+function versionDirectories(versionsDirectory, pathApi) {
+  try {
+    const versions = fs3.readdirSync(versionsDirectory, { withFileTypes: true, encoding: "utf8" });
+    return versions.filter((entry) => entry.isDirectory()).sort((left, right) => right.name.localeCompare(left.name, void 0, { numeric: true })).map((entry) => pathApi.join(versionsDirectory, entry.name));
+  } catch (e) {
+    return [];
+  }
+}
+function nvmBinDirectories(homeDirectory) {
+  const versionsDirectory = path5.posix.join(homeDirectory, ".nvm", "versions", "node");
+  return versionDirectories(versionsDirectory, path5.posix).map((directory) => path5.posix.join(directory, "bin"));
+}
+function resolveOpencodeExecutable(configuredPath, options = {}) {
+  var _a, _b, _c, _d, _e;
+  const platform = (_a = options.platform) != null ? _a : process.platform;
+  const environment = (_b = options.environment) != null ? _b : process.env;
+  const pathApi = platform === "win32" ? path5.win32 : path5.posix;
+  const homeDirectory = (_c = options.homeDirectory) != null ? _c : os4.homedir();
+  const configuredExecutable = configuredPath.trim();
+  const executable = configuredExecutable.startsWith("~/") || configuredExecutable.startsWith("~\\") ? pathApi.join(homeDirectory, configuredExecutable.slice(2)) : configuredExecutable || DEFAULT_EXECUTABLE;
+  const names = executableNames(executable, platform, environment);
+  if (isAbsoluteExecutablePath(executable, platform)) {
+    return (_d = findExecutableOnPath(executable, { platform, environment })) != null ? _d : executable;
+  }
+  const fromPath = findExecutableOnPath(executable, { platform, environment });
+  if (fromPath)
+    return fromPath;
+  const localDirectories = [
+    ...COMMON_BIN_DIRS2.map((directory) => pathApi.join(homeDirectory, directory)),
+    ...platform === "win32" && environment.NVM_SYMLINK ? [environment.NVM_SYMLINK] : [],
+    ...platform === "win32" ? environment.NVM_HOME ? versionDirectories(environment.NVM_HOME, path5.win32) : [] : nvmBinDirectories(homeDirectory)
+  ];
+  const localCandidates = localDirectories.flatMap(
+    (directory) => names.map((name) => pathApi.join(directory, name))
+  );
+  return (_e = firstExecutable(localCandidates)) != null ? _e : executable;
+}
+
+// src/modules/wslWindowsClipboard.ts
+var POWERSHELL_ARGS = ["-NoProfile", "-NonInteractive", "-STA", "-EncodedCommand"];
+var MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+var BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+var CLIPBOARD_RETRY_FUNCTION = [
+  "function Invoke-ClipboardOperation {",
+  "param([scriptblock]$Operation);",
+  "$ErrorActionPreference = 'Stop';",
+  "for ($attempt = 0; $attempt -lt 5; $attempt++) {",
+  "try { return (& $Operation) } catch {",
+  "if ($attempt -eq 4) { throw };",
+  "Start-Sleep -Milliseconds (50 * ($attempt + 1))",
+  "}",
+  "}",
+  "}"
+].join(" ");
+var READ_COMMAND = [
+  CLIPBOARD_RETRY_FUNCTION,
+  "$text = Invoke-ClipboardOperation { Get-Clipboard -Raw -Format Text };",
+  "if ($null -eq $text) { $text = '' };",
+  "$bytes = [Text.Encoding]::UTF8.GetBytes([string]$text);",
+  "[Console]::Out.Write([Convert]::ToBase64String($bytes))"
+].join(" ");
+var READ_IMAGE_COMMAND = [
+  "Add-Type -AssemblyName System.Windows.Forms;",
+  "Add-Type -AssemblyName System.Drawing;",
+  CLIPBOARD_RETRY_FUNCTION,
+  "$image = Invoke-ClipboardOperation { if ([Windows.Forms.Clipboard]::ContainsImage()) { [Windows.Forms.Clipboard]::GetImage() } };",
+  "if ($null -ne $image) {",
+  "$stream = New-Object IO.MemoryStream;",
+  "try { $image.Save($stream, [Drawing.Imaging.ImageFormat]::Png);",
+  "[Console]::Out.Write([Convert]::ToBase64String($stream.ToArray())) }",
+  "finally { $stream.Dispose(); $image.Dispose() }",
+  "}"
+].join(" ");
+var CLEAR_COMMAND = [
+  "Add-Type -AssemblyName System.Windows.Forms;",
+  CLIPBOARD_RETRY_FUNCTION,
+  "Invoke-ClipboardOperation { [Windows.Forms.Clipboard]::Clear() }"
+].join(" ");
+var WRITE_TEXT_COMMAND = [
+  CLIPBOARD_RETRY_FUNCTION,
+  "$encoded = [Console]::In.ReadToEnd();",
+  "$bytes = [Convert]::FromBase64String($encoded);",
+  "$text = [Text.Encoding]::UTF8.GetString($bytes);",
+  "Invoke-ClipboardOperation { Set-Clipboard -Value $text }"
+].join(" ");
+var WRITE_IMAGE_COMMAND = [
+  "Add-Type -AssemblyName System.Windows.Forms;",
+  "Add-Type -AssemblyName System.Drawing;",
+  CLIPBOARD_RETRY_FUNCTION,
+  "$encoded = [Console]::In.ReadToEnd();",
+  "$bytes = [Convert]::FromBase64String($encoded);",
+  "$stream = New-Object IO.MemoryStream(,$bytes);",
+  "$source = [Drawing.Image]::FromStream($stream);",
+  "$image = New-Object Drawing.Bitmap($source);",
+  "try { Invoke-ClipboardOperation { [Windows.Forms.Clipboard]::SetImage($image) } }",
+  "finally { $image.Dispose(); $source.Dispose(); $stream.Dispose() }"
+].join(" ");
+function encodePowerShellCommand(command) {
+  return Buffer.from(command, "utf16le").toString("base64");
+}
+function decodeBase64Utf8(encoded) {
+  if (!BASE64_PATTERN.test(encoded))
+    return null;
+  const bytes = Buffer.from(encoded, "base64");
+  if (bytes.toString("base64").replace(/=+$/, "") !== encoded.replace(/=+$/, ""))
+    return null;
+  try {
+    return new import_node_util.TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (e) {
+    return null;
+  }
+}
+function runProcess(executable, args, input) {
+  return new Promise((resolve2, reject) => {
+    var _a;
+    const child = (0, import_node_child_process.execFile)(executable, args, {
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      windowsHide: true
+    }, (error, stdout, stderr) => {
+      if (error) {
+        const detail = String(stderr).trim();
+        reject(new Error(detail ? `${error.message}: ${detail}` : error.message));
+        return;
+      }
+      resolve2({ stdout: String(stdout), stderr: String(stderr) });
+    });
+    if (input !== void 0)
+      (_a = child.stdin) == null ? void 0 : _a.end(input, "utf8");
+  });
+}
+function isWsl2(options = {}) {
+  var _a, _b;
+  const platform = (_a = options.platform) != null ? _a : process.platform;
+  const release3 = (_b = options.release) != null ? _b : (0, import_node_os.release)();
+  return platform === "linux" && /microsoft-standard-wsl2/i.test(release3);
+}
+var WslWindowsClipboard = class {
+  constructor(powershellExecutable, run) {
+    this.powershellExecutable = powershellExecutable;
+    this.run = run;
+  }
+  async readText() {
+    const result = await this.execute(READ_COMMAND, "read");
+    const decoded = decodeBase64Utf8(result.stdout.trim());
+    if (decoded === null)
+      throw new Error("Windows clipboard returned invalid Unicode data.");
+    return decoded;
+  }
+  async writeText(text) {
+    if (!text) {
+      await this.execute(CLEAR_COMMAND, "clear");
+      return;
+    }
+    await this.execute(WRITE_TEXT_COMMAND, "write", Buffer.from(text, "utf8").toString("base64"));
+  }
+  async readImagePng() {
+    const result = await this.execute(READ_IMAGE_COMMAND, "read an image from");
+    const encoded = result.stdout.trim();
+    if (!encoded)
+      return null;
+    const decoded = decodeBase64Utf8Bytes(encoded);
+    if (!decoded || !isPng(decoded))
+      throw new Error("Windows clipboard returned invalid PNG image data.");
+    if (decoded.length > MAX_IMAGE_BYTES) {
+      throw new Error(`Windows clipboard image exceeds the ${MAX_IMAGE_BYTES / 1024 / 1024} MiB OpenCode attachment limit.`);
+    }
+    return decoded;
+  }
+  async writeImagePng(png) {
+    const bytes = Buffer.from(png);
+    if (!isPng(bytes))
+      throw new Error("Rendered terminal image is not valid PNG data.");
+    if (bytes.length > MAX_IMAGE_BYTES) {
+      throw new Error(`Rendered terminal image exceeds the ${MAX_IMAGE_BYTES / 1024 / 1024} MiB clipboard limit.`);
+    }
+    await this.execute(WRITE_IMAGE_COMMAND, "write an image to", bytes.toString("base64"));
+  }
+  async execute(command, operation, input) {
+    if (!this.powershellExecutable) {
+      throw new Error("Windows PowerShell clipboard interop is unavailable. Ensure powershell.exe is on WSL's PATH.");
+    }
+    try {
+      return await this.run(this.powershellExecutable, [
+        ...POWERSHELL_ARGS,
+        encodePowerShellCommand(command)
+      ], input);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Unable to ${operation} the Windows clipboard through PowerShell: ${detail}`);
+    }
+  }
+};
+function decodeBase64Utf8Bytes(encoded) {
+  if (!BASE64_PATTERN.test(encoded))
+    return null;
+  const bytes = Buffer.from(encoded, "base64");
+  return bytes.toString("base64").replace(/=+$/, "") === encoded.replace(/=+$/, "") ? bytes : null;
+}
+function isPng(bytes) {
+  return bytes.length >= 8 && Buffer.from(bytes.subarray(0, 8)).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+}
+function createWslWindowsClipboard(options = {}) {
+  var _a, _b;
+  if (!isWsl2(options))
+    return null;
+  const powershellExecutable = options.powershellExecutable === void 0 ? findExecutableOnPath("powershell.exe", {
+    platform: "linux",
+    environment: (_a = options.environment) != null ? _a : process.env
+  }) : options.powershellExecutable;
+  return new WslWindowsClipboard(powershellExecutable, (_b = options.run) != null ? _b : runProcess);
+}
+function decodeOsc52ClipboardSet(data) {
+  const separator = data.indexOf(";");
+  if (separator < 0)
+    return null;
+  const selection = data.slice(0, separator);
+  const encoded = data.slice(separator + 1);
+  if (!/^[cpsq0-7]*$/.test(selection) || encoded === "?")
+    return null;
+  return decodeBase64Utf8(encoded);
+}
 
 // src/modules/terminalKeyRouter.ts
 var TerminalKeyRouter = class {
@@ -20116,7 +22759,90 @@ var TerminalKeyRouter = class {
   }
   register(context) {
     this.registerShortcutScope(context);
-    this.registerPasteHandler(context);
+    if (context.clipboard) {
+      this.registerWslClipboard(context);
+    } else {
+      this.registerPasteHandler(context);
+    }
+  }
+  registerWslClipboard(context) {
+    const { clipboard, container, terminal } = context;
+    if (!clipboard)
+      return;
+    const reportFailure = (error) => {
+      var _a;
+      const detail = error instanceof Error ? error.message : String(error);
+      (_a = context.onClipboardError) == null ? void 0 : _a.call(context, `Windows clipboard: ${detail}`);
+    };
+    const normalizePaste = (text) => text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const copySelection = () => {
+      const manualCopy = typeof context.copySelectionOnCtrlC === "function" ? context.copySelectionOnCtrlC() : context.copySelectionOnCtrlC;
+      if (!manualCopy || !terminal.hasSelection())
+        return false;
+      const selection = terminal.getSelection();
+      void clipboard.writeText(selection).then(() => {
+        if (terminal.getSelection() === selection)
+          terminal.clearSelection();
+      }, reportFailure);
+      return true;
+    };
+    const pasteFromWindows = () => {
+      void (async () => {
+        if (clipboard.readImagePng && context.onClipboardImagePaste) {
+          const image = await clipboard.readImagePng();
+          if (image) {
+            await context.onClipboardImagePaste(image);
+            return;
+          }
+        }
+        const text = await clipboard.readText();
+        if (text)
+          terminal.paste(normalizePaste(text));
+      })().catch(reportFailure);
+    };
+    const stop = (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const keydownHandler = (event) => {
+      if (event.defaultPrevented || event.isComposing || !event.ctrlKey || event.altKey || event.metaKey)
+        return;
+      const key = event.key.toLowerCase();
+      if (key === "c") {
+        if (!copySelection())
+          return;
+        stop(event);
+      } else if (key === "v") {
+        stop(event);
+        pasteFromWindows();
+      }
+    };
+    const pasteHandler = (event) => {
+      if (event.defaultPrevented)
+        return;
+      if (!container.contains(event.target))
+        return;
+      stop(event);
+      pasteFromWindows();
+    };
+    container.addEventListener("keydown", keydownHandler, true);
+    container.addEventListener("paste", pasteHandler, true);
+    this.disposers.push(() => {
+      container.removeEventListener("keydown", keydownHandler, true);
+      container.removeEventListener("paste", pasteHandler, true);
+    });
+    const osc52 = terminal.parser.registerOscHandler(52, async (data) => {
+      const text = decodeOsc52ClipboardSet(data);
+      if (text === null)
+        return true;
+      try {
+        await clipboard.writeText(text);
+      } catch (error) {
+        reportFailure(error);
+      }
+      return true;
+    });
+    this.disposers.push(() => osc52.dispose());
   }
   registerShortcutScope(context) {
     var _a, _b, _c, _d, _e, _f, _g, _h;
@@ -20306,18 +23032,464 @@ var LifecycleQueue = class {
   }
 };
 
+// src/utils/opencode.ts
+var import_obsidian3 = require("obsidian");
+var import_child_process = require("child_process");
+var fs4 = __toESM(require("fs"));
+var os5 = __toESM(require("os"));
+var path6 = __toESM(require("path"));
+var SAFE_ID_RE = /^[a-zA-Z0-9._:-]+$/;
+function safeUnlinkSync(filePath) {
+  try {
+    fs4.unlinkSync(filePath);
+  } catch (e) {
+  }
+}
+function quoteShell(token) {
+  return `'${String(token).replace(/'/g, `'\\''`)}'`;
+}
+function looksLikeJson(text) {
+  const ch = text.trimStart().charCodeAt(0);
+  return ch === 91 || ch === 123;
+}
+function isRecord(value) {
+  return typeof value === "object" && value !== null;
+}
+function parseSession(value) {
+  var _a, _b, _c, _d;
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.directory !== "string" || typeof value.updated !== "number") {
+    throw new Error("Session entries require string id/directory fields and a numeric updated field");
+  }
+  if (value.title !== void 0 && typeof value.title !== "string")
+    throw new Error("Session title must be a string");
+  if (value.created !== void 0 && typeof value.created !== "number")
+    throw new Error("Session created must be a number");
+  const projectId = (_b = (_a = value.projectId) != null ? _a : value.projectID) != null ? _b : "";
+  if (typeof projectId !== "string")
+    throw new Error("Session projectId must be a string");
+  return {
+    id: value.id,
+    title: (_c = value.title) != null ? _c : "",
+    updated: value.updated,
+    created: (_d = value.created) != null ? _d : value.updated,
+    projectId,
+    directory: value.directory
+  };
+}
+function parseV2Session(value) {
+  if (!isRecord(value) || !isRecord(value.location) || !isRecord(value.time)) {
+    throw new Error("OpenCode v2 session entries require location and time fields");
+  }
+  return parseSession({
+    id: value.id,
+    title: value.title,
+    projectID: value.projectID,
+    directory: value.location.directory,
+    created: value.time.created,
+    updated: value.time.updated
+  });
+}
+function parseStableSessionList(raw) {
+  const payload = JSON.parse(raw);
+  if (!Array.isArray(payload))
+    throw new Error("Expected a JSON array");
+  return payload.map(parseSession);
+}
+function parseV2SessionPage(raw) {
+  const payload = JSON.parse(raw);
+  if (!isRecord(payload) || !Array.isArray(payload.data)) {
+    throw new Error("Expected an OpenCode v2 API response with a data array");
+  }
+  if (payload.cursor !== void 0 && !isRecord(payload.cursor)) {
+    throw new Error("Expected OpenCode v2 cursor metadata to be an object");
+  }
+  const rawNextCursor = isRecord(payload.cursor) ? payload.cursor.next : void 0;
+  if (rawNextCursor !== void 0 && rawNextCursor !== null && typeof rawNextCursor !== "string") {
+    throw new Error("Expected the OpenCode v2 next cursor to be a string");
+  }
+  const nextCursor = typeof rawNextCursor === "string" ? rawNextCursor : void 0;
+  const sessions = payload.data.flatMap((value) => {
+    const session = parseV2Session(value);
+    const parentID = value.parentID;
+    if (parentID !== void 0 && parentID !== null && typeof parentID !== "string") {
+      throw new Error("OpenCode v2 session parentID must be a string");
+    }
+    return parentID === void 0 || parentID === null ? [session] : [];
+  });
+  return { sessions, nextCursor };
+}
+var WINDOWS_EXEC_HOST_JS = String.raw`
+const { spawn } = require("child_process");
+let [cwd, file, ...args] = process.argv.slice(1);
+let options = { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true };
+if (/\.ps1$/i.test(file)) {
+  args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file, ...args];
+  file = "powershell.exe";
+} else if (/\.(cmd|bat)$/i.test(file)) {
+  const env = { ...process.env };
+  const tokens = [file, ...args];
+  const references = tokens.map((token, index) => {
+    const name = "OPENCODE_PLUGIN_CMD_" + index;
+    env[name] = token;
+    return '"%' + name + '%"';
+  });
+  file = process.env.ComSpec || "cmd.exe";
+  args = ["/d", "/s", "/c", '"' + references.join(" ") + '"'];
+  options = { ...options, env, windowsVerbatimArguments: true };
+}
+const child = spawn(file, args, options);
+child.stdout.pipe(process.stdout);
+child.stderr.pipe(process.stderr);
+child.on("error", (error) => {
+  console.error(error && error.message ? error.message : String(error));
+  process.exitCode = 1;
+});
+child.on("close", (code) => { process.exitCode = code == null ? 1 : code; });
+`;
+function windowsCommandReferences(tokens, env) {
+  const commandEnv = { ...env };
+  const references = tokens.map((token, index) => {
+    const name = `OPENCODE_PLUGIN_CMD_${index}`;
+    commandEnv[name] = token;
+    return `"%${name}%"`;
+  });
+  return { env: commandEnv, references };
+}
+function runExecFile(executable, args, opts) {
+  return new Promise((resolve2, reject) => {
+    var _a, _b;
+    let file = process.platform === "win32" ? (_a = findExecutableOnPath(executable, { platform: "win32", environment: opts.env })) != null ? _a : executable : executable;
+    let fileArgs = args;
+    let execOptions = opts;
+    if (process.platform === "win32") {
+      const target = file;
+      file = (_b = findExecutableOnPath("node.exe", { platform: "win32", environment: opts.env })) != null ? _b : "node.exe";
+      fileArgs = ["-e", WINDOWS_EXEC_HOST_JS, opts.cwd, target, ...args];
+      execOptions = { ...opts, windowsHide: true };
+    }
+    (0, import_child_process.execFile)(file, fileArgs, execOptions, (err, stdout, stderr) => {
+      var _a2, _b2;
+      if (err) {
+        const failure = err instanceof Error ? err : new Error(typeof err === "string" ? err : "exec failed");
+        if (stderr)
+          failure.stderr = stderr.toString();
+        reject(failure);
+      } else {
+        resolve2({ stdout: (_a2 = stdout == null ? void 0 : stdout.toString()) != null ? _a2 : "", stderr: (_b2 = stderr == null ? void 0 : stderr.toString()) != null ? _b2 : "" });
+      }
+    });
+  });
+}
+var OpencodeError = class extends Error {
+  constructor(message, cause) {
+    super(message);
+    this.name = new.target.name;
+    this.cause = cause;
+  }
+};
+var CliNotFoundError = class extends OpencodeError {
+  constructor(executable, cause) {
+    super(`OpenCode executable was not found: ${executable}`, cause);
+  }
+};
+var CliPermissionError = class extends OpencodeError {
+  constructor(executable, cause) {
+    super(`OpenCode executable could not be run due to a permission error: ${executable}`, cause);
+  }
+};
+var UnsupportedCliError = class extends OpencodeError {
+  constructor(cause) {
+    super("This OpenCode CLI does not support session listing.", cause);
+  }
+};
+var IncompatibleCliError = class extends OpencodeError {
+  constructor(detectedCli, cause) {
+    super(`The configured executable is ${detectedCli}. This plugin requires OpenCode.`, cause);
+    this.detectedCli = detectedCli;
+  }
+};
+var CliCommandError = class extends OpencodeError {
+  constructor(message, cause) {
+    super(message, cause);
+  }
+};
+var MalformedCliOutputError = class extends OpencodeError {
+  constructor(cause) {
+    super("OpenCode returned malformed session data.", cause);
+  }
+};
+function errorCode(error) {
+  return typeof error === "object" && error !== null && "code" in error ? String(error.code) : void 0;
+}
+function errorDetails(error) {
+  var _a;
+  if (typeof error !== "object" || error === null)
+    return String(error);
+  const stderr = "stderr" in error ? String((_a = error.stderr) != null ? _a : "") : "";
+  const message = error instanceof Error ? error.message : String(error);
+  return `${message}
+${stderr}`.trim();
+}
+var OPERATION_LABELS = {
+  "session-list": "session listing",
+  "compatibility-check": "compatibility check"
+};
+function classifyOperationError(error, executable, operation) {
+  const code = errorCode(error);
+  const details = errorDetails(error);
+  if (code === "ENOENT" || /\bENOENT\b|(?:command |executable )?not found/i.test(details)) {
+    return new CliNotFoundError(executable, error);
+  }
+  if (code === "EACCES" || code === "EPERM" || /\bEACCES\b|\bEPERM\b|permission denied/i.test(details) || details.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
+    return new CliPermissionError(executable, error);
+  }
+  if (/unrecognized flag|unknown (?:option|command)|no such command/i.test(details)) {
+    return operation === "session-list" ? new UnsupportedCliError(error) : new IncompatibleCliError("an unsupported CLI", error);
+  }
+  return new CliCommandError(`OpenCode ${OPERATION_LABELS[operation]} failed: ${details || "unknown command error"}`, error);
+}
+async function runSessionCommand(context, args) {
+  let raw = "";
+  let stderrText = "";
+  try {
+    if (context.isFlatpak) {
+      const tmpFile = path6.join(os5.tmpdir(), `opencode-sessions-${Date.now()}.json`);
+      const shellCmd = `${[context.executable, ...args].map(quoteShell).join(" ")} > ${quoteShell(tmpFile)}`;
+      const result = await runExecFile("flatpak-spawn", [
+        "--host",
+        ...flatpakEnvironmentArgs(context.environmentVariables),
+        "sh",
+        "-c",
+        shellCmd
+      ], { cwd: context.cwd, env: context.env });
+      stderrText = result.stderr;
+      try {
+        raw = fs4.readFileSync(tmpFile, "utf-8");
+      } finally {
+        safeUnlinkSync(tmpFile);
+      }
+    } else {
+      const result = await runExecFile(context.executable, args, { cwd: context.cwd, env: context.env });
+      raw = result.stdout || "";
+      stderrText = result.stderr || "";
+      if (!raw.trim() && looksLikeJson(stderrText)) {
+        raw = stderrText;
+        stderrText = "";
+      }
+    }
+  } catch (error) {
+    console.error("Failed to list sessions:", error);
+    throw classifyOperationError(error, context.executable, "session-list");
+  }
+  const trimmed = raw.trim();
+  if (trimmed)
+    return trimmed;
+  if (stderrText.trim()) {
+    throw classifyOperationError(new Error(stderrText.trim()), context.executable, "session-list");
+  }
+  throw new MalformedCliOutputError(new Error("OpenCode returned no JSON output"));
+}
+async function listStableSessions(run) {
+  return parseStableSessionList(await run(["session", "list", "--format", "json"]));
+}
+async function listV2Sessions(run, directory) {
+  const sessions = [];
+  const seenCursors = /* @__PURE__ */ new Set();
+  let cursor;
+  do {
+    const query = `/api/session?directory=${encodeURIComponent(directory)}&roots=true${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+    const page = parseV2SessionPage(await run(["api", "get", query]));
+    sessions.push(...page.sessions);
+    cursor = page.nextCursor;
+    if (cursor && seenCursors.has(cursor)) {
+      throw new Error("OpenCode v2 returned a repeated session cursor");
+    }
+    if (cursor)
+      seenCursors.add(cursor);
+  } while (cursor);
+  return sessions;
+}
+var ExportTooLargeError = class extends Error {
+  constructor(sessionId) {
+    super(`Session ${sessionId} is too large to export`);
+    this.name = "ExportTooLargeError";
+  }
+};
+var OpencodeClient = class {
+  constructor(opencodePath, cwd, environmentVariables = {}) {
+    this.opencodePath = opencodePath;
+    this.cwd = cwd;
+    this.environmentVariables = environmentVariables;
+  }
+  resolvePath(environment = process.env) {
+    return resolveOpencodeExecutable(this.opencodePath, { environment });
+  }
+  async checkCompatibility() {
+    const isFlatpak = fs4.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
+    const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
+    const executable = this.resolvePath(env);
+    let command = executable;
+    let args = ["--help"];
+    if (isFlatpak) {
+      command = "flatpak-spawn";
+      args = ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), executable, ...args];
+    }
+    let result;
+    try {
+      result = await runExecFile(command, args, { cwd: this.cwd, env });
+    } catch (error) {
+      throw classifyOperationError(error, executable, "compatibility-check");
+    }
+    const output = `${result.stdout}
+${result.stderr}`;
+    const generation = identifyOpenCodeCli(output);
+    if (generation)
+      return { generation, executable };
+    const detectedCli = /\bCodex CLI\b/i.test(output) ? "Codex CLI" : "an unsupported CLI";
+    throw new IncompatibleCliError(detectedCli);
+  }
+  async listSessions(generation = "stable") {
+    const isFlatpak = fs4.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
+    const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
+    const executable = this.resolvePath(env);
+    const run = (args) => runSessionCommand({
+      executable,
+      cwd: this.cwd,
+      env,
+      isFlatpak,
+      environmentVariables: this.environmentVariables
+    }, args);
+    try {
+      return generation === "stable" ? await listStableSessions(run) : await listV2Sessions(run, this.cwd);
+    } catch (error) {
+      if (error instanceof OpencodeError)
+        throw error;
+      throw new MalformedCliOutputError(error);
+    }
+  }
+  async exportSession(sessionId, generation = "stable") {
+    try {
+      return await this.exportSessionStreamed(sessionId, generation);
+    } catch (error) {
+      if (error instanceof ExportTooLargeError) {
+        console.warn("Session too large to preview:", sessionId);
+        throw error;
+      }
+      console.error("Failed to export session:", error);
+      new import_obsidian3.Notice(`Failed to export session ${sessionId}`);
+      return null;
+    }
+  }
+  exportSessionStreamed(sessionId, generation, maxBytes = 200 * 1024 * 1024) {
+    return new Promise((resolve2, reject) => {
+      if (!SAFE_ID_RE.test(sessionId)) {
+        reject(new Error(`Invalid session ID: ${sessionId}`));
+        return;
+      }
+      const tmpFile = path6.join(os5.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
+      let cleanedUp = false;
+      const cleanup = () => {
+        if (cleanedUp)
+          return;
+        cleanedUp = true;
+        safeUnlinkSync(tmpFile);
+      };
+      const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+      const exportEnv = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
+      const exportArgs = generation === "v2" ? ["session", "export", sessionId] : ["export", sessionId];
+      let command = [this.resolvePath(exportEnv), ...exportArgs].map(quoteShell).join(" ") + ` > ${quoteShell(tmpFile)} 2>/dev/null`;
+      if (isFlatpak) {
+        const environmentArgs = flatpakEnvironmentArgs(this.environmentVariables).map(quoteShell).join(" ");
+        command = `flatpak-spawn --host${environmentArgs ? ` ${environmentArgs}` : ""} ${command}`;
+      }
+      let child;
+      if (process.platform === "win32") {
+        const configuredExecutable = this.resolvePath(exportEnv);
+        const commandTokens = /\.ps1$/i.test(configuredExecutable) ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", configuredExecutable, ...exportArgs] : [configuredExecutable, ...exportArgs];
+        const windowsCommand = windowsCommandReferences([...commandTokens, tmpFile], exportEnv);
+        const tmpFileRef = windowsCommand.references.at(-1);
+        const commandLine = `${windowsCommand.references.slice(0, -1).join(" ")} > ${tmpFileRef} 2>NUL`;
+        child = (0, import_child_process.spawn)(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", `"${commandLine}"`], {
+          cwd: this.cwd,
+          env: windowsCommand.env,
+          windowsHide: true,
+          windowsVerbatimArguments: true
+        });
+      } else {
+        child = (0, import_child_process.spawn)(command, [], {
+          cwd: this.cwd,
+          env: exportEnv,
+          shell: true
+        });
+      }
+      child.on("error", (err) => {
+        cleanup();
+        reject(err);
+      });
+      child.on("close", (code) => {
+        if (code !== 0) {
+          cleanup();
+          reject(new Error(`Export exited with code ${code}`));
+          return;
+        }
+        try {
+          const stats = fs4.statSync(tmpFile);
+          if (stats.size > maxBytes) {
+            cleanup();
+            reject(new ExportTooLargeError(sessionId));
+            return;
+          }
+          const stdout = fs4.readFileSync(tmpFile, "utf-8");
+          cleanup();
+          const data = JSON.parse(stdout);
+          resolve2(data);
+        } catch (parseError) {
+          cleanup();
+          reject(parseError instanceof Error ? parseError : new Error(String(parseError)));
+        }
+      });
+    });
+  }
+  async deleteSession(sessionId) {
+    if (!SAFE_ID_RE.test(sessionId)) {
+      console.error("Refusing to delete invalid session ID:", sessionId);
+      return false;
+    }
+    try {
+      const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
+      const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
+      let executable = this.resolvePath(env);
+      let args = ["session", "delete", sessionId];
+      if (isFlatpak) {
+        args = ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), executable, ...args];
+        executable = "flatpak-spawn";
+      }
+      await runExecFile(executable, args, { cwd: this.cwd, env });
+      return true;
+    } catch (error) {
+      console.error("Failed to delete session:", error);
+      return false;
+    }
+  }
+};
+
 // src/views/opencodeTerminalView.ts
 var OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
-var OpencodeTerminalView = class extends import_obsidian3.ItemView {
+var OpencodeTerminalView = class extends import_obsidian4.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
     this.terminal = null;
     this.fitAddon = null;
+    this.imageAddon = null;
     this.container = null;
     this.editorServer = null;
     this.lifecycle = new LifecycleQueue();
     this.closing = false;
+    this.clipboardTempDirectory = null;
+    this.clipboardImageCounter = 0;
+    this.clipboardImageCleanupTimers = [];
+    this.copySelectionOnCtrlC = false;
     this.ptySession = this.plugin.createPtySession();
     this.keyRouter = new TerminalKeyRouter();
   }
@@ -20337,6 +23509,8 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
       process.env,
       this.plugin.settings.environmentVariables
     );
+    this.copySelectionOnCtrlC = loadOpenCodeManualCopy(terminalCwd, terminalEnvironment, "stable");
+    const windowsClipboard = createWslWindowsClipboard({ environment: terminalEnvironment });
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass("opencode-terminal-container");
@@ -20375,12 +23549,22 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
       cursorBlink: true,
       scrollback: 1e4,
       convertEol: false,
-      windowsPty: process.platform === "win32" ? { backend: "conpty", buildNumber: Number.parseInt((0, import_node_os.release)().split(".")[2], 10) } : void 0,
+      windowOptions: {
+        getWinSizePixels: true,
+        getCellSizePixels: true
+      },
+      windowsPty: process.platform === "win32" ? { backend: "conpty", buildNumber: Number.parseInt((0, import_node_os2.release)().split(".")[2], 10) } : void 0,
       allowProposedApi: true
     });
     const fitAddon = new import_addon_fit.FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.loadAddon(new import_addon_web_links.WebLinksAddon());
+    const imageAddon = new import_addon_image.ImageAddon({
+      enableSizeReports: false,
+      iipSupport: false
+    });
+    terminal.loadAddon(imageAddon);
+    this.imageAddon = imageAddon;
     terminal.open(termContainer);
     let scrollbarRail = null;
     let scrollbarThumb = null;
@@ -20483,10 +23667,10 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
     });
     const terminalCellAt = (event) => {
       var _a2;
-      const screen = (_a2 = terminal.element) == null ? void 0 : _a2.querySelector(".xterm-screen");
-      if (!screen)
+      const screen2 = (_a2 = terminal.element) == null ? void 0 : _a2.querySelector(".xterm-screen");
+      if (!screen2)
         return null;
-      const rect = screen.getBoundingClientRect();
+      const rect = screen2.getBoundingClientRect();
       return {
         column: Math.floor((event.clientX - rect.left) / (rect.width / terminal.cols)),
         row: Math.max(0, Math.min(
@@ -20621,10 +23805,10 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
       var _a2;
       if (process.platform !== "win32" || event.button !== 0 || isMouseClickableTui())
         return;
-      const screen = (_a2 = terminal.element) == null ? void 0 : _a2.querySelector(".xterm-screen");
-      if (!screen)
+      const screen2 = (_a2 = terminal.element) == null ? void 0 : _a2.querySelector(".xterm-screen");
+      if (!screen2)
         return;
-      const rect = screen.getBoundingClientRect();
+      const rect = screen2.getBoundingClientRect();
       const row = Math.floor((event.clientY - rect.top) / (rect.height / terminal.rows));
       const buffer = terminal.buffer.active;
       if (row !== buffer.cursorY)
@@ -20646,10 +23830,10 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
       var _a2;
       if (process.platform !== "win32" || event.button !== 0 || !isMouseClickableTui())
         return;
-      const screen = (_a2 = terminal.element) == null ? void 0 : _a2.querySelector(".xterm-screen");
-      if (!screen)
+      const screen2 = (_a2 = terminal.element) == null ? void 0 : _a2.querySelector(".xterm-screen");
+      if (!screen2)
         return;
-      const rect = screen.getBoundingClientRect();
+      const rect = screen2.getBoundingClientRect();
       const clickedRow = Math.floor((event.clientY - rect.top) / (rect.height / terminal.rows));
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -20667,6 +23851,33 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
       termContainer.removeEventListener("mousedown", handlePickerMouse, true);
       termContainer.removeEventListener("mouseup", handlePickerMouse, true);
     });
+    if (windowsClipboard == null ? void 0 : windowsClipboard.writeImagePng) {
+      const copyRenderedImage = (event) => {
+        var _a2;
+        const screen2 = (_a2 = terminal.element) == null ? void 0 : _a2.querySelector(".xterm-screen");
+        if (!screen2)
+          return;
+        const rect = screen2.getBoundingClientRect();
+        const column = Math.floor((event.clientX - rect.left) / (rect.width / terminal.cols));
+        const viewportRow = Math.floor((event.clientY - rect.top) / (rect.height / terminal.rows));
+        if (column < 0 || column >= terminal.cols || viewportRow < 0 || viewportRow >= terminal.rows)
+          return;
+        const canvas = imageAddon.getImageAtBufferCell(column, terminal.buffer.active.viewportY + viewportRow);
+        if (!canvas)
+          return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const encoded = canvas.toDataURL("image/png").split(",", 2)[1];
+        void windowsClipboard.writeImagePng(Buffer.from(encoded, "base64")).then(() => {
+          new import_obsidian4.Notice("Copied terminal image to the Windows clipboard.");
+        }, (error) => {
+          const detail = error instanceof Error ? error.message : String(error);
+          new import_obsidian4.Notice(`Windows clipboard: ${detail}`);
+        });
+      };
+      termContainer.addEventListener("contextmenu", copyRenderedImage, true);
+      this.register(() => termContainer.removeEventListener("contextmenu", copyRenderedImage, true));
+    }
     this.editorServer = new EditorServer({ publishLock: false });
     try {
       this.editorPort = await this.editorServer.start(this.plugin.vaultRoot);
@@ -20682,7 +23893,7 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
         } catch (e) {
           console.warn("Initial fit failed:", e);
         }
-        this.spawnPty(terminal);
+        void this.lifecycle.enqueue(() => this.spawnPty(terminal));
       } else {
         window.setTimeout(spawnWithCorrectSize, 50);
       }
@@ -20692,7 +23903,35 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
       app: this.app,
       terminal,
       container,
-      reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment)
+      reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
+      clipboard: windowsClipboard != null ? windowsClipboard : void 0,
+      copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,
+      onClipboardError: (message) => new import_obsidian4.Notice(message),
+      onClipboardImagePaste: (png) => {
+        if (!this.clipboardTempDirectory) {
+          this.clipboardTempDirectory = (0, import_node_fs.mkdtempSync)((0, import_node_path.join)((0, import_node_os2.tmpdir)(), "obsidian-opencode-clipboard-"));
+        }
+        const imagePath = (0, import_node_path.join)(this.clipboardTempDirectory, `clipboard-${++this.clipboardImageCounter}.png`);
+        (0, import_node_fs.writeFileSync)(imagePath, png, { mode: 384 });
+        terminal.paste(imagePath);
+        const cleanupTimer = window.setTimeout(() => {
+          this.clipboardImageCleanupTimers = this.clipboardImageCleanupTimers.filter((timer) => timer !== cleanupTimer);
+          try {
+            (0, import_node_fs.unlinkSync)(imagePath);
+          } catch (e) {
+          }
+          if (this.clipboardTempDirectory) {
+            try {
+              if ((0, import_node_fs.readdirSync)(this.clipboardTempDirectory).length === 0) {
+                (0, import_node_fs.rmdirSync)(this.clipboardTempDirectory);
+                this.clipboardTempDirectory = null;
+              }
+            } catch (e) {
+            }
+          }
+        }, 6e4);
+        this.clipboardImageCleanupTimers.push(cleanupTimer);
+      }
     });
     this.register(() => this.keyRouter.dispose());
     const dragOverHandler = (e) => {
@@ -20714,7 +23953,7 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
         terminalInput: this.ptySession.getStdin() ? (data) => terminal.input(data, true) : void 0,
         onFileDrop: this.editorServer ? (filePath) => {
           const normalized = normalizeVaultPath(filePath, this.plugin.vaultRoot);
-          this.editorServer.notifyAtMentioned(normalized);
+          return this.editorServer.notifyAtMentioned(normalized);
         } : void 0
       });
     };
@@ -20743,15 +23982,37 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
         } catch (error) {
           console.warn("Restart fit failed:", error);
         }
-        this.spawnPty(this.terminal);
+        await this.spawnPty(this.terminal);
         this.ptySession.sendResize(this.terminal);
       }
     });
   }
-  spawnPty(terminal) {
+  async spawnPty(terminal) {
     const defaultCwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
     const cwd = this.plugin.sessionCwd || defaultCwd;
-    const opencodePath = this.plugin.settings.opencodePath || "opencode";
+    const configuredPath = this.plugin.settings.opencodePath || "opencode";
+    let opencodePath;
+    try {
+      const compatibility = await new OpencodeClient(
+        configuredPath,
+        cwd,
+        this.plugin.settings.environmentVariables
+      ).checkCompatibility();
+      opencodePath = compatibility.executable;
+      const terminalEnvironment = mergeEnvironmentVariables(
+        process.env,
+        this.plugin.settings.environmentVariables
+      );
+      this.copySelectionOnCtrlC = loadOpenCodeManualCopy(cwd, terminalEnvironment, compatibility.generation);
+    } catch (error) {
+      const message = error instanceof OpencodeError ? error.message : "Unable to verify the configured OpenCode executable.";
+      terminal.writeln(`\r
+${message}\r
+`);
+      return;
+    }
+    if (this.closing)
+      return;
     let args = [];
     if (this.plugin.sessionArgs) {
       args = [...this.plugin.sessionArgs];
@@ -20787,8 +24048,17 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
         } catch (e) {
         }
         this.terminal = null;
+        this.imageAddon = null;
       }
       this.keyRouter.dispose();
+      for (const timer of this.clipboardImageCleanupTimers)
+        window.clearTimeout(timer);
+      this.clipboardImageCleanupTimers = [];
+      if (this.clipboardTempDirectory) {
+        (0, import_node_fs.rmSync)(this.clipboardTempDirectory, { recursive: true, force: true });
+        this.clipboardTempDirectory = null;
+        this.clipboardImageCounter = 0;
+      }
     });
   }
   focusTerminal() {
@@ -20800,273 +24070,6 @@ var OpencodeTerminalView = class extends import_obsidian3.ItemView {
 
 // src/views/conversationView.ts
 var import_obsidian6 = require("obsidian");
-
-// src/utils/opencode.ts
-var import_obsidian4 = require("obsidian");
-var import_child_process = require("child_process");
-var fs3 = __toESM(require("fs"));
-var os4 = __toESM(require("os"));
-var path5 = __toESM(require("path"));
-var FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian";
-var SAFE_ID_RE = /^[a-zA-Z0-9._:-]+$/;
-function safeUnlinkSync(filePath) {
-  try {
-    fs3.unlinkSync(filePath);
-  } catch (e) {
-  }
-}
-function quoteShell(token) {
-  return `'${String(token).replace(/'/g, `'\\''`)}'`;
-}
-function looksLikeJson(text) {
-  const ch = text.trimStart().charCodeAt(0);
-  return ch === 91 || ch === 123;
-}
-var WINDOWS_EXEC_HOST_JS = String.raw`
-const { spawn } = require("child_process");
-let [cwd, file, ...args] = process.argv.slice(1);
-let options = { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true };
-if (/\.ps1$/i.test(file)) {
-  args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", file, ...args];
-  file = "powershell.exe";
-} else if (/\.(cmd|bat)$/i.test(file)) {
-  const env = { ...process.env };
-  const tokens = [file, ...args];
-  const references = tokens.map((token, index) => {
-    const name = "OPENCODE_PLUGIN_CMD_" + index;
-    env[name] = token;
-    return '"%' + name + '%"';
-  });
-  file = process.env.ComSpec || "cmd.exe";
-  args = ["/d", "/s", "/c", '"' + references.join(" ") + '"'];
-  options = { ...options, env, windowsVerbatimArguments: true };
-}
-const child = spawn(file, args, options);
-child.stdout.pipe(process.stdout);
-child.stderr.pipe(process.stderr);
-child.on("error", (error) => {
-  console.error(error && error.message ? error.message : String(error));
-  process.exitCode = 1;
-});
-child.on("close", (code) => { process.exitCode = code == null ? 1 : code; });
-`;
-function windowsCommandReferences(tokens, env) {
-  const commandEnv = { ...env };
-  const references = tokens.map((token, index) => {
-    const name = `OPENCODE_PLUGIN_CMD_${index}`;
-    commandEnv[name] = token;
-    return `"%${name}%"`;
-  });
-  return { env: commandEnv, references };
-}
-function resolveWindowsExecutable(executable, env) {
-  if (path5.win32.isAbsolute(executable))
-    return executable;
-  const extensions = (env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
-  const names = path5.win32.extname(executable) ? [executable] : extensions.map((extension2) => `${executable}${extension2}`);
-  for (const directory of (env.PATH || "").split(path5.win32.delimiter)) {
-    if (!directory)
-      continue;
-    for (const name of names) {
-      const candidate = path5.win32.join(directory, name);
-      try {
-        fs3.accessSync(candidate, fs3.constants.X_OK);
-        return candidate;
-      } catch (e) {
-        continue;
-      }
-    }
-  }
-  return executable;
-}
-function runExecFile(executable, args, opts) {
-  return new Promise((resolve2, reject) => {
-    let file = process.platform === "win32" ? resolveWindowsExecutable(executable, opts.env) : executable;
-    let fileArgs = args;
-    let execOptions = opts;
-    if (process.platform === "win32") {
-      const target = file;
-      file = resolveWindowsExecutable("node.exe", opts.env);
-      fileArgs = ["-e", WINDOWS_EXEC_HOST_JS, opts.cwd, target, ...args];
-      execOptions = { ...opts, windowsHide: true };
-    }
-    (0, import_child_process.execFile)(file, fileArgs, execOptions, (err, stdout, stderr) => {
-      var _a, _b;
-      if (err) {
-        const message = err instanceof Error ? err.message : typeof err === "string" ? err : "exec failed";
-        reject(new Error(message));
-      } else {
-        resolve2({ stdout: (_a = stdout == null ? void 0 : stdout.toString()) != null ? _a : "", stderr: (_b = stderr == null ? void 0 : stderr.toString()) != null ? _b : "" });
-      }
-    });
-  });
-}
-var ExportTooLargeError = class extends Error {
-  constructor(sessionId) {
-    super(`Session ${sessionId} is too large to export`);
-    this.name = "ExportTooLargeError";
-  }
-};
-var OpencodeClient = class {
-  constructor(opencodePath, cwd, environmentVariables = {}) {
-    this.opencodePath = opencodePath;
-    this.cwd = cwd;
-    this.environmentVariables = environmentVariables;
-  }
-  resolvePath() {
-    return this.opencodePath || "opencode";
-  }
-  async listSessions() {
-    const isFlatpak = fs3.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
-    const executable = this.resolvePath();
-    const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
-    let raw = "";
-    let stderrText = "";
-    try {
-      if (isFlatpak) {
-        const tmpFile = path5.join(os4.tmpdir(), `opencode-sessions-${Date.now()}.json`);
-        const shellCmd = `${quoteShell(executable)} session list --format json > ${quoteShell(tmpFile)} 2>/dev/null`;
-        await runExecFile("flatpak-spawn", ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), "sh", "-c", shellCmd], { cwd: this.cwd, env });
-        try {
-          raw = fs3.readFileSync(tmpFile, "utf-8");
-        } finally {
-          safeUnlinkSync(tmpFile);
-        }
-      } else {
-        const result = await runExecFile(executable, ["session", "list", "--format", "json"], { cwd: this.cwd, env });
-        raw = result.stdout || "";
-        stderrText = result.stderr || "";
-        if (!raw.trim() && looksLikeJson(stderrText)) {
-          raw = stderrText;
-          stderrText = "";
-        }
-      }
-      const trimmed = raw.trim();
-      if (!trimmed) {
-        if (stderrText.trim())
-          console.warn("opencode session list stderr:", stderrText.trim());
-        return [];
-      }
-      return JSON.parse(trimmed);
-    } catch (error) {
-      console.error("Failed to list sessions:", error);
-      if (stderrText.trim())
-        console.warn("opencode session list stderr:", stderrText.trim());
-      const errStr = String(error);
-      if (errStr.includes("org.freedesktop.DBus.Error.ServiceUnknown") || errStr.includes("flatpak-spawn")) {
-        new import_obsidian4.Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND}' on your host system.`, 15e3);
-      } else if (errStr.includes("Unexpected end of JSON input") || errStr.includes("JSON")) {
-        new import_obsidian4.Notice("Opencode: session list returned no JSON. Check the dev console for details and ensure opencode is up to date.", 15e3);
-      } else {
-        new import_obsidian4.Notice("Failed to list opencode sessions. Check your opencode path in settings.");
-      }
-      return [];
-    }
-  }
-  async exportSession(sessionId) {
-    try {
-      return await this.exportSessionStreamed(sessionId);
-    } catch (error) {
-      if (error instanceof ExportTooLargeError) {
-        console.warn("Session too large to preview:", sessionId);
-        throw error;
-      }
-      console.error("Failed to export session:", error);
-      new import_obsidian4.Notice(`Failed to export session ${sessionId}`);
-      return null;
-    }
-  }
-  exportSessionStreamed(sessionId, maxBytes = 200 * 1024 * 1024) {
-    return new Promise((resolve2, reject) => {
-      if (!SAFE_ID_RE.test(sessionId)) {
-        reject(new Error(`Invalid session ID: ${sessionId}`));
-        return;
-      }
-      const tmpFile = path5.join(os4.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
-      let cleanedUp = false;
-      const cleanup = () => {
-        if (cleanedUp)
-          return;
-        cleanedUp = true;
-        safeUnlinkSync(tmpFile);
-      };
-      const isFlatpak = fs3.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
-      let command = `${quoteShell(this.resolvePath())} export ${quoteShell(sessionId)} > ${quoteShell(tmpFile)} 2>/dev/null`;
-      if (isFlatpak) {
-        const environmentArgs = flatpakEnvironmentArgs(this.environmentVariables).map(quoteShell).join(" ");
-        command = `flatpak-spawn --host${environmentArgs ? ` ${environmentArgs}` : ""} ${command}`;
-      }
-      const exportEnv = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
-      let child;
-      if (process.platform === "win32") {
-        const configuredExecutable = this.resolvePath();
-        const commandTokens = /\.ps1$/i.test(configuredExecutable) ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", configuredExecutable, "export", sessionId] : [configuredExecutable, "export", sessionId];
-        const windowsCommand = windowsCommandReferences([...commandTokens, tmpFile], exportEnv);
-        const tmpFileRef = windowsCommand.references.at(-1);
-        const commandLine = `${windowsCommand.references.slice(0, -1).join(" ")} > ${tmpFileRef} 2>NUL`;
-        child = (0, import_child_process.spawn)(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", `"${commandLine}"`], {
-          cwd: this.cwd,
-          env: windowsCommand.env,
-          windowsHide: true,
-          windowsVerbatimArguments: true
-        });
-      } else {
-        child = (0, import_child_process.spawn)(command, [], {
-          cwd: this.cwd,
-          env: exportEnv,
-          shell: true
-        });
-      }
-      child.on("error", (err) => {
-        cleanup();
-        reject(err);
-      });
-      child.on("close", (code) => {
-        if (code !== 0) {
-          cleanup();
-          reject(new Error(`Export exited with code ${code}`));
-          return;
-        }
-        try {
-          const stats = fs3.statSync(tmpFile);
-          if (stats.size > maxBytes) {
-            cleanup();
-            reject(new ExportTooLargeError(sessionId));
-            return;
-          }
-          const stdout = fs3.readFileSync(tmpFile, "utf-8");
-          cleanup();
-          const data = JSON.parse(stdout);
-          resolve2(data);
-        } catch (parseError) {
-          cleanup();
-          reject(parseError instanceof Error ? parseError : new Error(String(parseError)));
-        }
-      });
-    });
-  }
-  async deleteSession(sessionId) {
-    if (!SAFE_ID_RE.test(sessionId)) {
-      console.error("Refusing to delete invalid session ID:", sessionId);
-      return false;
-    }
-    try {
-      const isFlatpak = fs3.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
-      let executable = this.resolvePath();
-      let args = ["session", "delete", sessionId];
-      if (isFlatpak) {
-        args = ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), executable, ...args];
-        executable = "flatpak-spawn";
-      }
-      const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
-      await runExecFile(executable, args, { cwd: this.cwd, env });
-      return true;
-    } catch (error) {
-      console.error("Failed to delete session:", error);
-      return false;
-    }
-  }
-};
 
 // src/modules/sessionExporter.ts
 var import_obsidian5 = require("obsidian");
@@ -21144,6 +24147,28 @@ var SessionExporter = class {
   }
 };
 
+// src/views/conversationErrors.ts
+function sessionListErrorMessage(error) {
+  if (error instanceof IncompatibleCliError)
+    return error.message;
+  if (error instanceof CliNotFoundError) {
+    return "OpenCode could not be found. Set the executable path in plugin settings, then retry.";
+  }
+  if (error instanceof CliPermissionError) {
+    return "OpenCode could not be started because access was denied. Check the executable and sandbox permissions.";
+  }
+  if (error instanceof UnsupportedCliError) {
+    return "Session browsing is not supported by this OpenCode CLI version.";
+  }
+  if (error instanceof MalformedCliOutputError) {
+    return "OpenCode returned invalid session data. Check the configured CLI version and retry.";
+  }
+  if (error instanceof CliCommandError) {
+    return "OpenCode failed while loading sessions. Check the developer console for command details.";
+  }
+  return "Could not run OpenCode to load sessions.";
+}
+
 // src/views/conversationView.ts
 var moment2 = import_obsidian6.moment;
 var OPENCODE_CONVERSATION_VIEW_TYPE = "opencode-conversations";
@@ -21154,6 +24179,8 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     this.sessions = [];
     this.listContainer = null;
     this.detailContainer = null;
+    this.mainContainer = null;
+    this.cliGeneration = "stable";
     this.exporter = new SessionExporter(this.app);
   }
   createClient() {
@@ -21191,6 +24218,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
       void this.loadSessions();
     });
     const main = container.createEl("div", { cls: "opencode-conversation-main" });
+    this.mainContainer = main;
     this.listContainer = main.createEl("div", { cls: "opencode-session-list" });
     const splitter = main.createEl("div", {
       cls: "opencode-session-splitter",
@@ -21266,11 +24294,23 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     await this.loadSessions();
   }
   async loadSessions() {
+    var _a;
     if (!this.listContainer)
       return;
     this.listContainer.empty();
+    (_a = this.mainContainer) == null ? void 0 : _a.removeClass("is-error");
     this.listContainer.createEl("div", { cls: "opencode-loading", text: "Loading sessions..." });
-    this.sessions = await this.createClient().listSessions();
+    try {
+      const client = this.createClient();
+      const compatibility = await client.checkCompatibility();
+      this.cliGeneration = compatibility.generation;
+      this.sessions = await client.listSessions(compatibility.generation);
+    } catch (error) {
+      console.error("Unable to load OpenCode sessions", error);
+      this.sessions = [];
+      this.renderSessionListError(error);
+      return;
+    }
     this.listContainer.empty();
     if (this.sessions.length === 0) {
       this.listContainer.createEl("div", { cls: "opencode-empty", text: "No sessions found." });
@@ -21283,12 +24323,28 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
       const meta = item.createEl("div", { cls: "opencode-session-meta" });
       meta.createEl("span", { text: moment2(session.updated).format("YYYY-MM-DD HH:mm") });
       item.addEventListener("click", () => {
-        var _a;
-        (_a = this.listContainer) == null ? void 0 : _a.querySelectorAll(".opencode-session-item").forEach((el) => el.removeClass("is-active"));
+        var _a2;
+        (_a2 = this.listContainer) == null ? void 0 : _a2.querySelectorAll(".opencode-session-item").forEach((el) => el.removeClass("is-active"));
         item.addClass("is-active");
         void this.showSessionDetail(session);
       });
     }
+  }
+  renderSessionListError(error) {
+    var _a;
+    if (!this.listContainer)
+      return;
+    (_a = this.mainContainer) == null ? void 0 : _a.addClass("is-error");
+    this.listContainer.empty();
+    const errorContainer = this.listContainer.createEl("div", { cls: "opencode-session-error" });
+    errorContainer.createEl("div", { cls: "opencode-error", text: sessionListErrorMessage(error) });
+    const actions = errorContainer.createEl("div", { cls: "opencode-session-error-actions" });
+    const retryButton = actions.createEl("button", { text: "Retry", cls: "mod-cta" });
+    retryButton.addEventListener("click", () => {
+      void this.loadSessions();
+    });
+    const settingsButton = actions.createEl("button", { text: "Open settings" });
+    settingsButton.addEventListener("click", () => this.plugin.openSettings());
   }
   async showSessionDetail(session) {
     var _a, _b, _c, _d, _e;
@@ -21320,7 +24376,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     this.detailContainer.createEl("div", { cls: "opencode-loading", text: "Loading conversation..." });
     let data;
     try {
-      data = await this.createClient().exportSession(session.id);
+      data = await this.createClient().exportSession(session.id, this.cliGeneration);
     } catch (error) {
       (_a = this.detailContainer.querySelector(".opencode-loading")) == null ? void 0 : _a.remove();
       if (error instanceof ExportTooLargeError) {
@@ -21364,7 +24420,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
   }
   async exportSessionToNote(session) {
     try {
-      const data = await this.createClient().exportSession(session.id);
+      const data = await this.createClient().exportSession(session.id, this.cliGeneration);
       if (!data) {
         new import_obsidian6.Notice("Failed to export session");
         return;
@@ -21537,6 +24593,10 @@ var ViewCoordinator = class {
       return leaf;
     }
   }
+  async closeTerminal() {
+    const leaves = [...this.workspace.getLeavesOfType(this.config.terminalViewType)];
+    await Promise.all(leaves.map((leaf) => leaf.detach()));
+  }
   async openOrRestartTerminal(restartFn) {
     let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
     if (leaf) {
@@ -21553,18 +24613,14 @@ var ViewCoordinator = class {
     }
     return null;
   }
-  async closeTerminalViews() {
-    const leaves = [...this.workspace.getLeavesOfType(this.config.terminalViewType)];
-    await Promise.all(leaves.map((leaf) => leaf.detach()));
-  }
 };
 
 // src/modules/ptySession.ts
 var import_child_process2 = require("child_process");
 var import_obsidian8 = require("obsidian");
-var fs4 = __toESM(require("fs"));
-var os5 = __toESM(require("os"));
-var path6 = __toESM(require("path"));
+var fs5 = __toESM(require("fs"));
+var os6 = __toESM(require("os"));
+var path7 = __toESM(require("path"));
 
 // src/pty/windowsPtyNativeX64.ts
 var WINDOWS_PTY_NATIVE_X64_BASE64 = "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TWAPKQHo3yUAAEiNlZAAAAAPKQJIjY2AAAAADykx6PYdAABIjZWwAAAADykCDygFiH4AAEiNjaAAAAAPKQHopiUAAEiNldAAAAAPKQJIjY3AAAAADykx6L0dAABIjZXwAAAADykCDygFX34AAEiNjeAAAAAPKQHobSUAAEiNlRABAAAPKQJIjY0AAQAADykx6IQdAABIjZUwAQAADykCDygFNn4AAEiNjSABAAAPKQHoNCUAAEiNlVABAAAPKQJIjY1AAQAADykx6EsdAABIjZVwAQAADykCDygFDX4AAEiNjWABAAAPKQHo+yQAAEiNlZABAAAPKQJIjY2AAQAADykx6BIdAABIjZWwAQAADykCDygF5H0AAEiNjaABAAAPKQHowiQAAEiNldABAAAPKQJIjY3AAQAADykx6NkcAABIjZXwAQAADykCDygFu30AAEiNjeABAAAPKQHoiSQAAEiNlRACAAAPKQJIjY0AAgAADykx6KAcAABIjZUwAgAADykCDygFkn0AAEiNjSACAAAPKQHoUCQAAEiNlVACAAAPKQJIjY1AAgAADykx6GccAABEDyjASI2VcAIAAA8pMg8oBWV9AABIjY1gAgAADykB6EMcAABEDyjISI2VkAIAAA8pAkQPKCVQfQAASI2NgAIAAEQPKSHo/B8AAA8o+EiNlbACAAAPKQJIjY2gAgAARA8pIejfHwAASI2V0AIAAEQPKQpIjY3AAgAADykB6MUfAABEDyjISI2V8AIAAEQPKQJIjY3gAgAADykx6MgbAAAPKPBIjZUQAwAARA8pGkiNjQADAABEDykR6KobAABIjZUwAwAADykCSI2NIAMAAA8pMehwHwAASI2VUAMAAA8pAkiNjUADAABEDykJ6EcjAABIjZVwAwAADykCSI2NYAMAAA8pOeguIwAADyi1gAMAAA8ovZADAABEDyiFoAMAAEQPKI2wAwAARA8olcADAABEDyid0AMAAEQPKKXgAwAASIHEcAQAAF3DVUiJ5dsq2cDYydnA3A1AfAAA3AVCfAAA2MncBUJ8AABIicjYydwFP3wAAEHbKNnJ2MrcBTp8AADYytwFOnwAANjK2y06fAAA3sHZwtgNQHwAANnJ2MvZ6NnA2OPc6dnJ3uPZzN7J2czeytnL3uHewt7B2zldw1VIieXbKtnA2MnZwNwNGnwAANwFHHwAANjJ3AUcfAAASInI2MncBRl8AABB2yjZydjK3AUUfAAA2cPYy9nJ2MvcBQ58AADYy9wFDnwAAEWFyXQi2cLYDQl8AADZydjK3uney9nK3uHbLf97AADeyt7B3unrEt3a2creydst+3sAAN7B3snewds4XcNVVkiB7MgEAABIjawkgAAAAEQPKZ0wBAAARA8plSAEAABEDymNEAQAAEQPKYUABAAADym98AMAAA8pteADAABEicZEDygaRA8oEUiNVbBEDykSSI1NoEQPKRHovxkAAA8o+EiNVdBEDykSSI1NwA8pAeioGQAADyjwDygFgXsAAEiNVfAPKQJIjU3gDyk56IsZAABIjVUQDykCDygFcHsAAEiJ6Q8pAehCIQAASI1VMA8pAkiNTSAPKTnoXxkAAEiNVVAPKQIPKAVUewAASI1NQA8pAegVIQAASI1VcA8pAkiNTWAPKTnoMhkAAEiNlZAAAAAPKQIPKAU0ewAASI2NgAAAAA8pAejiIAAASI2VsAAAAA8pAkiNjaAAAAAPKTno+RgAAEiNldAAAAAPKQIPKAULewAASI2NwAAAAA8pAeipIAAASI2V8AAAAA8pAkiNjeAAAAAPKTnowBgAAEiNlRABAAAPKQIPKAXiegAASI2NAAEAAA8pAehwIAAASI2VMAEAAA8pAkiNjSABAAAPKTnohxgAAEiNlVABAAAPKQIPKAW5egAASI2NQAEAAA8pAeg3IAAASI2VcAEAAA8pAkiNjWABAAAPKTnoThgAAEiNlZABAAAPKQIPKAWQegAASI2NgAEAAA8pAej+HwAASI2VsAEAAA8pAkiNjaABAAAPKTnoFRgAAEiNldABAAAPKQIPKAVnegAASI2NwAEAAA8pAejFHwAASI2V8AEAAA8pAkiNjeABAAAPKTno3BcAAEiNlRACAAAPKQIPKAU+egAASI2NAAIAAA8pAeiMHwAASI2VMAIAAA8pAkiNjSACAAAPKTnooxcAAEiNlVACAAAPKQIPKAUVegAASI2NQAIAAA8pAehTHwAARA8owIX2D4TkAAAASI2VcAIAAEQPKRoPKAX4eQAASI2NYAIAAA8pAehWFwAARA8oyEiNlZACAABEDykCSI2NgAIAAA8pMeg4FwAASI2VsAIAAA8pAkiNjaACAABEDykJ6P0aAABIjZXQAgAADykCSI2N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otoPyf4/AAAAAAAAAY7//5SO//9Vjv//cY7//wAAAAAAAACAAAAAAAAAAIAAAAAAAABwRwAAAAAAAPA/3o7//xGP//8cj///MI///wAAAIAAAACAAAAAgAAAAIAAAAAAAAAAgAAAAAAAAACA0iEzf3zZEsAYLURU+yEZQBgtRFT7IRnAGC1EVPsh+T8YLURU+yEJQBgtRFT7IQnAAACAewAAgD9Qj///4I///z2P//8EkP//AAAAAAAAAAD///////////////////9/AAAAAAAAAAAAAAAAAAD/PwAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAP9/AACA/wAAgH8AAAAAAAAAAP////////9//////////38AAAAAAAAAgAAAAAAAAACAAAAAAAAA8H8AAAAAAADwfwAAAAAAAPA/AAAAAAAA8D8AAAAAAADwPwAAAAAAAPB/////f////3////9/////fwAAAIAAAACAAAAAgAAAAIAAAIB/AACAfwAAgH8AAIB/////f////38AAAAAAAAAAAAAgH8AAIB/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAgH8AAAAAAAAAAP9//3//f/9//3//f/9//38AgACAAIAAgACAAIAAgACAAHwAAAAAgH8AAAAAAAAAAP9//3//f/9//3//f/9//38AgACAAIAAgACAAIAAgACAAHwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/z8AAAAAAAAAAAAAAAAAAACA////////////////////fwAAAAAAAAAAAAAAAAAA/38AAIB/AAAAAAAAAAAAAAAA/////////3//////////fwAAAAAAAPB/AAAAAAAA8H8AAAAAAADwPwAAAAAAAPA/AAAAAAAAAIAAAAAAAAAAgAAAAAAAAPB/AAAAAAAAAAD///9/////f////3////9/AACAfwAAgH8AAIB/AACAf////3////9/AAAAAAAAAAAAAIB/AACAfwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAAIAAAACAAAAAgAAAAIAAAIA/AACAfwAAAAAAAAAA/3//f/9//3//f/9//3//fwCAAIAAgACAAIAAgACAAIAAfAB8AHwAfAAAAAAAAAAAAACAfwA8AAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAA/z8AAAAAAADwPwAAgD8AAAAAAAAAAAAAAAAAAAAAAID/fwAAwH8AAAAAAAAAAAAA+H8AAMB/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAID/fwAAAAAAAPh/AADAfwB+AAAAAAAAAAAAAAAAAAAAgP9/AAAAAAAAAIAAAAAAAAAAgAAAAAAAAPh/AAAAAAAAAAAAAACAAAAAgAAAAIAAAACA////f////3////9/////fwAAwH8AAAAAAAAAAAAAAAAAgACAAIAAgACAAIAAgACA/3//f/9//3//f/9//3//fwAAwH8AAAAAAAAAAAAAAAD///////////////////9/AAAAAAAAAAAAAAAAAID/fwAAAAAAAPh/AAAAAAAAAAD///9/////f////3////9/AADAfwAAAAAAAAAAAAAAAP9//3//f/9//3//f/9//3//////////f/////////9/////f////3////9/////f/9//3//f/9//3//f/9//3//////////f/////////9//////////3//////////fwAAAIAAAACAAAAAgAAAAIAAAID/AACA/wAAgP8AAID//3//f/9//3//f/9//3//f////3////9/////f////3//f/9//3//f/9//3//f/9/AAAAAAAAgF/enP//iZv//7ab///Zm///mZv//w2d//9Lnf//IZ3//zCd//8Vnf//AAAwQwAAMEUAAAAAAAAAAAAAAAAAADBDAAAAAAAAMEVZnv//pp7//22e//+Onv//X57//7if//8AoP//yZ///+if//+9n///7KD//zSh///9oP//HKH///Gg//8AfAB8AHwAALmn//88pv//aKb//3mm//9Lpv//66f//yuo////p///D6j///On//9rqf//n6n//3+p//+Gqf//can//7uq///sqv//zKr//9Oq///Aqv//+av//yqs//8KrP//Eaz///6r//8AAABfo7P//xey//9Vsv//l7L//z2y//81tv//6bT//xO1//8otf///bT//wAAAAAAAAAAAADgQzC5///tt///C7j//zK4///5t///AAAAXwG7///2uf//FLr//zu6//8Cuv//AAAAX5e9//9AvP//bLz//5y8//9VvP//CcD//3O+//+xvv//2b7//5m+///5wf//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bmFwaV9nZXRfdmFsdWVfaW50MzIAAAAAbmFwaV9nZXRfdmFsdWVfc3RyaW5nX3V0ZjgAAAAAbmFwaV9yZWxlYXNlX3RocmVhZHNhZmVfZnVuY3Rpb24AAAAAbmFwaV9zZXRfZWxlbWVudAAAAABuYXBpX3NldF9uYW1lZF9wcm9wZXJ0eQAAAG5hcGlfdGhyb3dfZXJyb3IAAAAAbmFwaV91bnJlZl90aHJlYWRzYWZlX2Z1bmN0aW9uAAAAAENsb3NlSGFuZGxlAAAAQ2xvc2VQc2V1ZG9Db25zb2xlAAAAAENyZWF0ZVBpcGUAAAAAQ3JlYXRlUHJvY2Vzc1cAAAAAQ3JlYXRlUHNldWRvQ29uc29sZQAAAENyZWF0ZVRvb2xoZWxwMzJTbmFwc2hvdAAAAABEZWxldGVQcm9jVGhyZWFkQXR0cmlidXRlTGlzdAAAAEdldEV4aXRDb2RlUHJvY2VzcwAAAABHZXRQcm9jZXNzVGltZXMAAABJbml0aWFsaXplUHJvY1RocmVhZEF0dHJpYnV0ZUxpc3QAAABLMzJHZXRQcm9jZXNzTWVtb3J5SW5mbwAAAE9wZW5Qcm9jZXNzAAAAUHJvY2VzczMyRmlyc3RXAAAAUHJvY2VzczMyTmV4dFcAAAAAUmVhZEZpbGUAAAAAUmVzaXplUHNldWRvQ29uc29sZQAAAFRlcm1pbmF0ZVByb2Nlc3MAAAAAVXBkYXRlUHJvY1RocmVhZEF0dHJpYnV0ZQAAAFdhaXRGb3JTaW5nbGVPYmplY3QAAABXcml0ZUZpbGUAAABOdEFsbG9jYXRlVmlydHVhbE1lbW9yeQAAAE50Q2xvc2UAAABOdENyZWF0ZVRocmVhZEV4AAAAAE50RnJlZVZpcnR1YWxNZW1vcnkAAABOdFJlc3VtZVRocmVhZAAAAABOdFdhaXRGb3JTaW5nbGVPYmplY3QAAABSdGxBY3RpdmF0ZUFjdGl2YXRpb25Db250ZXh0RXgAAAAAUnRsQWxsb2NhdGVIZWFwAAAAUnRsRnJlZUhlYXAAAABSdGxHZXRBY3RpdmVBY3RpdmF0aW9uQ29udGV4dAAAAFJ0bFJlbGVhc2VBY3RpdmF0aW9uQ29udGV4dABub2RlLmV4ZQBLRVJORUwzMi5kbGwAbnRkbGwuZGxsAAAAAQQCBQQDAVABDQYl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AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA8AAAHAAAAOCgYKKwo7ijwKPIo7CkuKTApMikABABABQAAAAAohCvIK/or/Cv+K8AIAEADAAAAACgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
@@ -21576,7 +24632,7 @@ var WINDOWS_PTY_NATIVE_ARM64_BASE64 = "TVp4AAEAAAAEAAAAAAAAAAAAAAAAAAAAQAAAAAAAA
 var WINDOWS_PTY_JOB_HOST_BASE64 = "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AQASAwAAAgAgAwAAAQAlAwAAAgApAwAAAwA6AwAABABGAwAAAQAlAwAAAgBYAwAAAQBgAwAAAgBuAwAAAwB8AwAAAQCGAwAAAgCMAwAAAwCUAwAABACcAwAAAQBYAwIAAgCpAwAAAQDkAwAAAQDrAwAAAQDwAwAAAgD4AxkA3gN6ACEA3gN+ACkA3gN6ADEA3gODADkAmgSIAEEAwASPAEkAygSDAFEA2wSUAFEA4AQ7AFkABQWXAGkAHwWeAEEAJgWPAEkALgV6AHEAPgWkAGkASgW5AHkA3gO9AIEA3gPDAAkABAANAAkACAASAAkADAAXAAkAEAAcAAkAFAAhAAkAGAAmAC4AEwDJAC4AGwDSAKgAhgREAQMADAEBAEABBQAcAQEAQAEHADQBAQBAAQkATQEBAEABCwBZAQEAQAENAHABAQBAAQ8AgwEBAASAAAAAAAAAAAAAAAAAAAAAAF4EAAAEAAAAAAAAAAAAAAABAIEAAAAAAAQAAAAAAAAAAAAAAAEAigAAAAAAAwACAAQAAgAFAAIAAAAAAAA8TW9kdWxlPgB3aW5kb3dzLXB0eS1qb2ItaG9zdC5leGUAV2luZG93c1B0eUpvYkhvc3QASm9iT2JqZWN0QmFzaWNMaW1pdEluZm9ybWF0aW9uAElvQ291bnRlcnMASm9iT2JqZWN0RXh0ZW5kZWRMaW1pdEluZm9ybWF0aW9uAG1zY29ybGliAFN5c3RlbQBPYmplY3QAVmFsdWVUeXBlAEpPQl9PQkpFQ1RfTElNSVRfS0lMTF9PTl9KT0JfQ0xPU0UAUFJPQ0VTU19TRVRfUVVPVEEAUFJPQ0VTU19URVJNSU5BVEUAU1lOQ0hST05JWkUAV0FJVF9PQkpFQ1RfMABJTkZJTklURQBDcmVhdGVKb2JPYmplY3QAU2V0SW5mb3JtYXRpb25Kb2JPYmplY3QAQXNzaWduUHJvY2Vzc1RvSm9iT2JqZWN0AE9wZW5Qcm9jZXNzAFdhaXRGb3JNdWx0aXBsZU9iamVjdHMAR2V0RXhpdENvZGVQcm9jZXNzAENsb3NlSGFuZGxlAE1haW4ARW5zdXJlAFBlclByb2Nlc3NVc2VyVGltZUxpbWl0AFBlckpvYlVzZXJUaW1lTGltaXQATGltaXRGbGFncwBNaW5pbXVtV29ya2luZ1NldFNpemUATWF4aW11bVdvcmtpbmdTZXRTaXplAEFjdGl2ZVByb2Nlc3NMaW1pdABBZmZpbml0eQBQcmlvcml0eUNsYXNzAFNjaGVkdWxpbmdDbGFzcwBSZWFkT3BlcmF0aW9uQ291bnQAV3JpdGVPcGVyYXRpb25Db3VudABPdGhlck9wZXJhdGlvbkNvdW50AFJlYWRUcmFuc2ZlckNvdW50AFdyaXRlVHJhbnNmZXJDb3VudABPdGhlclRyYW5zZmVyQ291bnQAQmFzaWNMaW1pdEluZm9ybWF0aW9uAElvSW5mbwBQcm9jZXNzTWVtb3J5TGltaXQASm9iTWVtb3J5TGltaXQAUGVha1Byb2Nlc3NNZW1vcnlVc2VkAFBlYWtKb2JNZW1vcnlVc2VkAGpvYkF0dHJpYnV0ZXMAbmFtZQBqb2IAaW5mb3JtYXRpb25DbGFzcwBpbmZvcm1hdGlvbgBpbmZvcm1hdGlvbkxlbmd0aABwcm9jZXNzAGRlc2lyZWRBY2Nlc3MAaW5oZXJpdEhhbmRsZQBwcm9jZXNzSWQAY291bnQAaGFuZGxlcwB3YWl0QWxsAG1pbGxpc2Vjb25kcwBleGl0Q29kZQBTeXN0ZW0uUnVudGltZS5JbnRlcm9wU2VydmljZXMAT3V0QXR0cmlidXRlAC5jdG9yAGhhbmRsZQBhcmdzAHN1Y2Nlc3MAbWVzc2FnZQBTeXN0ZW0uUnVudGltZS5Db21waWxlclNlcnZpY2VzAENvbXBpbGF0aW9uUmVsYXhhdGlvbnNBdHRyaWJ1dGUAUnVudGltZUNvbXBhdGliaWxpdHlBdHRyaWJ1dGUAd2luZG93cy1wdHktam9iLWhvc3QARGxsSW1wb3J0QXR0cmlidXRlAGtlcm5lbDMyLmRsbABVSW50MzIAVHJ5UGFyc2UAQ29uc29sZQBTeXN0ZW0uSU8AVGV4dFdyaXRlcgBnZXRfRXJyb3IAV3JpdGVMaW5lAEludFB0cgBaZXJvAG9wX0luZXF1YWxpdHkAVHlwZQBSdW50aW1lVHlwZUhhbmRsZQBHZXRUeXBlRnJvbUhhbmRsZQBNYXJzaGFsAFNpemVPZgBnZXRfT3V0AEZsdXNoAEV4Y2VwdGlvbgBnZXRfTWVzc2FnZQBHZXRMYXN0V2luMzJFcnJvcgBTeXN0ZW0uQ29tcG9uZW50TW9kZWwAV2luMzJFeGNlcHRpb24AU3RydWN0TGF5b3V0QXR0cmlidXRlAExheW91dEtpbmQAAAAAaVUAcwBhAGcAZQA6ACAAdwBpAG4AZABvAHcAcwAtAHAAdAB5AC0AagBvAGIALQBoAG8AcwB0ACAAPABvAHcAbgBlAHIALQBwAGkAZAA+ACAAPAB0AGEAcgBnAGUAdAAtAHAAaQBkAD4AAU1VAG4AYQBiAGwAZQAgAHQAbwAgAG0AbwBuAGkAdABvAHIAIAB0AGgAZQAgAE8AYgBzAGkAZABpAGEAbgAgAHAAcgBvAGMAZQBzAHMAAEdVAG4AYQBiAGwAZQAgAHQAbwAgAG8AcABlAG4AIAB0AGgAZQAgAFcAaQBuAGQAbwB3AHMAIABQAFQAWQAgAGgAbwBzAHQAAEdVAG4AYQBiAGwAZQAgAHQAbwAgAGMAcgBlAGEAdABlACAAdABoAGUAIABQAFQAWQAgAGoAbwBiACAAbwBiAGoAZQBjAHQAAE1VAG4AYQBiAGwAZQAgAHQAbwAgAGMAbwBuAGYAaQBnAHUAcgBlACAAdABoAGUAIABQAFQAWQAgAGoAbwBiACAAbwBiAGoAZQBjAHQAAG9VAG4AYQBiAGwAZQAgAHQAbwAgAGEAcwBzAGkAZwBuACAAdABoAGUAIABXAGkAbgBkAG8AdwBzACAAUABUAFkAIABoAG8AcwB0ACAAdABvACAAaQB0AHMAIABqAG8AYgAgAG8AYgBqAGUAYwB0AAALcgBlAGEAZAB5AABNVQBuAGEAYgBsAGUAIAB0AG8AIABtAG8AbgBpAHQAbwByACAAdABoAGUAIABXAGkAbgBkAG8AdwBzACAAUABUAFkAIABoAG8AcwB0AABbVQBuAGEAYgBsAGUAIAB0AG8AIAByAGUAYQBkACAAdABoAGUAIABXAGkAbgBkAG8AdwBzACAAUABUAFkAIABoAG8AcwB0ACAAZQB4AGkAdAAgAGMAbwBkAGUAAAAAAForTDitzVFNhnOGfFdHH0AACLd6XFYZNOCJAgYJBAAgAAAEAAEAAAQBAAAABAAAEAAEAAAAAAT/////BQACGBgOCQAEAhgIEBEUCQUAAgIYGAYAAxgJAgkIAAQJCR0YAgkGAAICGBAJBAABAhgFAAEIHQ4FAAIBAg4CBgoCBhkCBgsDBhEMAwYREAMg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";
 
 // src/modules/ptySession.ts
-var FLATPAK_OVERRIDE_COMMAND2 = "flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian";
+var FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian";
 var WINDOWS_CONPTY_PROBE_ARTIFACT = "+q4d73Gi=31337,s=1,v=1,a=q,t=d,f=24;AAAA";
 var WINDOWS_CONPTY_XTGETTCAP_ARTIFACT = "+q4d73";
 var WINDOWS_TUI_TEARDOWN_SEQUENCES = ["\x1B[?2004l", "\x1B[?2031l"];
@@ -21608,12 +24664,13 @@ from os import execvp, read, write, waitpid, waitstatus_to_exitcode
 from fcntl import ioctl
 from pty import fork
 from termios import TIOCSWINSZ
-from struct import pack
+from struct import pack, error as StructError
 from selectors import DefaultSelector, EVENT_READ
 
 _CHUNK_SIZE = 1024
 _CMDIO = 3
 _KILL_TOKEN = os.environ.get("OPENCODE_PTY_KILL_TOKEN", "")
+_resize_buffer = b""
 
 def forward_termination(signum, frame):
     # Killing the proxy closes the PTY master, but the kernel cannot carry a
@@ -21640,8 +24697,8 @@ def main():
     initial_size = os.environ.get("OPENCODE_PTY_INITIAL_SIZE", "")
     if initial_size:
         try:
-            rows, columns = (int(s) for s in initial_size.split("x", 2))
-            ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, 0, 0))
+            rows, columns, pixel_width, pixel_height = (int(s) for s in initial_size.split("x"))
+            ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, pixel_width, pixel_height))
         except (ValueError, OSError):
             pass
 
@@ -21678,24 +24735,27 @@ def forward_stdin(pty_fd):
     write_all(pty_fd, data)
 
 def handle_resize(pty_fd):
+    global _resize_buffer
     try:
         data = read(_CMDIO, _CHUNK_SIZE)
     except OSError:
         data = b""
     if not data:
         return
-    for line in data.decode("UTF-8", "strict").splitlines():
-        rows, columns = (int(s.strip()) for s in line.split("x", 2))
-        ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, 0, 0))
+    _resize_buffer += data
+    while b"\\n" in _resize_buffer:
+        line, _resize_buffer = _resize_buffer.split(b"\\n", 1)
+        try:
+            rows, columns, pixel_width, pixel_height = (
+                int(s.strip()) for s in line.decode("UTF-8", "strict").split("x")
+            )
+            ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, pixel_width, pixel_height))
+        except (UnicodeDecodeError, ValueError, StructError, OSError):
+            pass
 
 if __name__ == "__main__":
     main()
 `;
-var COMMON_BIN_DIRS2 = [
-  ".opencode/bin",
-  ".local/bin",
-  "bin"
-];
 var WINDOWS_PTY_HOST_JS = String.raw`
 const fs = require("fs");
 const [nativePath, colsText, rowsText, file, ...args] = process.argv.slice(1);
@@ -21744,57 +24804,6 @@ process.on("SIGTERM", () => {
   else process.exit(0);
 });
 `;
-function executableNames(executable) {
-  if (process.platform !== "win32" || path6.extname(executable)) {
-    return [executable];
-  }
-  const extensions = (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
-  return extensions.map((extension2) => `${executable}${extension2}`);
-}
-function isAbsoluteExecutablePath(executable, platform = process.platform) {
-  return (platform === "win32" ? path6.win32 : path6.posix).isAbsolute(executable);
-}
-function resolveExecutablePath(executable, platform = process.platform) {
-  const pathApi = platform === "win32" ? path6.win32 : path6.posix;
-  if (isAbsoluteExecutablePath(executable, platform)) {
-    for (const candidate of executableNames(executable)) {
-      try {
-        fs4.accessSync(candidate, fs4.constants.X_OK);
-        return candidate;
-      } catch (e) {
-        continue;
-      }
-    }
-    return executable;
-  }
-  const pathDirs = (process.env.PATH || "").split(pathApi.delimiter);
-  for (const dir of pathDirs) {
-    if (!dir)
-      continue;
-    for (const candidate of executableNames(executable)) {
-      const fullPath = pathApi.join(dir, candidate);
-      try {
-        fs4.accessSync(fullPath, fs4.constants.X_OK);
-        return fullPath;
-      } catch (e) {
-        continue;
-      }
-    }
-  }
-  const homeDir = os5.homedir();
-  for (const sub of COMMON_BIN_DIRS2) {
-    for (const candidate of executableNames(executable)) {
-      const fullPath = pathApi.join(homeDir, sub, candidate);
-      try {
-        fs4.accessSync(fullPath, fs4.constants.X_OK);
-        return fullPath;
-      } catch (e) {
-        continue;
-      }
-    }
-  }
-  return executable;
-}
 var materializedWindowsPty = /* @__PURE__ */ new Map();
 var materializedWindowsPtyJobHost = null;
 function materializeWindowsPtyNative(architecture) {
@@ -21802,20 +24811,33 @@ function materializeWindowsPtyNative(architecture) {
   if (existing)
     return existing;
   const base64 = architecture === "arm64" ? WINDOWS_PTY_NATIVE_ARM64_BASE64 : WINDOWS_PTY_NATIVE_X64_BASE64;
-  const directory = fs4.mkdtempSync(path6.join(os5.tmpdir(), "obsidian-opencode-"));
-  const nativeModule = path6.join(directory, `zigpty-${architecture}.node`);
-  fs4.writeFileSync(nativeModule, Buffer.from(base64, "base64"), { flag: "wx", mode: 384 });
+  const directory = fs5.mkdtempSync(path7.join(os6.tmpdir(), "obsidian-opencode-"));
+  const nativeModule = path7.join(directory, `zigpty-${architecture}.node`);
+  fs5.writeFileSync(nativeModule, Buffer.from(base64, "base64"), { flag: "wx", mode: 384 });
   materializedWindowsPty.set(architecture, nativeModule);
   return nativeModule;
 }
 function materializeWindowsPtyJobHost() {
   if (materializedWindowsPtyJobHost)
     return materializedWindowsPtyJobHost;
-  const directory = fs4.mkdtempSync(path6.join(os5.tmpdir(), "obsidian-opencode-job-"));
-  const executable = path6.join(directory, "windows-pty-job-host.exe");
-  fs4.writeFileSync(executable, Buffer.from(WINDOWS_PTY_JOB_HOST_BASE64, "base64"), { flag: "wx", mode: 448 });
+  const directory = fs5.mkdtempSync(path7.join(os6.tmpdir(), "obsidian-opencode-job-"));
+  const executable = path7.join(directory, "windows-pty-job-host.exe");
+  fs5.writeFileSync(executable, Buffer.from(WINDOWS_PTY_JOB_HOST_BASE64, "base64"), { flag: "wx", mode: 448 });
   materializedWindowsPtyJobHost = executable;
   return executable;
+}
+function unixTerminalSize(terminal) {
+  var _a, _b, _c, _d;
+  const clamp = (value, minimum) => {
+    const integer = Number.isFinite(value) ? Math.round(value) : minimum;
+    return Math.min(65535, Math.max(minimum, integer));
+  };
+  return [
+    clamp(terminal.rows, 1),
+    clamp(terminal.cols, 1),
+    clamp((_b = (_a = terminal.element) == null ? void 0 : _a.clientWidth) != null ? _b : 0, 0),
+    clamp((_d = (_c = terminal.element) == null ? void 0 : _c.clientHeight) != null ? _d : 0, 0)
+  ].join("x");
 }
 function childExit(child) {
   if (!child || !child.pid || child.exitCode != null || child.signalCode != null)
@@ -21861,19 +24883,19 @@ var PtySession = class {
     var _a, _b, _c, _d, _e, _f, _g;
     this.windowsGracefulExitRequested = false;
     if (process.platform === "win32") {
-      const windowsBuild = Number(os5.release().split(".")[2]);
+      const windowsBuild = Number(os6.release().split(".")[2]);
       if (Number.isFinite(windowsBuild) && windowsBuild > 0 && windowsBuild < 17763) {
         terminal.writeln("\r\nOpenCode requires Windows 10 version 1809 or later for ConPTY support.\r\n");
         return;
       }
     }
-    let executable = resolveExecutablePath(options.opencodePath);
+    let executable = resolveOpencodeExecutable(options.opencodePath);
     let args = [...options.args];
     if (process.platform === "win32" && /\.ps1$/i.test(executable)) {
       args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", executable, ...args];
-      executable = resolveExecutablePath("powershell.exe");
+      executable = resolveOpencodeExecutable("powershell.exe");
     }
-    const isFlatpak = process.platform !== "win32" && (fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID);
+    const isFlatpak = process.platform !== "win32" && (fs5.existsSync("/.flatpak-info") || process.env.FLATPAK_ID);
     const killToken = `opencode-pty-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     if (isFlatpak) {
       const hostEnvironment = {
@@ -21889,7 +24911,7 @@ var PtySession = class {
     if (options.editorPort) {
       env.OPENCODE_EDITOR_SSE_PORT = String(options.editorPort);
     }
-    env.OPENCODE_PTY_INITIAL_SIZE = `${Math.min(65535, Math.max(1, terminal.rows))}x${Math.min(65535, Math.max(1, terminal.cols))}`;
+    env.OPENCODE_PTY_INITIAL_SIZE = unixTerminalSize(terminal);
     if (isFlatpak) {
       env.OPENCODE_PTY_KILL_TOKEN = killToken;
     }
@@ -21897,7 +24919,7 @@ var PtySession = class {
     if (process.platform === "win32") {
       this.backend = 1 /* WindowsConPty */;
       let windowsPtyProcess = null;
-      const nodeExecutable = resolveExecutablePath("node.exe");
+      const nodeExecutable = resolveOpencodeExecutable("node.exe");
       let nodeArchitecture;
       try {
         nodeArchitecture = (0, import_child_process2.execFileSync)(nodeExecutable, ["-p", "process.arch"], {
@@ -21979,7 +25001,7 @@ Unable to start the OpenCode Windows PTY: ${message}\r
       }
     } else {
       this.backend = 0 /* Unix */;
-      ptyProcess = (0, import_child_process2.spawn)(resolveExecutablePath("python3"), ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
+      ptyProcess = (0, import_child_process2.spawn)(resolveOpencodeExecutable("python3"), ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
         cwd: options.cwd,
         env,
         stdio: ["pipe", "pipe", "pipe", "pipe"]
@@ -21989,7 +25011,7 @@ Unable to start the OpenCode Windows PTY: ${message}\r
     (_f = ptyProcess.stdout) == null ? void 0 : _f.on("data", (chunk) => {
       const str = chunk.toString();
       if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-        new import_obsidian8.Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND2}' on your host system to allow command execution.`, 15e3);
+        new import_obsidian8.Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND}' on your host system to allow command execution.`, 15e3);
       }
       const output = this.backend === 1 /* WindowsConPty */ ? stripWindowsConPtyProbeArtifact(str) : chunk;
       if (output.length > 0)
@@ -22015,7 +25037,7 @@ Unable to start the OpenCode Windows PTY: ${message}\r
         terminal.write(chunk);
       }
       if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-        new import_obsidian8.Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND2}' on your host system to allow command execution.`, 15e3);
+        new import_obsidian8.Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND}' on your host system to allow command execution.`, 15e3);
       }
     });
     ptyProcess.on("exit", (code, signal) => {
@@ -22132,7 +25154,7 @@ Error: ${err.message}\r
     }
     const cmdio = (_b = this.ptyProcess.stdio) == null ? void 0 : _b[3];
     if (cmdio && typeof cmdio.write === "function") {
-      cmdio.write(`${rows}x${cols}
+      cmdio.write(`${unixTerminalSize(terminal)}
 `);
     }
   }
@@ -22247,21 +25269,21 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
       }
     });
     this.addCommand({
-      id: "restart-terminal",
-      name: "Restart terminal (reset size)",
-      callback: () => {
-        void this.openOrRestartTerminal();
-      }
-    });
-    this.addCommand({
       id: "close-terminal",
       name: "Close terminal",
       hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: "w" }],
       checkCallback: (checking) => {
         const hasTerminal = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE).length > 0;
         if (hasTerminal && !checking)
-          void this.closeTerminalViews();
+          void this.viewCoordinator.closeTerminal();
         return hasTerminal;
+      }
+    });
+    this.addCommand({
+      id: "restart-terminal",
+      name: "Restart terminal (reset size)",
+      callback: () => {
+        void this.openOrRestartTerminal();
       }
     });
     this.addSettingTab(new OpencodeSettingTab(this.app, this));
@@ -22273,6 +25295,11 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
   }
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+  openSettings() {
+    const settings = this.app.setting;
+    settings == null ? void 0 : settings.open();
+    settings == null ? void 0 : settings.openTabById(this.manifest.id);
   }
   createPtySession() {
     return this.ptySessions.register(new PtySession());
@@ -22301,9 +25328,6 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
   async continueLastSession() {
     this.sessionState.setContinueLastSession();
     await this.openOrRestartTerminal();
-  }
-  async closeTerminalViews() {
-    await this.viewCoordinator.closeTerminalViews();
   }
   async openTerminalWithSession(sessionId, directory) {
     this.sessionState.setOpenSession(sessionId, directory);
@@ -22341,4 +25365,9 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+*/
+/*! Bundled license information:
+
+@xterm/addon-image/lib/addon-image.js:
+  (*! For license information please see addon-image.js.LICENSE.txt *)
 */

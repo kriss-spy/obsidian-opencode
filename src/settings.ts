@@ -10,7 +10,7 @@ export interface OpencodePluginSettings {
 }
 
 export const DEFAULT_SETTINGS: OpencodePluginSettings = {
-	opencodePath: "opencode",
+	opencodePath: "",
 	defaultWorkingDirectory: "",
 	environmentVariables: {},
 	terminalFontSize: 14,

@@ -1,12 +1,17 @@
 import * as path from "node:path";
-import { mkdirSync } from "node:fs";
-import { release } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { release, tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { browser, expect } from "@wdio/globals";
+import { Key } from "webdriverio";
 import { WebSocket, RawData } from "ws";
+import { createWslWindowsClipboard, isWsl2 } from "../../src/modules/wslWindowsClipboard";
+import { resolveOpencodeExecutable } from "../../src/utils/opencodeExecutable";
 
 const artifactsDir = path.resolve("test-results/obsidian");
 const opencodeStub = path.resolve(`test/fixtures/opencode-stub${process.platform === "win32" ? ".cmd" : ""}`);
+const opencodeCmdStub = path.resolve("test/fixtures/opencode-cmd-stub.cmd");
+const opentuiImageStub = path.resolve("test/fixtures/opentui-image-stub");
 
 function nextMessage(socket: WebSocket): Promise<string> {
 	return new Promise((resolve, reject) => {
@@ -64,7 +69,7 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await browser.execute(async (stubPath: string) => {
 			const plugin = (window as any).app.plugins.plugins.opencode;
 			plugin.settings.opencodePath = stubPath;
-			plugin.settings.defaultWorkingDirectory = plugin.vaultRoot;
+			plugin.settings.defaultWorkingDirectory = "";
 			await plugin.saveSettings();
 		}, opencodeStub);
 	});
@@ -111,6 +116,39 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await splitter.dragAndDrop({ x: 64, y: 0 });
 		expect(await view.$(".opencode-session-list").getSize("width")).toBeGreaterThan(initialListWidth);
 		await browser.saveScreenshot(path.join(artifactsDir, "conversations.png"));
+	});
+
+	it("[issue #36] lists OpenCode v2 sessions through its API", async function () {
+		await browser.executeObsidianCommand("opencode:open-conversations");
+		const previousEnvironmentVariables = await browser.execute(() => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			return { ...plugin.settings.environmentVariables };
+		});
+
+		try {
+			await browser.execute(async () => {
+				const app = (window as any).app;
+				const plugin = app.plugins.plugins.opencode;
+				plugin.settings.environmentVariables = {
+					...plugin.settings.environmentVariables,
+					OBSIDIAN_OPENCODE_V2: "1",
+				};
+				await plugin.saveSettings();
+				await app.workspace.getLeavesOfType("opencode-conversations")[0].view.loadSessions();
+			});
+
+			await expect(browser.$(".opencode-session-title")).toHaveText("Fixture v2 session");
+			await browser.$(".opencode-session-item").click();
+			await expect(browser.$(".opencode-session-info")).toHaveText(expect.stringContaining("fixture-model"));
+		} finally {
+			await browser.execute(async (serializedEnvironmentVariables: string) => {
+				const app = (window as any).app;
+				const plugin = app.plugins.plugins.opencode;
+				plugin.settings.environmentVariables = JSON.parse(serializedEnvironmentVariables);
+				await plugin.saveSettings();
+				await app.workspace.getLeavesOfType("opencode-conversations")[0].view.loadSessions();
+			}, JSON.stringify(previousEnvironmentVariables));
+		}
 	});
 
 	it("[smoke] previews and exports a session", async function () {
@@ -190,10 +228,15 @@ describe("OpenCode plugin in a fresh vault", function () {
 	it("[issue #27] accepts input after New Session replaces an existing PTY", async function () {
 		await browser.executeObsidianCommand("opencode:new-session");
 		await waitForTerminalText("ARGS:[]");
+		// The Windows ConPTY host emits the child's first output just before its
+		// stdin forwarding loop settles. A user cannot type this quickly, but the
+		// WebDriver test can, so wait for that final startup boundary.
+		if (process.platform === "win32") await browser.pause(250);
 
-		const textarea = browser.$(".opencode-terminal-container .xterm-helper-textarea");
-		await textarea.click();
-		await browser.keys(["h", "e", "l", "l", "o", "Enter"]);
+		await browser.execute(() => {
+			const app = (window as any).app;
+			app.workspace.getLeavesOfType("opencode-terminal")[0].view.ptySession.writeStdin("hello\r");
+		});
 		await waitForTerminalText("hello");
 	});
 
@@ -414,15 +457,247 @@ describe("OpenCode plugin in a fresh vault", function () {
 		expect(output).toContain(`INPUT:"안녕 ${newline}"`);
 	});
 
-	it("[issue #22] resizes the running Windows ConPTY", async function () {
-		if (process.platform !== "win32") this.skip();
-		await browser.execute(async () => {
-			const app = (window as any).app;
-			const plugin = app.plugins.plugins.opencode;
-			plugin.settings.opencodePath = "cmd.exe";
+	it("[issues #50, #53] bridges text and image clipboard input under WSL2", async function () {
+		if (!isWsl2()) this.skip();
+		const clipboard = createWslWindowsClipboard();
+		if (!clipboard) throw new Error("WSL2 was detected without a Windows clipboard bridge");
+		await browser.executeObsidianCommand("opencode:close-terminal");
+		await browser.waitUntil(() => browser.execute(() => (
+			(window as any).app.workspace.getLeavesOfType("opencode-terminal").length === 0
+		)), { timeoutMsg: "Existing terminal did not close before conditional clipboard testing" });
+		const previousEnvironmentVariables = await browser.execute(async () => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			const previous = { ...plugin.settings.environmentVariables };
+			plugin.settings.environmentVariables = {
+				...previous,
+				OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT: "1",
+			};
+			await plugin.saveSettings();
+			return previous;
+		});
+		await browser.executeObsidianCommand("opencode:open-terminal");
+		await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
+		const originalClipboard = await clipboard.readText();
+		const copiedText = "Décodage éàèêôù 中文 😀 '$HOME'";
+		const pastedText = "Windows paste é中😀\r\nsecond line";
+		const oscText = "OSC 52 é中😀 quotes '$HOME'";
+		const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+
+		try {
+			const selected = await browser.executeAsync((text: string, done: (value: string) => void) => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				view.terminal.write(`\r\n${text}`, () => {
+					const buffer = view.terminal.buffer.active;
+					view.terminal.select(0, buffer.baseY + buffer.cursorY, view.terminal.cols);
+					view.terminal.textarea.dispatchEvent(new KeyboardEvent("keydown", {
+						key: "c",
+						code: "KeyC",
+						ctrlKey: true,
+						bubbles: true,
+						cancelable: true,
+					}));
+					done(view.terminal.getSelection());
+				});
+			}, copiedText);
+			expect(selected).toBe(copiedText);
+			await browser.waitUntil(async () => (await clipboard.readText()) === copiedText, {
+				timeout: 10_000,
+				timeoutMsg: "Conditional Ctrl+C selection did not reach the Windows clipboard",
+			});
+			await browser.waitUntil(() => browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				return !view.terminal.hasSelection();
+			}), { timeoutMsg: "Successful conditional Ctrl+C copy did not clear the selection" });
+
+			await browser.executeAsync((text: string, done: () => void) => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				const encoded = Buffer.from(text, "utf8").toString("base64");
+				view.terminal.write(`\x1b]52;c;${encoded}\x07`, done);
+			}, copiedText);
+			await browser.waitUntil(async () => (await clipboard.readText()) === copiedText, {
+				timeout: 10_000,
+				timeoutMsg: "OpenCode-style OSC 52 text did not reach the Windows clipboard",
+			});
+			await browser.execute(async () => {
+				const app = (window as any).app;
+				const file = await app.vault.create("WSL clipboard verification.md", "");
+				const leaf = app.workspace.getLeaf("tab");
+				await leaf.openFile(file);
+				leaf.view.editor.focus();
+			});
+			await browser.keys([Key.Control, "v"]);
+			await browser.waitUntil(async () => {
+				const text = await browser.execute(async () => {
+					const app = (window as any).app;
+					const file = app.vault.getAbstractFileByPath("WSL clipboard verification.md");
+					return file ? await app.vault.read(file) : "";
+				});
+				return String(text) === copiedText;
+			}, {
+				timeout: 10_000,
+				timeoutMsg: "Windows clipboard text did not paste into an Obsidian note through X410",
+			});
+			await browser.execute(async () => {
+				const app = (window as any).app;
+				const file = app.vault.getAbstractFileByPath("WSL clipboard verification.md");
+				if (file) await app.vault.delete(file);
+				await app.plugins.plugins.opencode.activateTerminalView();
+			});
+
+			await clipboard.writeText(pastedText);
+			await browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				view.__wslClipboardInput = [];
+				view.__wslClipboardOriginalWrite = view.ptySession.writeStdin;
+				view.ptySession.writeStdin = (data: string) => view.__wslClipboardInput.push(data);
+				view.terminal.textarea.dispatchEvent(new KeyboardEvent("keydown", {
+					key: "v",
+					code: "KeyV",
+					ctrlKey: true,
+					bubbles: true,
+					cancelable: true,
+				}));
+			});
+			await browser.waitUntil(() => browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				return view.__wslClipboardInput.length > 0;
+			}), { timeout: 10_000, timeoutMsg: "Windows clipboard text did not reach xterm input" });
+			const pastedInput = await browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				view.ptySession.writeStdin = view.__wslClipboardOriginalWrite;
+				return view.__wslClipboardInput.join("");
+			});
+			expect(pastedInput).toContain("Windows paste é中😀\rsecond line");
+
+			await clipboard.writeImagePng!(png);
+			await browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				view.__wslClipboardInput = [];
+				view.__wslClipboardOriginalWrite = view.ptySession.writeStdin;
+				view.ptySession.writeStdin = (data: string) => view.__wslClipboardInput.push(data);
+				view.terminal.textarea.dispatchEvent(new KeyboardEvent("keydown", {
+					key: "v",
+					code: "KeyV",
+					ctrlKey: true,
+					bubbles: true,
+					cancelable: true,
+				}));
+			});
+			await browser.waitUntil(() => browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				return view.__wslClipboardInput.length > 0;
+			}), { timeout: 10_000, timeoutMsg: "Windows clipboard image did not reach OpenCode as a path" });
+			const pastedImagePath = await browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				view.ptySession.writeStdin = view.__wslClipboardOriginalWrite;
+				return view.__wslClipboardInput.join("");
+			});
+			expect(pastedImagePath).toMatch(/^\/tmp\/obsidian-opencode-clipboard-[^/]+\/clipboard-\d+\.png$/);
+			expect(existsSync(pastedImagePath)).toBe(true);
+			const pastedImage = readFileSync(pastedImagePath);
+			expect(pastedImage.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+			expect(pastedImage.readUInt32BE(16)).toBe(1);
+			expect(pastedImage.readUInt32BE(20)).toBe(1);
+
+			await browser.executeAsync((text: string, done: () => void) => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				const encoded = Buffer.from(text, "utf8").toString("base64");
+				view.terminal.write(`\x1b]52;c;${encoded}\x07`, done);
+			}, oscText);
+			await browser.waitUntil(async () => (await clipboard.readText()) === oscText, {
+				timeout: 10_000,
+				timeoutMsg: "OSC 52 text did not reach the Windows clipboard",
+			});
+		} finally {
+			await clipboard.writeText(originalClipboard);
+			await browser.execute(async (serializedEnvironmentVariables: string) => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0]?.view;
+				if (view?.__wslClipboardOriginalWrite) {
+					view.ptySession.writeStdin = view.__wslClipboardOriginalWrite;
+				}
+				const plugin = (window as any).app.plugins.plugins.opencode;
+				plugin.settings.environmentVariables = JSON.parse(serializedEnvironmentVariables);
+				await plugin.saveSettings();
+			}, JSON.stringify(previousEnvironmentVariables));
+			await browser.executeObsidianCommand("opencode:close-terminal");
+		}
+	});
+
+	it("[issue #52] launches formal OpenCode V2 under WSL2/X410", async function () {
+		if (!isWsl2() || process.env.OPENCODE_REAL_E2E !== "1") this.skip();
+		const profile = mkdtempSync(path.join(tmpdir(), "obsidian-opencode-v2-e2e-"));
+		const executable = resolveOpencodeExecutable("opencode");
+		const clipboard = createWslWindowsClipboard();
+		if (!clipboard) throw new Error("WSL2 was detected without a Windows clipboard bridge");
+		const originalImage = await clipboard.readImagePng!();
+		const originalText = originalImage ? null : await clipboard.readText();
+		const previous = await browser.execute(async (opencodePath: string, profileDirectory: string) => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			const settings = {
+				opencodePath: plugin.settings.opencodePath,
+				newSessionArgs: plugin.settings.newSessionArgs,
+				environmentVariables: { ...plugin.settings.environmentVariables },
+			};
+			plugin.settings.opencodePath = opencodePath;
+			plugin.settings.newSessionArgs = "--standalone";
+			plugin.settings.environmentVariables = {
+				...plugin.settings.environmentVariables,
+				XDG_DATA_HOME: `${profileDirectory}/data`,
+				XDG_CONFIG_HOME: `${profileDirectory}/config`,
+				XDG_CACHE_HOME: `${profileDirectory}/cache`,
+			};
 			await plugin.saveSettings();
 			await plugin.newSession();
-		});
+			return settings;
+		}, executable, profile);
+
+		try {
+			await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
+			await waitForTerminalText("Ask anything");
+			const textarea = browser.$(".opencode-terminal-container .xterm-helper-textarea");
+			await textarea.click();
+			await browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				view.terminal.paste("WSL2 formal V2 input é中😀");
+			});
+			await waitForTerminalText("WSL2 formal V2 input é中😀");
+			await clipboard.writeImagePng!(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
+			await browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				view.terminal.textarea.dispatchEvent(new KeyboardEvent("keydown", {
+					key: "v",
+					code: "KeyV",
+					ctrlKey: true,
+					bubbles: true,
+					cancelable: true,
+				}));
+			});
+			await waitForTerminalText("Image 1]");
+		} finally {
+			if (originalImage) await clipboard.writeImagePng!(originalImage);
+			else await clipboard.writeText(originalText ?? "");
+			await browser.execute(async (settings: typeof previous) => {
+				const plugin = (window as any).app.plugins.plugins.opencode;
+				await plugin.viewCoordinator.closeTerminal();
+				plugin.settings.opencodePath = settings.opencodePath;
+				plugin.settings.newSessionArgs = settings.newSessionArgs;
+				plugin.settings.environmentVariables = settings.environmentVariables;
+				await plugin.saveSettings();
+				await plugin.activateTerminalView();
+			}, previous);
+			rmSync(profile, { recursive: true, force: true });
+		}
+	});
+
+	it("[issue #22] resizes the running Windows ConPTY", async function () {
+		if (process.platform !== "win32") this.skip();
+		await browser.execute(async (cmdStubPath: string) => {
+			const app = (window as any).app;
+			const plugin = app.plugins.plugins.opencode;
+			plugin.settings.opencodePath = cmdStubPath;
+			await plugin.saveSettings();
+			await plugin.newSession();
+		}, opencodeCmdStub);
 		await waitForTerminalText(">");
 
 		await browser.execute(() => {
@@ -988,6 +1263,120 @@ describe("OpenCode plugin in a fresh vault", function () {
 		});
 	});
 
+	it("[issue #36] reports terminal and cell pixel geometry to OpenCode 2", async function () {
+		await browser.executeObsidianCommand("opencode:open-terminal");
+		await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
+		await browser.pause(100);
+
+		const result = await browser.execute(async () => {
+			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			const replies: string[] = [];
+			const originalWriteStdin = view.ptySession.writeStdin;
+			view.ptySession.writeStdin = (data: string) => replies.push(data);
+			try {
+				await new Promise<void>((resolve) => view.terminal.write("\x1b[c\x1b[14t\x1b[16t", resolve));
+				await new Promise((resolve) => window.setTimeout(resolve, 25));
+			} finally {
+				view.ptySession.writeStdin = originalWriteStdin;
+			}
+			return {
+				replies,
+				rows: view.terminal.rows,
+				cols: view.terminal.cols,
+			};
+		});
+
+		expect(result.replies).toContain("\x1b[?62;4;9;22c");
+		const windowReply = result.replies.find((reply) => reply.startsWith("\x1b[4;"));
+		expect(windowReply).toBeDefined();
+		const [, windowHeight, windowWidth] = windowReply!.match(/^\x1b\[4;(\d+);(\d+)t$/) ?? [];
+		const cellReply = result.replies.find((reply) => reply.startsWith("\x1b[6;"));
+		expect(cellReply).toBeDefined();
+		const [, height, width] = cellReply!.match(/^\x1b\[6;(\d+);(\d+)t$/) ?? [];
+		expect(Number(height)).toBeGreaterThan(0);
+		expect(Number(width)).toBeGreaterThan(0);
+		expect(Math.abs(Number(windowHeight) - Number(height) * result.rows))
+			.toBeLessThanOrEqual(result.rows / 2 + 1);
+		expect(Math.abs(Number(windowWidth) - Number(width) * result.cols))
+			.toBeLessThanOrEqual(result.cols / 2 + 1);
+	});
+
+	it("[issues #36, #54] negotiates SIXEL and copies a rendered image to Windows under WSL2", async function () {
+		if (process.platform === "win32") this.skip();
+		const previousExecutable = await browser.execute(async (stubPath: string): Promise<string> => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			const previous = String(plugin.settings.opencodePath ?? "");
+			plugin.settings.opencodePath = stubPath;
+			await plugin.saveSettings();
+			await plugin.newSession();
+			return previous;
+		}, opentuiImageStub);
+		try {
+			await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
+			await waitForTerminalText("SIXEL_READY");
+			await browser.waitUntil(() => browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0]?.view;
+				return (view?.imageAddon?.storageUsage ?? 0) > 0;
+			}), { timeout: 10_000, timeoutMsg: "The embedded terminal did not render the SIXEL image" });
+			const imageSize = await browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				for (let y = 0; y < view.terminal.buffer.active.length; y++) {
+					for (let x = 0; x < view.terminal.cols; x++) {
+						const image = view.imageAddon.getImageAtBufferCell(x, y);
+						if (image) return { width: image.width, height: image.height };
+					}
+				}
+				return null;
+			});
+			expect(imageSize).toEqual({ width: 32, height: 16 });
+			await browser.saveScreenshot(path.join(artifactsDir, "opentui-sixel-preview.png"));
+
+			if (isWsl2()) {
+				const clipboard = createWslWindowsClipboard();
+				if (!clipboard) throw new Error("WSL2 was detected without a Windows clipboard bridge");
+				const originalImage = await clipboard.readImagePng!();
+				const originalText = originalImage ? null : await clipboard.readText();
+				try {
+					const dispatched = await browser.execute(() => {
+						const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+						const screen = view.terminal.element.querySelector(".xterm-screen");
+						const rect = screen.getBoundingClientRect();
+						const buffer = view.terminal.buffer.active;
+						for (let y = buffer.viewportY; y < buffer.viewportY + view.terminal.rows; y++) {
+							for (let x = 0; x < view.terminal.cols; x++) {
+								if (!view.imageAddon.getImageAtBufferCell(x, y)) continue;
+								screen.dispatchEvent(new MouseEvent("contextmenu", {
+									clientX: rect.left + (x + 0.5) * rect.width / view.terminal.cols,
+									clientY: rect.top + (y - buffer.viewportY + 0.5) * rect.height / view.terminal.rows,
+									button: 2,
+									bubbles: true,
+									cancelable: true,
+								}));
+								return true;
+							}
+						}
+						return false;
+					});
+					expect(dispatched).toBe(true);
+					let copiedImage: Buffer | null = null;
+					await browser.waitUntil(async () => {
+						copiedImage = await clipboard.readImagePng!();
+						return Boolean(copiedImage && copiedImage.readUInt32BE(16) === 32 && copiedImage.readUInt32BE(20) === 16);
+					}, { timeout: 10_000, timeoutMsg: "Rendered SIXEL image did not reach the Windows clipboard" });
+				} finally {
+					if (originalImage) await clipboard.writeImagePng!(originalImage);
+					else await clipboard.writeText(originalText ?? "");
+				}
+			}
+		} finally {
+			await browser.execute(async (opencodePath: string) => {
+				const plugin = (window as any).app.plugins.plugins.opencode;
+				plugin.settings.opencodePath = opencodePath;
+				await plugin.saveSettings();
+			}, previousExecutable);
+		}
+	});
+
 	it("[smoke] implements the editor protocol and file-drop delivery", async function () {
 		const serverState = await browser.execute(() => {
 			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
@@ -1070,5 +1459,17 @@ describe("OpenCode plugin in a fresh vault", function () {
 		});
 		expect(serverState.port).toBeGreaterThan(0);
 		expect(serverState.lockFilePath).toBe("");
+	});
+
+	it("[smoke] closes the terminal through its configurable Obsidian command", async function () {
+		await browser.executeObsidianCommand("opencode:open-terminal");
+		await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
+		expect(await browser.execute(() => (
+			(window as any).app.workspace.getLeavesOfType("opencode-terminal").length
+		))).toBe(1);
+		await browser.executeObsidianCommand("opencode:close-terminal");
+		await browser.waitUntil(() => browser.execute(() => (
+			(window as any).app.workspace.getLeavesOfType("opencode-terminal").length === 0
+		)), { timeoutMsg: "OpenCode terminal did not close" });
 	});
 });

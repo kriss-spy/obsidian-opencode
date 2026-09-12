@@ -3,14 +3,34 @@
 const { createHash } = require("node:crypto");
 const args = process.argv.slice(2);
 
-if (args.slice(0, 2).join(" ") === "session list") {
+if (args[0] === "--help") {
+	console.log(process.env.OBSIDIAN_OPENCODE_V2
+		? "DESCRIPTION\n  OpenCode command line interface"
+		: "opencode [project]  start opencode tui");
+} else if (process.env.OBSIDIAN_OPENCODE_V2 && args[0] === "api" && args[1] === "get" && args[2]?.startsWith("/api/session?directory=")) {
+	console.log(JSON.stringify({
+		data: [{
+			id: "fixture-v2-session",
+			title: "Fixture v2 session",
+			projectID: "fixture-v2-project",
+			location: { directory: process.cwd() },
+			time: { created: 1_700_000_000_000, updated: 1_700_000_002_000 },
+		}],
+		cursor: {},
+	}));
+} else if (args.slice(0, 2).join(" ") === "session list") {
+	if (process.env.OBSIDIAN_OPENCODE_V2) {
+		console.error("Unrecognized flag: --format in command opencode2");
+		process.exit(1);
+	}
 	console.log(JSON.stringify(process.env.OBSIDIAN_OPENCODE_EMPTY_SESSIONS ? [] : [{
 		id: "fixture-session",
 		title: "Fixture session",
 		directory: process.cwd(),
 		updated: 1_700_000_000_000,
 	}]));
-} else if (args[0] === "export" && args[1] === "fixture-session") {
+} else if ((args[0] === "export" && args[1] === "fixture-session")
+	|| (args.slice(0, 2).join(" ") === "session export" && args[2] === "fixture-v2-session")) {
 	console.log(JSON.stringify({
 		info: {
 			model: { id: "fixture-model" },

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { Hotkey } from "obsidian";
+import type { OpenCodeCliGeneration } from "../utils/opencodeExecutable";
 
 type KeyStroke = {
 	name: string;
@@ -14,6 +15,10 @@ type KeyStroke = {
 
 type Binding = string | KeyStroke | { key: string | KeyStroke } | false;
 type BindingValue = Binding | Binding[];
+type TuiConfig = {
+	keybinds?: Record<string, BindingValue>;
+	terminal?: { copy?: unknown };
+};
 
 // Snapshot of OpenCode's non-empty defaults. Configured keys not present here are
 // still accepted, so commands whose upstream default is `none` can be enabled.
@@ -205,7 +210,7 @@ function parseJsonc(text: string): unknown {
 	return JSON.parse(withoutTrailingCommas);
 }
 
-function readOverrides(file: string, env: NodeJS.ProcessEnv): Record<string, BindingValue> {
+function readConfig(file: string, env: NodeJS.ProcessEnv): TuiConfig {
 	try {
 		let source = fs.readFileSync(file, "utf8").replace(/\{env:([^}]+)\}/g, (_, name: string) => env[name] ?? "");
 		source = source.replace(/\{file:([^}]+)\}/g, (token: string, reference: string, offset: number) => {
@@ -220,18 +225,26 @@ function readOverrides(file: string, env: NodeJS.ProcessEnv): Record<string, Bin
 				return "";
 			}
 		});
-		const parsed = parseJsonc(source) as { keybinds?: unknown };
-		return parsed && typeof parsed.keybinds === "object" && parsed.keybinds
-			? parsed.keybinds as Record<string, BindingValue>
-			: {};
+		const parsed = parseJsonc(source);
+		return parsed && typeof parsed === "object" ? parsed as TuiConfig : {};
 	} catch {
 		return {};
 	}
 }
 
+function readOverrides(file: string, env: NodeJS.ProcessEnv): Record<string, BindingValue> {
+	const keybinds = readConfig(file, env).keybinds;
+	return keybinds && typeof keybinds === "object" ? keybinds : {};
+}
+
 function configFiles(cwd: string, env: NodeJS.ProcessEnv): string[] {
 	const configHome = env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
-	const files = [path.join(configHome, "opencode", "tui.json"), path.join(configHome, "opencode", "tui.jsonc")];
+	const files = [
+		path.join(configHome, "opencode", "cli.json"),
+		path.join(configHome, "opencode", "cli.jsonc"),
+		path.join(configHome, "opencode", "tui.json"),
+		path.join(configHome, "opencode", "tui.jsonc"),
+	];
 	if (env.OPENCODE_TUI_CONFIG) files.push(env.OPENCODE_TUI_CONFIG);
 
 	const ancestors: string[] = [];
@@ -260,4 +273,29 @@ export function loadOpenCodeHotkeys(cwd: string, env: NodeJS.ProcessEnv = proces
 	const overrides: Record<string, BindingValue> = {};
 	for (const file of configFiles(cwd, env)) Object.assign(overrides, readOverrides(file, env));
 	return resolveOpenCodeHotkeys(overrides);
+}
+
+export function loadOpenCodeManualCopy(
+	cwd: string,
+	env: NodeJS.ProcessEnv = process.env,
+	generation: OpenCodeCliGeneration = "stable",
+): boolean {
+	const legacyFlag = /^(1|true)$/i.test(env.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ?? "");
+	if (generation === "stable") return legacyFlag;
+
+	const configHome = env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+	const cliFiles = [
+		path.join(configHome, "opencode", "cli.json"),
+		path.join(configHome, "opencode", "cli.jsonc"),
+	];
+	const files = cliFiles.some((file) => fs.existsSync(file))
+		? cliFiles
+		: configFiles(cwd, env).filter((file) => !cliFiles.includes(file));
+	let copyMode: "manual" | "select" | undefined;
+	for (const file of files) {
+		const configured = readConfig(file, env).terminal?.copy;
+		if (configured === "manual" || configured === "select") copyMode = configured;
+	}
+	if (copyMode) return copyMode === "manual";
+	return legacyFlag;
 }

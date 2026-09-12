@@ -3,7 +3,12 @@ import OpencodePlugin from "./main";
 import { parseEnvironmentVariables, serializeEnvironmentVariables } from "./utils/environment";
 
 const environmentVariableFormat = "NAME=value";
-const environmentVariableExample = "OPENCODE_CONFIG_DIR=/home/user/.config/opencode-vault";
+const environmentVariableExample = [
+	"EDITOR=/usr/bin/nvim",
+	"VISUAL=/usr/bin/nvim",
+	"GIT_EDITOR=/usr/bin/nvim",
+	"OPENCODE_DISABLE_TERMINAL_TITLE=1",
+].join("\n");
 
 export class OpencodeSettingTab extends PluginSettingTab {
 	plugin: OpencodePlugin;
@@ -19,13 +24,13 @@ export class OpencodeSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName("Opencode path")
-			.setDesc("Full absolute path to the opencode executable. Obsidian may not inherit your shell path.")
+			.setDesc("Leave empty to auto-detect OpenCode, or enter an executable name, ~/ path, or full path.")
 			.addText((text) =>
 				text
 					.setPlaceholder("Opencode")
 					.setValue(this.plugin.settings.opencodePath)
 					.onChange(async (value) => {
-						this.plugin.settings.opencodePath = value || "opencode";
+						this.plugin.settings.opencodePath = value.trim();
 						await this.plugin.saveSettings();
 					})
 			);

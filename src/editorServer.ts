@@ -121,7 +121,7 @@ export class EditorServer {
 		return this.wss !== null;
 	}
 
-	notifyAtMentioned(filePath: string, lineStart?: number, lineEnd?: number): void {
+	notifyAtMentioned(filePath: string, lineStart?: number, lineEnd?: number): boolean {
 		const msg = {
 			jsonrpc: "2.0",
 			method: "at_mentioned",
@@ -132,10 +132,17 @@ export class EditorServer {
 			},
 		};
 		const payload = JSON.stringify(msg);
+		let queued = false;
 		for (const client of this.clients) {
 			if (client.readyState === WebSocket.OPEN) {
-				client.send(payload);
+				try {
+					client.send(payload);
+					queued = true;
+				} catch {
+					// A client can close between the ready-state check and send.
+				}
 			}
 		}
+		return queued;
 	}
 }

@@ -2,6 +2,16 @@
 
 A plugin that embeds the OpenCode CLI directly into Obsidian. Browse conversation history and resume work without leaving your vault.
 
+## Demo
+
+Work with vault notes and OpenCode side by side:
+
+![A waterfall-model note open beside an OpenCode conversation in Obsidian](docs/assets/obsidian-opencode-side-by-side.png)
+
+Use OpenCode 2's multi-session interface in a full Obsidian editor tab:
+
+![OpenCode 2 showing vertical session tabs inside Obsidian](docs/assets/obsidian-opencode-v2-sessions.png)
+
 ## Features
 
 - **Native OpenCode Execution:** Runs the OpenCode CLI directly inside Obsidian using an integrated terminal, ensuring smooth performance for long sessions.
@@ -16,6 +26,7 @@ A plugin that embeds the OpenCode CLI directly into Obsidian. Browse conversatio
 ## Platform Support
 
 - **Linux**: stable on my daily driver, not tested on all distros.
+- **WSL2/X410**: Supported with the Linux Obsidian app and formal OpenCode V2. Text copy/paste, OSC 52, Windows clipboard image paste, and copying rendered terminal images use a Unicode-safe Windows PowerShell bridge. WSLg is outside this support contract.
 - **Windows**: Beta support on Windows 10 version 1809 and later through ConPTY. Node.js must be available on `PATH` for the isolated PTY helper.
 - **macOS**: Experimental.
 
@@ -38,7 +49,9 @@ A plugin that embeds the OpenCode CLI directly into Obsidian. Browse conversatio
 
 - **Terminal:** Use the command palette (`Ctrl/Cmd + P`) and select **"OpenCode: Open Terminal"** to launch the CLI.
 - **Sessions View:** Use the command palette to select **"OpenCode: Open conversations"** to browse, restore, or export past conversations, or start a new session from the panel header.
-- **Settings:** Configure the **full absolute path** to your `opencode` executable, default CLI arguments, per-vault environment variables, and terminal styling preferences (font size/family) in the Obsidian settings under the "OpenCode" tab. Environment values are passed literally. Do not rely on a command name from your shell `PATH`, because desktop-launched Obsidian may not inherit your shell environment.
+- **Close terminal:** Run **"OpenCode: Close terminal"** or press `Ctrl+Shift+W`. The shortcut can be changed in Obsidian's Hotkeys settings.
+- **Settings:** Leave the OpenCode path empty to auto-detect a compatible OpenCode installation, or configure `opencode`, `opencode2`, a `~/…` path, or a full executable path. Bare executable names are resolved from `PATH`, common user-local directories, and NVM installations: nvm-sh version directories on Unix, or the active `NVM_SYMLINK` and installed versions under `NVM_HOME` on Windows. Shell aliases are not executable paths and cannot be launched directly. Default CLI arguments, per-vault environment variables, and terminal styling preferences are available in the Obsidian settings under the "OpenCode" tab.
+- **WSL2 clipboard:** With Linux Obsidian displayed through X410, selecting text uses OpenCode's default copy-on-select behavior, and the plugin forwards its OSC 52 copy to Windows. For manual copy, set `terminal.copy` to `"manual"` in OpenCode V2's TUI config (`cli.json` in 2.0.1 or `tui.json` in newer builds); the legacy `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT=1` environment flag is also recognized for older OpenCode releases. In manual mode, `Ctrl+C` copies an active terminal selection through the Windows bridge; without a selection it remains an OpenCode interrupt. `Ctrl+V` prefers a Windows clipboard image and otherwise pastes Unicode text. Right-click a rendered terminal image to copy it to the Windows clipboard. PowerShell interop errors appear as Obsidian notices.
 
 ## Development
 
@@ -59,6 +72,10 @@ Use `npm run test:obsidian:smoke` for the smaller baseline suite. Windows contri
 See [Testing in Obsidian](docs/testing-obsidian.md) for setup, coverage, evidence, and limitations.
 
 ## Known Issues
+
+- **Empty external-editor prompts are not applied:** In both OpenCode 1 and OpenCode V2, opening the prompt in an external editor, deleting all content, and saving leaves the previous prompt in place. This also reproduces when OpenCode runs outside Obsidian, so it must be fixed upstream.
+
+- **OpenCode V2 can time out while pasting large images:** This reproduces in both the embedded terminal and standalone OpenCode V2, so it is not caused by the plugin. A V2 preview build configured clipboard reads with a 1-second timeout and an 8 MiB read limit; a 54.5 MB, 2720 x 18447 PNG reports `Clipboard read timed out`. Its separate local-file attachment limit is 20 MiB, so attaching that same file by path is also unsupported. OpenCode 1.4.6 on Linux reads image data through `wl-paste` without those explicit clipboard limits, so the large image may work there, but that comparison has not yet been verified manually.
 
 - **large session preview:** While the buffer size for exporting sessions has been increased (up to 100MB), exceptionally large or deeply complex OpenCode sessions with massive token counts may still occasionally fail to preview or load properly.
 

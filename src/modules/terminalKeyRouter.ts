@@ -1,6 +1,7 @@
 import { Terminal } from "@xterm/xterm";
 import { App, Hotkey, Scope } from "obsidian";
 import { normalizeObsidianHotkey } from "./openCodeKeymap";
+import { decodeOsc52ClipboardSet, TerminalClipboard } from "./wslWindowsClipboard";
 
 interface HotkeyManagerInternals {
 	defaultKeys?: Record<string, Hotkey[] | undefined>;
@@ -17,6 +18,10 @@ export interface KeyRouterContext {
 	terminal: Terminal;
 	container: HTMLElement;
 	reservedTerminalHotkeys: ReadonlySet<string>;
+	clipboard?: TerminalClipboard;
+	copySelectionOnCtrlC?: boolean | (() => boolean);
+	onClipboardError?: (message: string) => void;
+	onClipboardImagePaste?: (png: Buffer) => void | Promise<void>;
 }
 
 export class TerminalKeyRouter {
@@ -24,7 +29,87 @@ export class TerminalKeyRouter {
 
 	register(context: KeyRouterContext): void {
 		this.registerShortcutScope(context);
-		this.registerPasteHandler(context);
+		if (context.clipboard) {
+			this.registerWslClipboard(context);
+		} else {
+			this.registerPasteHandler(context);
+		}
+	}
+
+	private registerWslClipboard(context: KeyRouterContext): void {
+		const { clipboard, container, terminal } = context;
+		if (!clipboard) return;
+
+		const reportFailure = (error: unknown) => {
+			const detail = error instanceof Error ? error.message : String(error);
+			context.onClipboardError?.(`Windows clipboard: ${detail}`);
+		};
+		const normalizePaste = (text: string) => text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+		const copySelection = () => {
+			const manualCopy = typeof context.copySelectionOnCtrlC === "function"
+				? context.copySelectionOnCtrlC()
+				: context.copySelectionOnCtrlC;
+			if (!manualCopy || !terminal.hasSelection()) return false;
+			const selection = terminal.getSelection();
+			void clipboard.writeText(selection).then(() => {
+				if (terminal.getSelection() === selection) terminal.clearSelection();
+			}, reportFailure);
+			return true;
+		};
+		const pasteFromWindows = () => {
+			void (async () => {
+				if (clipboard.readImagePng && context.onClipboardImagePaste) {
+					const image = await clipboard.readImagePng();
+					if (image) {
+						await context.onClipboardImagePaste(image);
+						return;
+					}
+				}
+				const text = await clipboard.readText();
+				if (text) terminal.paste(normalizePaste(text));
+			})().catch(reportFailure);
+		};
+		const stop = (event: Event) => {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+		};
+
+		const keydownHandler = (event: KeyboardEvent) => {
+			if (event.defaultPrevented || event.isComposing || !event.ctrlKey || event.altKey || event.metaKey) return;
+			const key = event.key.toLowerCase();
+			if (key === "c") {
+				if (!copySelection()) return;
+				stop(event);
+			} else if (key === "v") {
+				stop(event);
+				pasteFromWindows();
+			}
+		};
+		const pasteHandler = (event: ClipboardEvent) => {
+			if (event.defaultPrevented) return;
+			if (!container.contains(event.target as Node)) return;
+			stop(event);
+			pasteFromWindows();
+		};
+
+		container.addEventListener("keydown", keydownHandler, true);
+		container.addEventListener("paste", pasteHandler, true);
+		this.disposers.push(() => {
+			container.removeEventListener("keydown", keydownHandler, true);
+			container.removeEventListener("paste", pasteHandler, true);
+		});
+
+		const osc52 = terminal.parser.registerOscHandler(52, async (data) => {
+			const text = decodeOsc52ClipboardSet(data);
+			if (text === null) return true;
+			try {
+				await clipboard.writeText(text);
+			} catch (error) {
+				reportFailure(error);
+			}
+			return true;
+		});
+		this.disposers.push(() => osc52.dispose());
 	}
 
 	private registerShortcutScope(context: KeyRouterContext): void {

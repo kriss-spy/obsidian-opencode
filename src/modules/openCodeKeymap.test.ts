@@ -3,7 +3,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Hotkey } from "obsidian";
-import { loadOpenCodeHotkeys, normalizeObsidianHotkey, resolveOpenCodeHotkeys } from "./openCodeKeymap";
+import {
+	loadOpenCodeHotkeys,
+	loadOpenCodeManualCopy,
+	normalizeObsidianHotkey,
+	resolveOpenCodeHotkeys,
+} from "./openCodeKeymap";
 
 const temporaryDirectories: string[] = [];
 afterEach(() => {
@@ -65,6 +70,61 @@ describe("OpenCode keymap", () => {
 		});
 		expect(keys).not.toContain("ctrl+p");
 		expect(keys).toContain("ctrl+x");
+	});
+
+	it("loads formal V2 manual-copy mode from TUI config", () => {
+		const directory = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-keymap-"));
+		temporaryDirectories.push(directory);
+		const config = path.join(directory, "tui.json");
+		fs.writeFileSync(config, JSON.stringify({ terminal: { copy: "manual" } }));
+
+		expect(loadOpenCodeManualCopy(directory, {
+			XDG_CONFIG_HOME: path.join(directory, "missing"),
+			OPENCODE_TUI_CONFIG: config,
+		}, "v2")).toBe(true);
+	});
+
+	it("loads manual-copy mode from OpenCode 2.0's transitional CLI config", () => {
+		const directory = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-keymap-"));
+		temporaryDirectories.push(directory);
+		const configDirectory = path.join(directory, "opencode");
+		fs.mkdirSync(configDirectory);
+		fs.writeFileSync(path.join(configDirectory, "cli.json"), JSON.stringify({
+			terminal: { copy: "manual" },
+		}));
+
+		expect(loadOpenCodeManualCopy(directory, {
+			XDG_CONFIG_HOME: directory,
+		}, "v2")).toBe(true);
+	});
+
+	it("does not mix conflicting V2 CLI and TUI copy modes", () => {
+		const directory = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-keymap-"));
+		temporaryDirectories.push(directory);
+		const configDirectory = path.join(directory, "opencode");
+		fs.mkdirSync(configDirectory);
+		fs.writeFileSync(path.join(configDirectory, "cli.json"), JSON.stringify({
+			terminal: { copy: "manual" },
+		}));
+		const staleTuiConfig = path.join(directory, "tui.json");
+		fs.writeFileSync(staleTuiConfig, JSON.stringify({ terminal: { copy: "select" } }));
+		const environment = {
+			XDG_CONFIG_HOME: directory,
+			OPENCODE_TUI_CONFIG: staleTuiConfig,
+		};
+
+		expect(loadOpenCodeManualCopy(directory, environment, "v2")).toBe(true);
+		expect(loadOpenCodeManualCopy(directory, environment, "stable")).toBe(false);
+	});
+
+	it("supports the legacy copy-on-select environment flag when no V2 mode is configured", () => {
+		const directory = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-keymap-"));
+		temporaryDirectories.push(directory);
+
+		expect(loadOpenCodeManualCopy(directory, {
+			XDG_CONFIG_HOME: path.join(directory, "missing"),
+			OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT: "1",
+		})).toBe(true);
 	});
 
 	it("preserves commas before bracket keys inside JSONC strings", () => {

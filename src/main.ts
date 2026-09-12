@@ -105,20 +105,20 @@ export default class OpencodePlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: "restart-terminal",
-			name: "Restart terminal (reset size)",
-			callback: () => { void this.openOrRestartTerminal(); },
-		});
-
-		this.addCommand({
 			id: "close-terminal",
 			name: "Close terminal",
 			hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: "w" }],
 			checkCallback: (checking) => {
 				const hasTerminal = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE).length > 0;
-				if (hasTerminal && !checking) void this.closeTerminalViews();
+				if (hasTerminal && !checking) void this.viewCoordinator.closeTerminal();
 				return hasTerminal;
 			},
+		});
+
+		this.addCommand({
+			id: "restart-terminal",
+			name: "Restart terminal (reset size)",
+			callback: () => { void this.openOrRestartTerminal(); },
 		});
 
 		this.addSettingTab(new OpencodeSettingTab(this.app, this));
@@ -133,6 +133,14 @@ export default class OpencodePlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
+	}
+
+	openSettings(): void {
+		const settings = (this.app as typeof this.app & {
+			setting?: { open(): void; openTabById(id: string): void };
+		}).setting;
+		settings?.open();
+		settings?.openTabById(this.manifest.id);
 	}
 
 	createPtySession(): PtySession {
@@ -169,10 +177,6 @@ export default class OpencodePlugin extends Plugin {
 	async continueLastSession() {
 		this.sessionState.setContinueLastSession();
 		await this.openOrRestartTerminal();
-	}
-
-	async closeTerminalViews() {
-		await this.viewCoordinator.closeTerminalViews();
 	}
 
 	async openTerminalWithSession(sessionId: string, directory: string) {

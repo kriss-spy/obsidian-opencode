@@ -1,10 +1,13 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebglAddon } from "@xterm/addon-webgl";
-import { release } from "node:os";
+import { ImageAddon } from "@xterm/addon-image";
+import { release, tmpdir } from "node:os";
+import { mkdtempSync, readdirSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import OpencodePlugin from "../main";
 import { handleTerminalDrop } from "../terminalDrop";
 import { EditorServer } from "../editorServer";
@@ -23,8 +26,10 @@ import {
 	scrollbarPageInput,
 } from "../modules/windowsTerminalMouse";
 import { LifecycleQueue } from "../modules/lifecycleQueue";
-import { loadOpenCodeHotkeys } from "../modules/openCodeKeymap";
+import { loadOpenCodeHotkeys, loadOpenCodeManualCopy } from "../modules/openCodeKeymap";
 import { mergeEnvironmentVariables } from "../utils/environment";
+import { OpencodeClient, OpencodeError } from "../utils/opencode";
+import { createWslWindowsClipboard } from "../modules/wslWindowsClipboard";
 
 interface VaultWithConfig {
 	getConfig?(key: string): string;
@@ -35,6 +40,7 @@ export const OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
 export class OpencodeTerminalView extends ItemView {
 	terminal: Terminal | null = null;
 	fitAddon: FitAddon | null = null;
+	imageAddon: ImageAddon | null = null;
 	container: HTMLElement | null = null;
 	editorServer: EditorServer | null = null;
 	private editorPort: number | undefined;
@@ -42,6 +48,10 @@ export class OpencodeTerminalView extends ItemView {
 	private keyRouter: TerminalKeyRouter;
 	private readonly lifecycle = new LifecycleQueue();
 	private closing = false;
+	private clipboardTempDirectory: string | null = null;
+	private clipboardImageCounter = 0;
+	private clipboardImageCleanupTimers: number[] = [];
+	private copySelectionOnCtrlC = false;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
@@ -69,6 +79,8 @@ export class OpencodeTerminalView extends ItemView {
 			process.env,
 			this.plugin.settings.environmentVariables,
 		);
+		this.copySelectionOnCtrlC = loadOpenCodeManualCopy(terminalCwd, terminalEnvironment, "stable");
+		const windowsClipboard = createWslWindowsClipboard({ environment: terminalEnvironment });
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
 		container.addClass("opencode-terminal-container");
@@ -116,6 +128,10 @@ export class OpencodeTerminalView extends ItemView {
 			cursorBlink: true,
 			scrollback: 10000,
 			convertEol: false,
+			windowOptions: {
+				getWinSizePixels: true,
+				getCellSizePixels: true,
+			},
 			windowsPty: process.platform === "win32"
 				? { backend: "conpty", buildNumber: Number.parseInt(release().split(".")[2], 10) }
 				: undefined,
@@ -125,6 +141,12 @@ export class OpencodeTerminalView extends ItemView {
 		const fitAddon = new FitAddon();
 		terminal.loadAddon(fitAddon);
 		terminal.loadAddon(new WebLinksAddon());
+		const imageAddon = new ImageAddon({
+			enableSizeReports: false,
+			iipSupport: false,
+		});
+		terminal.loadAddon(imageAddon);
+		this.imageAddon = imageAddon;
 
 		terminal.open(termContainer);
 		let scrollbarRail: HTMLElement | null = null;
@@ -405,6 +427,30 @@ export class OpencodeTerminalView extends ItemView {
 			termContainer.removeEventListener("mouseup", handlePickerMouse, true);
 		});
 
+		if (windowsClipboard?.writeImagePng) {
+			const copyRenderedImage = (event: MouseEvent) => {
+				const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+				if (!screen) return;
+				const rect = screen.getBoundingClientRect();
+				const column = Math.floor((event.clientX - rect.left) / (rect.width / terminal.cols));
+				const viewportRow = Math.floor((event.clientY - rect.top) / (rect.height / terminal.rows));
+				if (column < 0 || column >= terminal.cols || viewportRow < 0 || viewportRow >= terminal.rows) return;
+				const canvas = imageAddon.getImageAtBufferCell(column, terminal.buffer.active.viewportY + viewportRow);
+				if (!canvas) return;
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				const encoded = canvas.toDataURL("image/png").split(",", 2)[1];
+				void windowsClipboard.writeImagePng!(Buffer.from(encoded, "base64")).then(() => {
+					new Notice("Copied terminal image to the Windows clipboard.");
+				}, (error) => {
+					const detail = error instanceof Error ? error.message : String(error);
+					new Notice(`Windows clipboard: ${detail}`);
+				});
+			};
+			termContainer.addEventListener("contextmenu", copyRenderedImage, true);
+			this.register(() => termContainer.removeEventListener("contextmenu", copyRenderedImage, true));
+		}
+
 		// Keep this server private to the embedded OpenCode process. Publishing a
 		// lock file would also connect unrelated OpenCode processes in this vault.
 		this.editorServer = new EditorServer({ publishLock: false });
@@ -426,7 +472,7 @@ export class OpencodeTerminalView extends ItemView {
 				} catch (e) {
 					console.warn("Initial fit failed:", e);
 				}
-				this.spawnPty(terminal);
+				void this.lifecycle.enqueue(() => this.spawnPty(terminal));
 			} else {
 				window.setTimeout(spawnWithCorrectSize, 50);
 			}
@@ -439,6 +485,30 @@ export class OpencodeTerminalView extends ItemView {
 			terminal,
 			container,
 			reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
+			clipboard: windowsClipboard ?? undefined,
+			copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,
+			onClipboardError: (message) => new Notice(message),
+			onClipboardImagePaste: (png) => {
+				if (!this.clipboardTempDirectory) {
+					this.clipboardTempDirectory = mkdtempSync(join(tmpdir(), "obsidian-opencode-clipboard-"));
+				}
+				const imagePath = join(this.clipboardTempDirectory, `clipboard-${++this.clipboardImageCounter}.png`);
+				writeFileSync(imagePath, png, { mode: 0o600 });
+				terminal.paste(imagePath);
+				const cleanupTimer = window.setTimeout(() => {
+					this.clipboardImageCleanupTimers = this.clipboardImageCleanupTimers.filter((timer) => timer !== cleanupTimer);
+					try { unlinkSync(imagePath); } catch { /* already removed during terminal close */ }
+					if (this.clipboardTempDirectory) {
+						try {
+							if (readdirSync(this.clipboardTempDirectory).length === 0) {
+								rmdirSync(this.clipboardTempDirectory);
+								this.clipboardTempDirectory = null;
+							}
+						} catch { /* directory was already removed */ }
+					}
+				}, 60_000);
+				this.clipboardImageCleanupTimers.push(cleanupTimer);
+			},
 		});
 		this.register(() => this.keyRouter.dispose());
 
@@ -463,7 +533,7 @@ export class OpencodeTerminalView extends ItemView {
 				terminalInput: this.ptySession.getStdin() ? (data: string) => terminal.input(data, true) : undefined,
 				onFileDrop: this.editorServer ? (filePath: string) => {
 					const normalized = normalizeVaultPath(filePath, this.plugin.vaultRoot);
-					this.editorServer!.notifyAtMentioned(normalized);
+					return this.editorServer!.notifyAtMentioned(normalized);
 				} : undefined
 			});
 		};
@@ -493,16 +563,37 @@ export class OpencodeTerminalView extends ItemView {
 				} catch (error) {
 					console.warn("Restart fit failed:", error);
 				}
-				this.spawnPty(this.terminal);
+				await this.spawnPty(this.terminal);
 				this.ptySession.sendResize(this.terminal);
 			}
 		});
 	}
 
-	private spawnPty(terminal: Terminal) {
+	private async spawnPty(terminal: Terminal): Promise<void> {
 		const defaultCwd = this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
 		const cwd = this.plugin.sessionCwd || defaultCwd;
-		const opencodePath = this.plugin.settings.opencodePath || "opencode";
+		const configuredPath = this.plugin.settings.opencodePath || "opencode";
+		let opencodePath: string;
+		try {
+			const compatibility = await new OpencodeClient(
+				configuredPath,
+				cwd,
+				this.plugin.settings.environmentVariables
+			).checkCompatibility();
+			opencodePath = compatibility.executable;
+			const terminalEnvironment = mergeEnvironmentVariables(
+				process.env,
+				this.plugin.settings.environmentVariables,
+			);
+			this.copySelectionOnCtrlC = loadOpenCodeManualCopy(cwd, terminalEnvironment, compatibility.generation);
+		} catch (error) {
+			const message = error instanceof OpencodeError
+				? error.message
+				: "Unable to verify the configured OpenCode executable.";
+			terminal.writeln(`\r\n${message}\r\n`);
+			return;
+		}
+		if (this.closing) return;
 
 		let args: string[] = [];
 		if (this.plugin.sessionArgs) {
@@ -548,8 +639,16 @@ export class OpencodeTerminalView extends ItemView {
 					// xterm canvas addon may throw on dispose
 				}
 				this.terminal = null;
+				this.imageAddon = null;
 			}
 			this.keyRouter.dispose();
+			for (const timer of this.clipboardImageCleanupTimers) window.clearTimeout(timer);
+			this.clipboardImageCleanupTimers = [];
+			if (this.clipboardTempDirectory) {
+				rmSync(this.clipboardTempDirectory, { recursive: true, force: true });
+				this.clipboardTempDirectory = null;
+				this.clipboardImageCounter = 0;
+			}
 		});
 	}
 

@@ -177,7 +177,7 @@ describe('EditorServer', () => {
             });
         });
 
-        server.notifyAtMentioned('path/to/note.md', 1, 5);
+        expect(server.notifyAtMentioned('path/to/note.md', 1, 5)).toBe(true);
 
         const msg = await received;
         expect(msg.jsonrpc).toBe('2.0');
@@ -189,6 +189,12 @@ describe('EditorServer', () => {
         });
 
         client.close();
+    });
+
+    it('should report that at_mentioned was not queued without a connected client', () => {
+        server = new EditorServer({ lockDir: tempLockDir });
+
+        expect(server.notifyAtMentioned('path/to/note.md')).toBe(false);
     });
 
     it('should stop and clean up lock file', async () => {

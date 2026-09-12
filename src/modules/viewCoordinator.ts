@@ -60,6 +60,11 @@ export class ViewCoordinator {
 		}
 	}
 
+	async closeTerminal(): Promise<void> {
+		const leaves = [...this.workspace.getLeavesOfType(this.config.terminalViewType)];
+		await Promise.all(leaves.map((leaf) => leaf.detach()));
+	}
+
 	async openOrRestartTerminal(restartFn: () => void | Promise<void>): Promise<WorkspaceLeaf | null> {
 		let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
 		if (leaf) {
@@ -77,8 +82,4 @@ export class ViewCoordinator {
 		return null;
 	}
 
-	async closeTerminalViews(): Promise<void> {
-		const leaves = [...this.workspace.getLeavesOfType(this.config.terminalViewType)];
-		await Promise.all(leaves.map((leaf) => leaf.detach()));
-	}
 }

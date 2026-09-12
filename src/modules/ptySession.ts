@@ -8,6 +8,7 @@ import { WINDOWS_PTY_NATIVE_X64_BASE64 } from "../pty/windowsPtyNativeX64";
 import { WINDOWS_PTY_NATIVE_ARM64_BASE64 } from "../pty/windowsPtyNativeArm64";
 import { WINDOWS_PTY_JOB_HOST_BASE64 } from "../pty/windowsPtyJobHost";
 import { createChildEnvironment, EnvironmentVariables, flatpakEnvironmentArgs } from "../utils/environment";
+import { resolveOpencodeExecutable } from "../utils/opencodeExecutable";
 
 const FLATPAK_OVERRIDE_COMMAND = "flatpak override --user --talk-name=org.freedesktop.Flatpak md.obsidian.Obsidian";
 const WINDOWS_CONPTY_PROBE_ARTIFACT = "+q4d73Gi=31337,s=1,v=1,a=q,t=d,f=24;AAAA";
@@ -55,12 +56,13 @@ from os import execvp, read, write, waitpid, waitstatus_to_exitcode
 from fcntl import ioctl
 from pty import fork
 from termios import TIOCSWINSZ
-from struct import pack
+from struct import pack, error as StructError
 from selectors import DefaultSelector, EVENT_READ
 
 _CHUNK_SIZE = 1024
 _CMDIO = 3
 _KILL_TOKEN = os.environ.get("OPENCODE_PTY_KILL_TOKEN", "")
+_resize_buffer = b""
 
 def forward_termination(signum, frame):
     # Killing the proxy closes the PTY master, but the kernel cannot carry a
@@ -87,8 +89,8 @@ def main():
     initial_size = os.environ.get("OPENCODE_PTY_INITIAL_SIZE", "")
     if initial_size:
         try:
-            rows, columns = (int(s) for s in initial_size.split("x", 2))
-            ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, 0, 0))
+            rows, columns, pixel_width, pixel_height = (int(s) for s in initial_size.split("x"))
+            ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, pixel_width, pixel_height))
         except (ValueError, OSError):
             pass
 
@@ -125,25 +127,27 @@ def forward_stdin(pty_fd):
     write_all(pty_fd, data)
 
 def handle_resize(pty_fd):
+    global _resize_buffer
     try:
         data = read(_CMDIO, _CHUNK_SIZE)
     except OSError:
         data = b""
     if not data:
         return
-    for line in data.decode("UTF-8", "strict").splitlines():
-        rows, columns = (int(s.strip()) for s in line.split("x", 2))
-        ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, 0, 0))
+    _resize_buffer += data
+    while b"\\n" in _resize_buffer:
+        line, _resize_buffer = _resize_buffer.split(b"\\n", 1)
+        try:
+            rows, columns, pixel_width, pixel_height = (
+                int(s.strip()) for s in line.decode("UTF-8", "strict").split("x")
+            )
+            ioctl(pty_fd, TIOCSWINSZ, pack("HHHH", rows, columns, pixel_width, pixel_height))
+        except (UnicodeDecodeError, ValueError, StructError, OSError):
+            pass
 
 if __name__ == "__main__":
     main()
 `;
-
-const COMMON_BIN_DIRS = [
-	".opencode/bin",
-	".local/bin",
-	"bin",
-] as const;
 
 const WINDOWS_PTY_HOST_JS = String.raw`
 const fs = require("fs");
@@ -194,59 +198,6 @@ process.on("SIGTERM", () => {
 });
 `;
 
-function executableNames(executable: string): string[] {
-	if (process.platform !== "win32" || path.extname(executable)) {
-		return [executable];
-	}
-	const extensions = (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
-	return extensions.map((extension) => `${executable}${extension}`);
-}
-
-export function isAbsoluteExecutablePath(executable: string, platform: NodeJS.Platform = process.platform): boolean {
-	return (platform === "win32" ? path.win32 : path.posix).isAbsolute(executable);
-}
-
-function resolveExecutablePath(executable: string, platform: NodeJS.Platform = process.platform): string {
-	const pathApi = platform === "win32" ? path.win32 : path.posix;
-	if (isAbsoluteExecutablePath(executable, platform)) {
-		for (const candidate of executableNames(executable)) {
-			try {
-				fs.accessSync(candidate, fs.constants.X_OK);
-				return candidate;
-			} catch {
-				continue;
-			}
-		}
-		return executable;
-	}
-	const pathDirs = (process.env.PATH || "").split(pathApi.delimiter);
-	for (const dir of pathDirs) {
-		if (!dir) continue;
-		for (const candidate of executableNames(executable)) {
-			const fullPath = pathApi.join(dir, candidate);
-			try {
-				fs.accessSync(fullPath, fs.constants.X_OK);
-				return fullPath;
-			} catch {
-				continue;
-			}
-		}
-	}
-	const homeDir = os.homedir();
-	for (const sub of COMMON_BIN_DIRS) {
-		for (const candidate of executableNames(executable)) {
-			const fullPath = pathApi.join(homeDir, sub, candidate);
-			try {
-				fs.accessSync(fullPath, fs.constants.X_OK);
-				return fullPath;
-			} catch {
-				continue;
-			}
-		}
-	}
-	return executable;
-}
-
 const materializedWindowsPty = new Map<string, string>();
 let materializedWindowsPtyJobHost: string | null = null;
 
@@ -276,6 +227,19 @@ export interface PtySessionOptions {
 	args: string[];
 	environmentVariables?: EnvironmentVariables;
 	editorPort?: number;
+}
+
+function unixTerminalSize(terminal: Terminal): string {
+	const clamp = (value: number, minimum: number) => {
+		const integer = Number.isFinite(value) ? Math.round(value) : minimum;
+		return Math.min(65535, Math.max(minimum, integer));
+	};
+	return [
+		clamp(terminal.rows, 1),
+		clamp(terminal.cols, 1),
+		clamp(terminal.element?.clientWidth ?? 0, 0),
+		clamp(terminal.element?.clientHeight ?? 0, 0),
+	].join("x");
 }
 
 enum PtyBackend {
@@ -336,11 +300,11 @@ export class PtySession {
 		// Resolve executable path, searching common user-local bin directories
 		// that may not be in process.env.PATH (desktop-launched Electron apps
 		// don't read shell init files like .bashrc / .zshrc).
-		let executable = resolveExecutablePath(options.opencodePath);
+		let executable = resolveOpencodeExecutable(options.opencodePath);
 		let args = [...options.args];
 		if (process.platform === "win32" && /\.ps1$/i.test(executable)) {
 			args = ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", executable, ...args];
-			executable = resolveExecutablePath("powershell.exe");
+			executable = resolveOpencodeExecutable("powershell.exe");
 		}
 
 		const isFlatpak = process.platform !== "win32" && (fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID);
@@ -366,9 +330,10 @@ export class PtySession {
 		if (options.editorPort) {
 			env.OPENCODE_EDITOR_SSE_PORT = String(options.editorPort);
 		}
-		// pty.fork() starts at 0x0, which the TUI cannot use. Apply the
-		// terminal's current size to the PTY before the app starts.
-		env.OPENCODE_PTY_INITIAL_SIZE = `${Math.min(65535, Math.max(1, terminal.rows))}x${Math.min(65535, Math.max(1, terminal.cols))}`;
+		// pty.fork() starts at 0x0, which the TUI cannot use. Apply both
+		// the cell grid and DOM pixel dimensions before the app starts so
+		// terminal image renderers can preserve their aspect ratio.
+		env.OPENCODE_PTY_INITIAL_SIZE = unixTerminalSize(terminal);
 		if (isFlatpak) {
 			env.OPENCODE_PTY_KILL_TOKEN = killToken;
 		}
@@ -377,7 +342,7 @@ export class PtySession {
 		if (process.platform === "win32") {
 			this.backend = PtyBackend.WindowsConPty;
 			let windowsPtyProcess: ChildProcess | null = null;
-			const nodeExecutable = resolveExecutablePath("node.exe");
+			const nodeExecutable = resolveOpencodeExecutable("node.exe");
 			let nodeArchitecture: string;
 			try {
 				nodeArchitecture = execFileSync(nodeExecutable, ["-p", "process.arch"], {
@@ -445,7 +410,7 @@ export class PtySession {
 			}
 		} else {
 			this.backend = PtyBackend.Unix;
-			ptyProcess = spawn(resolveExecutablePath("python3"), ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
+			ptyProcess = spawn(resolveOpencodeExecutable("python3"), ["-c", UNIX_PSEUDOTERMINAL_PY, executable, ...args], {
 				cwd: options.cwd,
 				env,
 				stdio: ["pipe", "pipe", "pipe", "pipe"],
@@ -598,7 +563,7 @@ export class PtySession {
 		}
 		const cmdio = this.ptyProcess.stdio?.[3] as import("stream").Writable | undefined;
 		if (cmdio && typeof cmdio.write === "function") {
-			cmdio.write(`${rows}x${cols}\n`);
+			cmdio.write(`${unixTerminalSize(terminal)}\n`);
 		}
 	}
 
