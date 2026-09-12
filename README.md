@@ -26,6 +26,7 @@ Use OpenCode 2's multi-session interface in a full Obsidian editor tab:
 ## Platform Support
 
 - **Linux**: stable on my daily driver, not tested on all distros.
+- **WSL2/X410**: Supported with the Linux Obsidian app and formal OpenCode V2. Text copy/paste, OSC 52, Windows clipboard image paste, and copying rendered terminal images use a Unicode-safe Windows PowerShell bridge. WSLg is outside this support contract.
 - **Windows**: Beta support on Windows 10 version 1809 and later through ConPTY. Node.js must be available on `PATH` for the isolated PTY helper.
 - **macOS**: Experimental.
 
@@ -50,6 +51,7 @@ Use OpenCode 2's multi-session interface in a full Obsidian editor tab:
 - **Sessions View:** Use the command palette to select **"OpenCode: Open conversations"** to browse, restore, or export past conversations, or start a new session from the panel header.
 - **Close terminal:** Run **"OpenCode: Close terminal"**, or assign it a shortcut in Obsidian's Hotkeys settings. No default shortcut is installed, avoiding conflicts with Obsidian's tab commands.
 - **Settings:** Leave the OpenCode path empty to auto-detect a compatible OpenCode installation, or configure `opencode`, `opencode2`, a `~/…` path, or a full executable path. Bare executable names are resolved from `PATH`, common user-local directories, and NVM installations: nvm-sh version directories on Unix, or the active `NVM_SYMLINK` and installed versions under `NVM_HOME` on Windows. Shell aliases are not executable paths and cannot be launched directly. Default CLI arguments, per-vault environment variables, and terminal styling preferences are available in the Obsidian settings under the "OpenCode" tab.
+- **WSL2 clipboard:** With Linux Obsidian displayed through X410, `Ctrl+C` copies an active terminal selection to Windows; without a selection it still interrupts OpenCode. `Ctrl+V` prefers a Windows clipboard image and otherwise pastes Unicode text. Right-click a rendered terminal image to copy it to the Windows clipboard. PowerShell interop errors appear as Obsidian notices.
 
 ## Development
 

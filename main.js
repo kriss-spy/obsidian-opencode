@@ -21872,7 +21872,9 @@ var import_addon_web_links = __toESM(require_addon_web_links());
 var import_addon_canvas = __toESM(require_addon_canvas());
 var import_addon_webgl = __toESM(require_addon_webgl());
 var import_addon_image = __toESM(require_addon_image());
-var import_node_os = require("os");
+var import_node_os2 = require("os");
+var import_node_fs = require("fs");
+var import_node_path = require("path");
 
 // src/terminalDrop.ts
 function isDragManagerDraggable(val) {
@@ -22443,6 +22445,258 @@ function loadOpenCodeHotkeys(cwd, env = process.env) {
   return resolveOpenCodeHotkeys(overrides);
 }
 
+// src/modules/wslWindowsClipboard.ts
+var import_node_child_process = require("child_process");
+var import_node_os = require("os");
+var import_node_util = require("util");
+
+// src/utils/opencodeExecutable.ts
+var fs3 = __toESM(require("fs"));
+var os4 = __toESM(require("os"));
+var path5 = __toESM(require("path"));
+var DEFAULT_EXECUTABLE = "opencode";
+var COMMON_BIN_DIRS2 = [".opencode/bin", ".local/bin", "bin"];
+function identifyOpenCodeCli(helpOutput) {
+  if (/\bOpenCode command line interface\b/i.test(helpOutput))
+    return "v2";
+  if (/OpenCode 2\.0 preview command line interface/i.test(helpOutput))
+    return "v2-preview";
+  if (/start opencode tui/i.test(helpOutput))
+    return "stable";
+  return null;
+}
+function isAbsoluteExecutablePath(executable, platform = process.platform) {
+  return (platform === "win32" ? path5.win32 : path5.posix).isAbsolute(executable);
+}
+function executableNames(executable, platform, environment) {
+  if (platform !== "win32" || path5.win32.extname(executable))
+    return [executable];
+  const extensions = (environment.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
+  return extensions.map((extension2) => `${executable}${extension2}`);
+}
+function firstExecutable(candidates) {
+  for (const candidate of candidates) {
+    try {
+      if (!fs3.statSync(candidate).isFile())
+        continue;
+      fs3.accessSync(candidate, fs3.constants.X_OK);
+      return candidate;
+    } catch (e) {
+      continue;
+    }
+  }
+  return null;
+}
+function findExecutableOnPath(executable, options = {}) {
+  var _a, _b;
+  const platform = (_a = options.platform) != null ? _a : process.platform;
+  const environment = (_b = options.environment) != null ? _b : process.env;
+  const pathApi = platform === "win32" ? path5.win32 : path5.posix;
+  const names = executableNames(executable, platform, environment);
+  if (isAbsoluteExecutablePath(executable, platform))
+    return firstExecutable(names);
+  const environmentPath = environment.PATH || (platform === "win32" ? environment.Path : void 0) || "";
+  const candidates = environmentPath.split(pathApi.delimiter).filter(Boolean).flatMap((directory) => names.map((name) => pathApi.join(directory, name)));
+  return firstExecutable(candidates);
+}
+function versionDirectories(versionsDirectory, pathApi) {
+  try {
+    const versions = fs3.readdirSync(versionsDirectory, { withFileTypes: true, encoding: "utf8" });
+    return versions.filter((entry) => entry.isDirectory()).sort((left, right) => right.name.localeCompare(left.name, void 0, { numeric: true })).map((entry) => pathApi.join(versionsDirectory, entry.name));
+  } catch (e) {
+    return [];
+  }
+}
+function nvmBinDirectories(homeDirectory) {
+  const versionsDirectory = path5.posix.join(homeDirectory, ".nvm", "versions", "node");
+  return versionDirectories(versionsDirectory, path5.posix).map((directory) => path5.posix.join(directory, "bin"));
+}
+function resolveOpencodeExecutable(configuredPath, options = {}) {
+  var _a, _b, _c, _d, _e;
+  const platform = (_a = options.platform) != null ? _a : process.platform;
+  const environment = (_b = options.environment) != null ? _b : process.env;
+  const pathApi = platform === "win32" ? path5.win32 : path5.posix;
+  const homeDirectory = (_c = options.homeDirectory) != null ? _c : os4.homedir();
+  const configuredExecutable = configuredPath.trim();
+  const executable = configuredExecutable.startsWith("~/") || configuredExecutable.startsWith("~\\") ? pathApi.join(homeDirectory, configuredExecutable.slice(2)) : configuredExecutable || DEFAULT_EXECUTABLE;
+  const names = executableNames(executable, platform, environment);
+  if (isAbsoluteExecutablePath(executable, platform)) {
+    return (_d = findExecutableOnPath(executable, { platform, environment })) != null ? _d : executable;
+  }
+  const fromPath = findExecutableOnPath(executable, { platform, environment });
+  if (fromPath)
+    return fromPath;
+  const localDirectories = [
+    ...COMMON_BIN_DIRS2.map((directory) => pathApi.join(homeDirectory, directory)),
+    ...platform === "win32" && environment.NVM_SYMLINK ? [environment.NVM_SYMLINK] : [],
+    ...platform === "win32" ? environment.NVM_HOME ? versionDirectories(environment.NVM_HOME, path5.win32) : [] : nvmBinDirectories(homeDirectory)
+  ];
+  const localCandidates = localDirectories.flatMap(
+    (directory) => names.map((name) => pathApi.join(directory, name))
+  );
+  return (_e = firstExecutable(localCandidates)) != null ? _e : executable;
+}
+
+// src/modules/wslWindowsClipboard.ts
+var POWERSHELL_ARGS = ["-NoProfile", "-NonInteractive", "-STA", "-EncodedCommand"];
+var MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+var BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+var READ_COMMAND = [
+  "$text = Get-Clipboard -Raw -Format Text;",
+  "if ($null -eq $text) { $text = '' };",
+  "$bytes = [Text.Encoding]::UTF8.GetBytes([string]$text);",
+  "[Console]::Out.Write([Convert]::ToBase64String($bytes))"
+].join(" ");
+var READ_IMAGE_COMMAND = [
+  "Add-Type -AssemblyName System.Windows.Forms;",
+  "Add-Type -AssemblyName System.Drawing;",
+  "if ([Windows.Forms.Clipboard]::ContainsImage()) {",
+  "$image = [Windows.Forms.Clipboard]::GetImage();",
+  "$stream = New-Object IO.MemoryStream;",
+  "try { $image.Save($stream, [Drawing.Imaging.ImageFormat]::Png);",
+  "[Console]::Out.Write([Convert]::ToBase64String($stream.ToArray())) }",
+  "finally { $stream.Dispose(); $image.Dispose() }",
+  "}"
+].join(" ");
+var WRITE_IMAGE_COMMAND = [
+  "Add-Type -AssemblyName System.Windows.Forms;",
+  "Add-Type -AssemblyName System.Drawing;",
+  "$encoded = [Console]::In.ReadToEnd();",
+  "$bytes = [Convert]::FromBase64String($encoded);",
+  "$stream = New-Object IO.MemoryStream(,$bytes);",
+  "$source = [Drawing.Image]::FromStream($stream);",
+  "$image = New-Object Drawing.Bitmap($source);",
+  "try { [Windows.Forms.Clipboard]::SetImage($image) }",
+  "finally { $image.Dispose(); $source.Dispose(); $stream.Dispose() }"
+].join(" ");
+function encodePowerShellCommand(command) {
+  return Buffer.from(command, "utf16le").toString("base64");
+}
+function decodeBase64Utf8(encoded) {
+  if (!BASE64_PATTERN.test(encoded))
+    return null;
+  const bytes = Buffer.from(encoded, "base64");
+  if (bytes.toString("base64").replace(/=+$/, "") !== encoded.replace(/=+$/, ""))
+    return null;
+  try {
+    return new import_node_util.TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (e) {
+    return null;
+  }
+}
+function runProcess(executable, args, input) {
+  return new Promise((resolve2, reject) => {
+    var _a;
+    const child = (0, import_node_child_process.execFile)(executable, args, {
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+      windowsHide: true
+    }, (error, stdout, stderr) => {
+      if (error) {
+        const detail = String(stderr).trim();
+        reject(new Error(detail ? `${error.message}: ${detail}` : error.message));
+        return;
+      }
+      resolve2({ stdout: String(stdout), stderr: String(stderr) });
+    });
+    if (input !== void 0)
+      (_a = child.stdin) == null ? void 0 : _a.end(input, "utf8");
+  });
+}
+function isWsl2(options = {}) {
+  var _a, _b;
+  const platform = (_a = options.platform) != null ? _a : process.platform;
+  const release3 = (_b = options.release) != null ? _b : (0, import_node_os.release)();
+  return platform === "linux" && /microsoft-standard-wsl2/i.test(release3);
+}
+var WslWindowsClipboard = class {
+  constructor(powershellExecutable, run) {
+    this.powershellExecutable = powershellExecutable;
+    this.run = run;
+  }
+  async readText() {
+    const result = await this.execute(READ_COMMAND, "read");
+    const decoded = decodeBase64Utf8(result.stdout.trim());
+    if (decoded === null)
+      throw new Error("Windows clipboard returned invalid Unicode data.");
+    return decoded;
+  }
+  async writeText(text) {
+    const encodedText = Buffer.from(text, "utf8").toString("base64");
+    const command = [
+      `$bytes = [Convert]::FromBase64String('${encodedText}');`,
+      "$text = [Text.Encoding]::UTF8.GetString($bytes);",
+      "Set-Clipboard -Value $text"
+    ].join(" ");
+    await this.execute(command, "write");
+  }
+  async readImagePng() {
+    const result = await this.execute(READ_IMAGE_COMMAND, "read an image from");
+    const encoded = result.stdout.trim();
+    if (!encoded)
+      return null;
+    const decoded = decodeBase64Utf8Bytes(encoded);
+    if (!decoded || !isPng(decoded))
+      throw new Error("Windows clipboard returned invalid PNG image data.");
+    if (decoded.length > MAX_IMAGE_BYTES) {
+      throw new Error(`Windows clipboard image exceeds the ${MAX_IMAGE_BYTES / 1024 / 1024} MiB OpenCode attachment limit.`);
+    }
+    return decoded;
+  }
+  async writeImagePng(png) {
+    const bytes = Buffer.from(png);
+    if (!isPng(bytes))
+      throw new Error("Rendered terminal image is not valid PNG data.");
+    if (bytes.length > MAX_IMAGE_BYTES) {
+      throw new Error(`Rendered terminal image exceeds the ${MAX_IMAGE_BYTES / 1024 / 1024} MiB clipboard limit.`);
+    }
+    await this.execute(WRITE_IMAGE_COMMAND, "write an image to", bytes.toString("base64"));
+  }
+  async execute(command, operation, input) {
+    if (!this.powershellExecutable) {
+      throw new Error("Windows PowerShell clipboard interop is unavailable. Ensure powershell.exe is on WSL's PATH.");
+    }
+    try {
+      return await this.run(this.powershellExecutable, [
+        ...POWERSHELL_ARGS,
+        encodePowerShellCommand(command)
+      ], input);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Unable to ${operation} the Windows clipboard through PowerShell: ${detail}`);
+    }
+  }
+};
+function decodeBase64Utf8Bytes(encoded) {
+  if (!BASE64_PATTERN.test(encoded))
+    return null;
+  const bytes = Buffer.from(encoded, "base64");
+  return bytes.toString("base64").replace(/=+$/, "") === encoded.replace(/=+$/, "") ? bytes : null;
+}
+function isPng(bytes) {
+  return bytes.length >= 8 && Buffer.from(bytes.subarray(0, 8)).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+}
+function createWslWindowsClipboard(options = {}) {
+  var _a, _b;
+  if (!isWsl2(options))
+    return null;
+  const powershellExecutable = options.powershellExecutable === void 0 ? findExecutableOnPath("powershell.exe", {
+    platform: "linux",
+    environment: (_a = options.environment) != null ? _a : process.env
+  }) : options.powershellExecutable;
+  return new WslWindowsClipboard(powershellExecutable, (_b = options.run) != null ? _b : runProcess);
+}
+function decodeOsc52ClipboardSet(data) {
+  const separator = data.indexOf(";");
+  if (separator < 0)
+    return null;
+  const selection = data.slice(0, separator);
+  const encoded = data.slice(separator + 1);
+  if (!/^[cpsq0-7]*$/.test(selection) || encoded === "?")
+    return null;
+  return decodeBase64Utf8(encoded);
+}
+
 // src/modules/terminalKeyRouter.ts
 var TerminalKeyRouter = class {
   constructor() {
@@ -22450,7 +22704,96 @@ var TerminalKeyRouter = class {
   }
   register(context) {
     this.registerShortcutScope(context);
-    this.registerPasteHandler(context);
+    if (context.clipboard) {
+      this.registerWslClipboard(context);
+    } else {
+      this.registerPasteHandler(context);
+    }
+  }
+  registerWslClipboard(context) {
+    const { clipboard, container, terminal } = context;
+    if (!clipboard)
+      return;
+    const reportFailure = (error) => {
+      var _a;
+      const detail = error instanceof Error ? error.message : String(error);
+      (_a = context.onClipboardError) == null ? void 0 : _a.call(context, `Windows clipboard: ${detail}`);
+    };
+    const normalizePaste = (text) => text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const copySelection = () => {
+      if (!terminal.hasSelection())
+        return false;
+      const selection = terminal.getSelection();
+      void clipboard.writeText(selection).then(() => {
+        if (terminal.getSelection() === selection)
+          terminal.clearSelection();
+      }, reportFailure);
+      return true;
+    };
+    const pasteFromWindows = () => {
+      void (async () => {
+        if (clipboard.readImagePng && context.onClipboardImagePaste) {
+          const image = await clipboard.readImagePng();
+          if (image) {
+            await context.onClipboardImagePaste(image);
+            return;
+          }
+        }
+        const text = await clipboard.readText();
+        if (text)
+          terminal.paste(normalizePaste(text));
+      })().catch(reportFailure);
+    };
+    const stop = (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const keydownHandler = (event) => {
+      if (event.defaultPrevented || event.isComposing || !event.ctrlKey || event.altKey || event.metaKey)
+        return;
+      const key = event.key.toLowerCase();
+      if (key === "c") {
+        if (!copySelection())
+          return;
+        stop(event);
+      } else if (key === "v") {
+        stop(event);
+        pasteFromWindows();
+      }
+    };
+    const copyHandler = (event) => {
+      if (event.defaultPrevented || !copySelection())
+        return;
+      stop(event);
+    };
+    const pasteHandler = (event) => {
+      if (event.defaultPrevented)
+        return;
+      if (!container.contains(event.target))
+        return;
+      stop(event);
+      pasteFromWindows();
+    };
+    container.addEventListener("keydown", keydownHandler, true);
+    container.addEventListener("copy", copyHandler, true);
+    container.addEventListener("paste", pasteHandler, true);
+    this.disposers.push(() => {
+      container.removeEventListener("keydown", keydownHandler, true);
+      container.removeEventListener("copy", copyHandler, true);
+      container.removeEventListener("paste", pasteHandler, true);
+    });
+    const osc52 = terminal.parser.registerOscHandler(52, async (data) => {
+      const text = decodeOsc52ClipboardSet(data);
+      if (text === null)
+        return true;
+      try {
+        await clipboard.writeText(text);
+      } catch (error) {
+        reportFailure(error);
+      }
+      return true;
+    });
+    this.disposers.push(() => osc52.dispose());
   }
   registerShortcutScope(context) {
     var _a, _b, _c, _d, _e, _f, _g, _h;
@@ -22578,95 +22921,6 @@ var import_child_process = require("child_process");
 var fs4 = __toESM(require("fs"));
 var os5 = __toESM(require("os"));
 var path6 = __toESM(require("path"));
-
-// src/utils/opencodeExecutable.ts
-var fs3 = __toESM(require("fs"));
-var os4 = __toESM(require("os"));
-var path5 = __toESM(require("path"));
-var DEFAULT_EXECUTABLE = "opencode";
-var COMMON_BIN_DIRS2 = [".opencode/bin", ".local/bin", "bin"];
-function identifyOpenCodeCli(helpOutput) {
-  if (/\bOpenCode command line interface\b/i.test(helpOutput))
-    return "v2";
-  if (/OpenCode 2\.0 preview command line interface/i.test(helpOutput))
-    return "v2-preview";
-  if (/start opencode tui/i.test(helpOutput))
-    return "stable";
-  return null;
-}
-function isAbsoluteExecutablePath(executable, platform = process.platform) {
-  return (platform === "win32" ? path5.win32 : path5.posix).isAbsolute(executable);
-}
-function executableNames(executable, platform, environment) {
-  if (platform !== "win32" || path5.win32.extname(executable))
-    return [executable];
-  const extensions = (environment.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
-  return extensions.map((extension2) => `${executable}${extension2}`);
-}
-function firstExecutable(candidates) {
-  for (const candidate of candidates) {
-    try {
-      if (!fs3.statSync(candidate).isFile())
-        continue;
-      fs3.accessSync(candidate, fs3.constants.X_OK);
-      return candidate;
-    } catch (e) {
-      continue;
-    }
-  }
-  return null;
-}
-function findExecutableOnPath(executable, options = {}) {
-  var _a, _b;
-  const platform = (_a = options.platform) != null ? _a : process.platform;
-  const environment = (_b = options.environment) != null ? _b : process.env;
-  const pathApi = platform === "win32" ? path5.win32 : path5.posix;
-  const names = executableNames(executable, platform, environment);
-  if (isAbsoluteExecutablePath(executable, platform))
-    return firstExecutable(names);
-  const environmentPath = environment.PATH || (platform === "win32" ? environment.Path : void 0) || "";
-  const candidates = environmentPath.split(pathApi.delimiter).filter(Boolean).flatMap((directory) => names.map((name) => pathApi.join(directory, name)));
-  return firstExecutable(candidates);
-}
-function versionDirectories(versionsDirectory, pathApi) {
-  try {
-    const versions = fs3.readdirSync(versionsDirectory, { withFileTypes: true, encoding: "utf8" });
-    return versions.filter((entry) => entry.isDirectory()).sort((left, right) => right.name.localeCompare(left.name, void 0, { numeric: true })).map((entry) => pathApi.join(versionsDirectory, entry.name));
-  } catch (e) {
-    return [];
-  }
-}
-function nvmBinDirectories(homeDirectory) {
-  const versionsDirectory = path5.posix.join(homeDirectory, ".nvm", "versions", "node");
-  return versionDirectories(versionsDirectory, path5.posix).map((directory) => path5.posix.join(directory, "bin"));
-}
-function resolveOpencodeExecutable(configuredPath, options = {}) {
-  var _a, _b, _c, _d, _e;
-  const platform = (_a = options.platform) != null ? _a : process.platform;
-  const environment = (_b = options.environment) != null ? _b : process.env;
-  const pathApi = platform === "win32" ? path5.win32 : path5.posix;
-  const homeDirectory = (_c = options.homeDirectory) != null ? _c : os4.homedir();
-  const configuredExecutable = configuredPath.trim();
-  const executable = configuredExecutable.startsWith("~/") || configuredExecutable.startsWith("~\\") ? pathApi.join(homeDirectory, configuredExecutable.slice(2)) : configuredExecutable || DEFAULT_EXECUTABLE;
-  const names = executableNames(executable, platform, environment);
-  if (isAbsoluteExecutablePath(executable, platform)) {
-    return (_d = findExecutableOnPath(executable, { platform, environment })) != null ? _d : executable;
-  }
-  const fromPath = findExecutableOnPath(executable, { platform, environment });
-  if (fromPath)
-    return fromPath;
-  const localDirectories = [
-    ...COMMON_BIN_DIRS2.map((directory) => pathApi.join(homeDirectory, directory)),
-    ...platform === "win32" && environment.NVM_SYMLINK ? [environment.NVM_SYMLINK] : [],
-    ...platform === "win32" ? environment.NVM_HOME ? versionDirectories(environment.NVM_HOME, path5.win32) : [] : nvmBinDirectories(homeDirectory)
-  ];
-  const localCandidates = localDirectories.flatMap(
-    (directory) => names.map((name) => pathApi.join(directory, name))
-  );
-  return (_e = firstExecutable(localCandidates)) != null ? _e : executable;
-}
-
-// src/utils/opencode.ts
 var SAFE_ID_RE = /^[a-zA-Z0-9._:-]+$/;
 function safeUnlinkSync(filePath) {
   try {
@@ -23115,6 +23369,9 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
     this.editorServer = null;
     this.lifecycle = new LifecycleQueue();
     this.closing = false;
+    this.clipboardTempDirectory = null;
+    this.clipboardImageCounter = 0;
+    this.clipboardImageCleanupTimers = [];
     this.ptySession = this.plugin.createPtySession();
     this.keyRouter = new TerminalKeyRouter();
   }
@@ -23134,6 +23391,7 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
       process.env,
       this.plugin.settings.environmentVariables
     );
+    const windowsClipboard = createWslWindowsClipboard({ environment: terminalEnvironment });
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass("opencode-terminal-container");
@@ -23176,7 +23434,7 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
         getWinSizePixels: true,
         getCellSizePixels: true
       },
-      windowsPty: process.platform === "win32" ? { backend: "conpty", buildNumber: Number.parseInt((0, import_node_os.release)().split(".")[2], 10) } : void 0,
+      windowsPty: process.platform === "win32" ? { backend: "conpty", buildNumber: Number.parseInt((0, import_node_os2.release)().split(".")[2], 10) } : void 0,
       allowProposedApi: true
     });
     const fitAddon = new import_addon_fit.FitAddon();
@@ -23334,6 +23592,33 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
       termContainer.removeEventListener("mousedown", handlePickerMouse, true);
       termContainer.removeEventListener("mouseup", handlePickerMouse, true);
     });
+    if (windowsClipboard == null ? void 0 : windowsClipboard.writeImagePng) {
+      const copyRenderedImage = (event) => {
+        var _a2;
+        const screen2 = (_a2 = terminal.element) == null ? void 0 : _a2.querySelector(".xterm-screen");
+        if (!screen2)
+          return;
+        const rect = screen2.getBoundingClientRect();
+        const column = Math.floor((event.clientX - rect.left) / (rect.width / terminal.cols));
+        const viewportRow = Math.floor((event.clientY - rect.top) / (rect.height / terminal.rows));
+        if (column < 0 || column >= terminal.cols || viewportRow < 0 || viewportRow >= terminal.rows)
+          return;
+        const canvas = imageAddon.getImageAtBufferCell(column, terminal.buffer.active.viewportY + viewportRow);
+        if (!canvas)
+          return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const encoded = canvas.toDataURL("image/png").split(",", 2)[1];
+        void windowsClipboard.writeImagePng(Buffer.from(encoded, "base64")).then(() => {
+          new import_obsidian4.Notice("Copied terminal image to the Windows clipboard.");
+        }, (error) => {
+          const detail = error instanceof Error ? error.message : String(error);
+          new import_obsidian4.Notice(`Windows clipboard: ${detail}`);
+        });
+      };
+      termContainer.addEventListener("contextmenu", copyRenderedImage, true);
+      this.register(() => termContainer.removeEventListener("contextmenu", copyRenderedImage, true));
+    }
     this.editorServer = new EditorServer({ publishLock: false });
     try {
       this.editorPort = await this.editorServer.start(this.plugin.vaultRoot);
@@ -23359,7 +23644,34 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
       app: this.app,
       terminal,
       container,
-      reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment)
+      reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
+      clipboard: windowsClipboard != null ? windowsClipboard : void 0,
+      onClipboardError: (message) => new import_obsidian4.Notice(message),
+      onClipboardImagePaste: (png) => {
+        if (!this.clipboardTempDirectory) {
+          this.clipboardTempDirectory = (0, import_node_fs.mkdtempSync)((0, import_node_path.join)((0, import_node_os2.tmpdir)(), "obsidian-opencode-clipboard-"));
+        }
+        const imagePath = (0, import_node_path.join)(this.clipboardTempDirectory, `clipboard-${++this.clipboardImageCounter}.png`);
+        (0, import_node_fs.writeFileSync)(imagePath, png, { mode: 384 });
+        terminal.paste(imagePath);
+        const cleanupTimer = window.setTimeout(() => {
+          this.clipboardImageCleanupTimers = this.clipboardImageCleanupTimers.filter((timer) => timer !== cleanupTimer);
+          try {
+            (0, import_node_fs.unlinkSync)(imagePath);
+          } catch (e) {
+          }
+          if (this.clipboardTempDirectory) {
+            try {
+              if ((0, import_node_fs.readdirSync)(this.clipboardTempDirectory).length === 0) {
+                (0, import_node_fs.rmdirSync)(this.clipboardTempDirectory);
+                this.clipboardTempDirectory = null;
+              }
+            } catch (e) {
+            }
+          }
+        }, 6e4);
+        this.clipboardImageCleanupTimers.push(cleanupTimer);
+      }
     });
     this.register(() => this.keyRouter.dispose());
     const dragOverHandler = (e) => {
@@ -23474,6 +23786,14 @@ ${message}\r
         this.imageAddon = null;
       }
       this.keyRouter.dispose();
+      for (const timer of this.clipboardImageCleanupTimers)
+        window.clearTimeout(timer);
+      this.clipboardImageCleanupTimers = [];
+      if (this.clipboardTempDirectory) {
+        (0, import_node_fs.rmSync)(this.clipboardTempDirectory, { recursive: true, force: true });
+        this.clipboardTempDirectory = null;
+        this.clipboardImageCounter = 0;
+      }
     });
   }
   focusTerminal() {

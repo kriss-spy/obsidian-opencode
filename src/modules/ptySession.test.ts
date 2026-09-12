@@ -19,6 +19,11 @@ vi.mock("child_process", () => ({
 	execFileSync: vi.fn().mockReturnValue("x64\n"),
 }));
 
+vi.mock("os", async (importOriginal) => ({
+	...await importOriginal<typeof import("os")>(),
+	release: vi.fn(() => "10.0.19045"),
+}));
+
 vi.mock("fs", () => ({
 	accessSync: vi.fn(),
 	statSync: vi.fn(() => ({ isFile: () => true })),

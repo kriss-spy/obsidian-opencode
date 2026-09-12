@@ -26,6 +26,14 @@ npm run test:obsidian:windows-ui
 
 This suite requires `opencode` and Node.js on `PATH` and is not part of CI because it uses the developer's real OpenCode configuration.
 
+On WSL2 with X410 running, use the dedicated suite:
+
+```bash
+npm run test:obsidian:wsl-x410
+```
+
+It resolves X410 through WSL's Windows-host gateway, disables the WSLg Wayland route, enables software GL for consistent Electron startup, pins Obsidian 1.12.7, and runs the full isolated suite. It also launches the installed formal OpenCode V2 binary with isolated XDG data directories. Set `DISPLAY_X410` when X410 uses a non-default display address.
+
 The suite builds and installs the plugin, configures a deterministic local fake `opencode` executable, and checks:
 
 - The plugin activates in the isolated Obsidian process.
@@ -78,11 +86,22 @@ It cannot non-interactively create or register an arbitrary fresh vault. `vault:
 | #26 | Pinyin keydowns emitted while `isComposing` do not reach the PTY; only committed Chinese text is sent. Run with `npm run test:obsidian:macos-ime`. |
 | #22 | Unit tests verify the isolated Windows ConPTY helper and resize channel. Windows CI covers stubbed rendering, input, live resizing, restart, and session workflows; `npm run test:obsidian:windows-ui` covers the real CLI and mouse interactions. |
 | #10 | Unit tests cover large-export limits; E2E covers normal preview and export-to-note behavior. |
+| #50, #52, #53, #54 | Unit tests cover WSL2 detection, Unicode/Base64 transport, argument safety, failures, routing, OSC 52, and PNG validation. The X410 suite exercises formal V2 startup, exact selection copy, Unicode paste, OSC 52, Windows image paste through a temporary OpenCode attachment path, and rendered SIXEL copy to Windows. |
 
 Not yet automatable in this Linux job:
 
 - #15-#19 describe panel-mode behavior not present on the current branch.
 - #21 concerns OpenCode rollback ownership outside the plugin's current API boundary.
+
+## WSL2/X410 evidence
+
+On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:
+
+- `npm test`: 153 passing and 5 platform-only tests skipped.
+- `npm run build`: passing.
+- `npm run test:obsidian:wsl-x410`: 21 passing and 6 native-Windows tests skipped.
+
+The clipboard test selected Unicode terminal text, verified it through the Windows clipboard API, pasted it into an actual Obsidian note with `Ctrl+V`, and restored the previous clipboard. It also round-tripped a Windows bitmap into formal OpenCode V2 as `[Image 1]` and copied a rendered 32 × 16 SIXEL canvas back to the Windows clipboard as PNG. The isolated XDG profile and clipboard image directory were removed after the terminal closed.
 
 ## macOS VM
 

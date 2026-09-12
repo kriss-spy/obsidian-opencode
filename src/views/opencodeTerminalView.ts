@@ -1,11 +1,13 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { ImageAddon } from "@xterm/addon-image";
-import { release } from "node:os";
+import { release, tmpdir } from "node:os";
+import { mkdtempSync, readdirSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import OpencodePlugin from "../main";
 import { handleTerminalDrop } from "../terminalDrop";
 import { EditorServer } from "../editorServer";
@@ -17,6 +19,7 @@ import { LifecycleQueue } from "../modules/lifecycleQueue";
 import { loadOpenCodeHotkeys } from "../modules/openCodeKeymap";
 import { mergeEnvironmentVariables } from "../utils/environment";
 import { OpencodeClient, OpencodeError } from "../utils/opencode";
+import { createWslWindowsClipboard } from "../modules/wslWindowsClipboard";
 
 interface VaultWithConfig {
 	getConfig?(key: string): string;
@@ -35,6 +38,9 @@ export class OpencodeTerminalView extends ItemView {
 	private keyRouter: TerminalKeyRouter;
 	private readonly lifecycle = new LifecycleQueue();
 	private closing = false;
+	private clipboardTempDirectory: string | null = null;
+	private clipboardImageCounter = 0;
+	private clipboardImageCleanupTimers: number[] = [];
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
@@ -62,6 +68,7 @@ export class OpencodeTerminalView extends ItemView {
 			process.env,
 			this.plugin.settings.environmentVariables,
 		);
+		const windowsClipboard = createWslWindowsClipboard({ environment: terminalEnvironment });
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
 		container.addClass("opencode-terminal-container");
@@ -283,6 +290,30 @@ export class OpencodeTerminalView extends ItemView {
 			termContainer.removeEventListener("mouseup", handlePickerMouse, true);
 		});
 
+		if (windowsClipboard?.writeImagePng) {
+			const copyRenderedImage = (event: MouseEvent) => {
+				const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+				if (!screen) return;
+				const rect = screen.getBoundingClientRect();
+				const column = Math.floor((event.clientX - rect.left) / (rect.width / terminal.cols));
+				const viewportRow = Math.floor((event.clientY - rect.top) / (rect.height / terminal.rows));
+				if (column < 0 || column >= terminal.cols || viewportRow < 0 || viewportRow >= terminal.rows) return;
+				const canvas = imageAddon.getImageAtBufferCell(column, terminal.buffer.active.viewportY + viewportRow);
+				if (!canvas) return;
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				const encoded = canvas.toDataURL("image/png").split(",", 2)[1];
+				void windowsClipboard.writeImagePng!(Buffer.from(encoded, "base64")).then(() => {
+					new Notice("Copied terminal image to the Windows clipboard.");
+				}, (error) => {
+					const detail = error instanceof Error ? error.message : String(error);
+					new Notice(`Windows clipboard: ${detail}`);
+				});
+			};
+			termContainer.addEventListener("contextmenu", copyRenderedImage, true);
+			this.register(() => termContainer.removeEventListener("contextmenu", copyRenderedImage, true));
+		}
+
 		// Keep this server private to the embedded OpenCode process. Publishing a
 		// lock file would also connect unrelated OpenCode processes in this vault.
 		this.editorServer = new EditorServer({ publishLock: false });
@@ -317,6 +348,29 @@ export class OpencodeTerminalView extends ItemView {
 			terminal,
 			container,
 			reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
+			clipboard: windowsClipboard ?? undefined,
+			onClipboardError: (message) => new Notice(message),
+			onClipboardImagePaste: (png) => {
+				if (!this.clipboardTempDirectory) {
+					this.clipboardTempDirectory = mkdtempSync(join(tmpdir(), "obsidian-opencode-clipboard-"));
+				}
+				const imagePath = join(this.clipboardTempDirectory, `clipboard-${++this.clipboardImageCounter}.png`);
+				writeFileSync(imagePath, png, { mode: 0o600 });
+				terminal.paste(imagePath);
+				const cleanupTimer = window.setTimeout(() => {
+					this.clipboardImageCleanupTimers = this.clipboardImageCleanupTimers.filter((timer) => timer !== cleanupTimer);
+					try { unlinkSync(imagePath); } catch { /* already removed during terminal close */ }
+					if (this.clipboardTempDirectory) {
+						try {
+							if (readdirSync(this.clipboardTempDirectory).length === 0) {
+								rmdirSync(this.clipboardTempDirectory);
+								this.clipboardTempDirectory = null;
+							}
+						} catch { /* directory was already removed */ }
+					}
+				}, 60_000);
+				this.clipboardImageCleanupTimers.push(cleanupTimer);
+			},
 		});
 		this.register(() => this.keyRouter.dispose());
 
@@ -445,6 +499,13 @@ export class OpencodeTerminalView extends ItemView {
 				this.imageAddon = null;
 			}
 			this.keyRouter.dispose();
+			for (const timer of this.clipboardImageCleanupTimers) window.clearTimeout(timer);
+			this.clipboardImageCleanupTimers = [];
+			if (this.clipboardTempDirectory) {
+				rmSync(this.clipboardTempDirectory, { recursive: true, force: true });
+				this.clipboardTempDirectory = null;
+				this.clipboardImageCounter = 0;
+			}
 		});
 	}
 
