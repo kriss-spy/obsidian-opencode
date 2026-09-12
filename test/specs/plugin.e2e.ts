@@ -226,7 +226,7 @@ describe("OpenCode plugin in a fresh vault", function () {
 
 		await browser.execute(() => {
 			const app = (window as any).app;
-			app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.paste("hello\r");
+			app.workspace.getLeavesOfType("opencode-terminal")[0].view.ptySession.writeStdin("hello\r");
 		});
 		await waitForTerminalText("hello");
 	});
