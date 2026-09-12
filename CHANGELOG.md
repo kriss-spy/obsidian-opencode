@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Formal OpenCode V2 support** — Recognize the released V2 CLI, continue using its directory-scoped session API, and use the formal `session export` command for conversation previews and note exports. The V2 preview remains a fallback where its commands do not conflict. ([#36](https://github.com/kriss-spy/obsidian-opencode/issues/36))
-- **WSL2/X410 clipboard support** — Bridge selected Unicode text, pasted text and PNG images, OSC 52 clipboard sets, and rendered SIXEL images through Windows PowerShell. Clipboard access retries transient Windows contention, and temporary image attachments are private and cleaned up automatically. ([#52](https://github.com/kriss-spy/obsidian-opencode/issues/52))
+- **WSL2/X410 clipboard support** — Bridge OpenCode's OSC 52 copy-on-select output, pasted text and PNG images, and rendered SIXEL images through Windows PowerShell while preserving OpenCode's `Ctrl+C` handling. Clipboard access retries transient Windows contention, and temporary image attachments are private and cleaned up automatically. ([#52](https://github.com/kriss-spy/obsidian-opencode/issues/52))
 
 ## [2.0.0-beta.1] - 2026-09-10
 

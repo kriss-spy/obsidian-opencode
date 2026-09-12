@@ -101,7 +101,7 @@ On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microso
 - `npm run build`: passing.
 - `npm run test:obsidian:wsl-x410`: 22 passing and 7 native-Windows tests skipped.
 
-The clipboard test selected Unicode terminal text, verified it through the Windows clipboard API, pasted it into an actual Obsidian note with `Ctrl+V`, and restored the previous clipboard. It also round-tripped a Windows bitmap into formal OpenCode V2 as `[Image 1]` and copied a rendered 32 × 16 SIXEL canvas back to the Windows clipboard as PNG. The isolated XDG profile and clipboard image directory were removed after the terminal closed.
+The clipboard test emitted the Unicode OSC 52 payload used by OpenCode's default copy-on-select behavior, verified it through the Windows clipboard API, pasted it into an actual Obsidian note with `Ctrl+V`, and restored the previous clipboard. It also round-tripped a Windows bitmap into formal OpenCode V2 as `[Image 1]` and copied a rendered 32 × 16 SIXEL canvas back to the Windows clipboard as PNG. The isolated XDG profile and clipboard image directory were removed after the terminal closed.
 
 ## macOS VM
 

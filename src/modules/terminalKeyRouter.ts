@@ -44,14 +44,6 @@ export class TerminalKeyRouter {
 			context.onClipboardError?.(`Windows clipboard: ${detail}`);
 		};
 		const normalizePaste = (text: string) => text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-		const copySelection = () => {
-			if (!terminal.hasSelection()) return false;
-			const selection = terminal.getSelection();
-			void clipboard.writeText(selection).then(() => {
-				if (terminal.getSelection() === selection) terminal.clearSelection();
-			}, reportFailure);
-			return true;
-		};
 		const pasteFromWindows = () => {
 			void (async () => {
 				if (clipboard.readImagePng && context.onClipboardImagePaste) {
@@ -72,18 +64,9 @@ export class TerminalKeyRouter {
 
 		const keydownHandler = (event: KeyboardEvent) => {
 			if (event.defaultPrevented || event.isComposing || !event.ctrlKey || event.altKey || event.metaKey) return;
-			const key = event.key.toLowerCase();
-			if (key === "c") {
-				if (!copySelection()) return;
-				stop(event);
-			} else if (key === "v") {
-				stop(event);
-				pasteFromWindows();
-			}
-		};
-		const copyHandler = (event: ClipboardEvent) => {
-			if (event.defaultPrevented || !copySelection()) return;
+			if (event.key.toLowerCase() !== "v") return;
 			stop(event);
+			pasteFromWindows();
 		};
 		const pasteHandler = (event: ClipboardEvent) => {
 			if (event.defaultPrevented) return;
@@ -93,11 +76,9 @@ export class TerminalKeyRouter {
 		};
 
 		container.addEventListener("keydown", keydownHandler, true);
-		container.addEventListener("copy", copyHandler, true);
 		container.addEventListener("paste", pasteHandler, true);
 		this.disposers.push(() => {
 			container.removeEventListener("keydown", keydownHandler, true);
-			container.removeEventListener("copy", copyHandler, true);
 			container.removeEventListener("paste", pasteHandler, true);
 		});
 

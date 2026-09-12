@@ -464,36 +464,21 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await browser.executeObsidianCommand("opencode:open-terminal");
 		await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
 		const originalClipboard = await clipboard.readText();
-		const selectionText = "Décodage éàèêôù 中文 😀 '$HOME'";
+		const copiedText = "Décodage éàèêôù 中文 😀 '$HOME'";
 		const pastedText = "Windows paste é中😀\r\nsecond line";
 		const oscText = "OSC 52 é中😀 quotes '$HOME'";
 		const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 
 		try {
-			const selected = await browser.executeAsync((text: string, done: (value: string) => void) => {
+			await browser.executeAsync((text: string, done: () => void) => {
 				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
-				view.terminal.write(`\r\n${text}`, () => {
-					const buffer = view.terminal.buffer.active;
-					view.terminal.select(0, buffer.baseY + buffer.cursorY, view.terminal.cols);
-					view.terminal.textarea.dispatchEvent(new KeyboardEvent("keydown", {
-						key: "c",
-						code: "KeyC",
-						ctrlKey: true,
-						bubbles: true,
-						cancelable: true,
-					}));
-					done(view.terminal.getSelection());
-				});
-			}, selectionText);
-			expect(selected).toBe(selectionText);
-			await browser.waitUntil(async () => (await clipboard.readText()) === selectionText, {
+				const encoded = Buffer.from(text, "utf8").toString("base64");
+				view.terminal.write(`\x1b]52;c;${encoded}\x07`, done);
+			}, copiedText);
+			await browser.waitUntil(async () => (await clipboard.readText()) === copiedText, {
 				timeout: 10_000,
-				timeoutMsg: "Terminal selection did not reach the Windows clipboard",
+				timeoutMsg: "OpenCode-style OSC 52 text did not reach the Windows clipboard",
 			});
-			await browser.waitUntil(() => browser.execute(() => {
-				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
-				return !view.terminal.hasSelection();
-			}), { timeoutMsg: "Successful WSL clipboard copy did not clear the selection" });
 			await browser.execute(async () => {
 				const app = (window as any).app;
 				const file = await app.vault.create("WSL clipboard verification.md", "");
@@ -508,10 +493,10 @@ describe("OpenCode plugin in a fresh vault", function () {
 					const file = app.vault.getAbstractFileByPath("WSL clipboard verification.md");
 					return file ? await app.vault.read(file) : "";
 				});
-				return String(text) === selectionText;
+				return String(text) === copiedText;
 			}, {
 				timeout: 10_000,
-				timeoutMsg: "Windows clipboard selection did not paste into an Obsidian note through X410",
+				timeoutMsg: "Windows clipboard text did not paste into an Obsidian note through X410",
 			});
 			await browser.execute(async () => {
 				const app = (window as any).app;
