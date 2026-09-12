@@ -38,6 +38,8 @@ describe("WSL Windows clipboard bridge", () => {
 		const encodedText = Buffer.from(text, "utf8").toString("base64");
 		expect(command).toContain(encodedText);
 		expect(command).not.toContain(text);
+		expect(command).toContain("for ($attempt = 0; $attempt -lt 5; $attempt++)");
+		expect(command).toContain("Invoke-ClipboardOperation { Set-Clipboard -Value $text }");
 	});
 
 	it("reads Unicode from Base64 ASCII output", async () => {

@@ -31,8 +31,20 @@ interface WslClipboardOptions extends WslDetectionOptions {
 const POWERSHELL_ARGS = ["-NoProfile", "-NonInteractive", "-STA", "-EncodedCommand"];
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const CLIPBOARD_RETRY_FUNCTION = [
+	"function Invoke-ClipboardOperation {",
+	"param([scriptblock]$Operation);",
+	"for ($attempt = 0; $attempt -lt 5; $attempt++) {",
+	"try { return (& $Operation) } catch {",
+	"if ($attempt -eq 4) { throw };",
+	"Start-Sleep -Milliseconds (50 * ($attempt + 1))",
+	"}",
+	"}",
+	"}",
+].join(" ");
 const READ_COMMAND = [
-	"$text = Get-Clipboard -Raw -Format Text;",
+	CLIPBOARD_RETRY_FUNCTION,
+	"$text = Invoke-ClipboardOperation { Get-Clipboard -Raw -Format Text };",
 	"if ($null -eq $text) { $text = '' };",
 	"$bytes = [Text.Encoding]::UTF8.GetBytes([string]$text);",
 	"[Console]::Out.Write([Convert]::ToBase64String($bytes))",
@@ -40,8 +52,9 @@ const READ_COMMAND = [
 const READ_IMAGE_COMMAND = [
 	"Add-Type -AssemblyName System.Windows.Forms;",
 	"Add-Type -AssemblyName System.Drawing;",
-	"if ([Windows.Forms.Clipboard]::ContainsImage()) {",
-	"$image = [Windows.Forms.Clipboard]::GetImage();",
+	CLIPBOARD_RETRY_FUNCTION,
+	"$image = Invoke-ClipboardOperation { if ([Windows.Forms.Clipboard]::ContainsImage()) { [Windows.Forms.Clipboard]::GetImage() } };",
+	"if ($null -ne $image) {",
 	"$stream = New-Object IO.MemoryStream;",
 	"try { $image.Save($stream, [Drawing.Imaging.ImageFormat]::Png);",
 	"[Console]::Out.Write([Convert]::ToBase64String($stream.ToArray())) }",
@@ -51,12 +64,13 @@ const READ_IMAGE_COMMAND = [
 const WRITE_IMAGE_COMMAND = [
 	"Add-Type -AssemblyName System.Windows.Forms;",
 	"Add-Type -AssemblyName System.Drawing;",
+	CLIPBOARD_RETRY_FUNCTION,
 	"$encoded = [Console]::In.ReadToEnd();",
 	"$bytes = [Convert]::FromBase64String($encoded);",
 	"$stream = New-Object IO.MemoryStream(,$bytes);",
 	"$source = [Drawing.Image]::FromStream($stream);",
 	"$image = New-Object Drawing.Bitmap($source);",
-	"try { [Windows.Forms.Clipboard]::SetImage($image) }",
+	"try { Invoke-ClipboardOperation { [Windows.Forms.Clipboard]::SetImage($image) } }",
 	"finally { $image.Dispose(); $source.Dispose(); $stream.Dispose() }",
 ].join(" ");
 
@@ -115,9 +129,10 @@ class WslWindowsClipboard implements TerminalClipboard {
 	async writeText(text: string): Promise<void> {
 		const encodedText = Buffer.from(text, "utf8").toString("base64");
 		const command = [
+			CLIPBOARD_RETRY_FUNCTION,
 			`$bytes = [Convert]::FromBase64String('${encodedText}');`,
 			"$text = [Text.Encoding]::UTF8.GetString($bytes);",
-			"Set-Clipboard -Value $text",
+			"Invoke-ClipboardOperation { Set-Clipboard -Value $text }",
 		].join(" ");
 		await this.execute(command, "write");
 	}

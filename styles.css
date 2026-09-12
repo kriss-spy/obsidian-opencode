@@ -268,6 +268,49 @@
 	background-color: transparent;
 }
 
+/* OpenCode owns message scrollback, so xterm's native scrollbar has no range. */
+.opencode-terminal.is-windows .xterm .xterm-viewport {
+	scrollbar-width: none;
+}
+
+.opencode-terminal.is-windows .xterm .xterm-viewport::-webkit-scrollbar {
+	display: none;
+}
+
+.opencode-terminal-scrollbar {
+	position: absolute;
+	top: 0;
+	right: 0;
+	height: 100%;
+	width: 14px;
+	z-index: 6;
+	display: none;
+	cursor: default;
+}
+
+.opencode-terminal-scrollbar.is-active {
+	display: block;
+}
+
+.opencode-terminal-scrollbar-thumb {
+	position: absolute;
+	right: 2px;
+	width: 8px;
+	min-height: 18px;
+	border-radius: 4px;
+	background: var(--scrollbar-thumb-bg);
+	cursor: grab;
+}
+
+.opencode-terminal-scrollbar-thumb:hover,
+.opencode-terminal-scrollbar.is-dragging .opencode-terminal-scrollbar-thumb {
+	background: var(--scrollbar-active-thumb-bg);
+}
+
+.opencode-terminal-scrollbar.is-dragging .opencode-terminal-scrollbar-thumb {
+	cursor: grabbing;
+}
+
 .opencode-terminal .xterm .xterm-screen canvas {
 	display: block;
 }
