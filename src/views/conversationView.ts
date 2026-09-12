@@ -1,5 +1,5 @@
 import { ItemView, WorkspaceLeaf, Notice, moment as obsidianMoment, Modal, App, setIcon } from "obsidian";
-import OpencodePlugin from "../main";
+import type OpencodePlugin from "../main";
 import { OpencodeClient, OpencodeSession, OpencodeExport, ExportTooLargeError } from "../utils/opencode";
 import { SessionExporter } from "../modules/sessionExporter";
 import { sessionListErrorMessage } from "./conversationErrors";

@@ -22479,11 +22479,6 @@ ${message}\r
       }
     });
   }
-  focusTerminal() {
-    if (this.terminal) {
-      this.terminal.focus();
-    }
-  }
 };
 
 // src/views/conversationView.ts
@@ -23723,11 +23718,8 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
   async openOrRestartTerminal() {
     await this.viewCoordinator.openOrRestartTerminal(async () => {
       const leaf = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
-      if (leaf) {
-        const view = leaf.view;
-        if (view && "restartPty" in view && typeof view.restartPty === "function") {
-          await view.restartPty();
-        }
+      if ((leaf == null ? void 0 : leaf.view) instanceof OpencodeTerminalView) {
+        await leaf.view.restartPty();
       }
     });
   }

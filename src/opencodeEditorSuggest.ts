@@ -1,5 +1,5 @@
 import { EditorSuggest, Editor, EditorPosition, EditorSuggestTriggerInfo, EditorSuggestContext, TFile } from "obsidian";
-import OpencodePlugin from "./main";
+import type OpencodePlugin from "./main";
 
 interface OpencodeSuggestion {
 	label: string;

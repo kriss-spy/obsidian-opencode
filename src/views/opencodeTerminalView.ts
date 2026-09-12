@@ -8,7 +8,7 @@ import { ImageAddon } from "@xterm/addon-image";
 import { release, tmpdir } from "node:os";
 import { mkdtempSync, readdirSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import OpencodePlugin from "../main";
+import type OpencodePlugin from "../main";
 import { handleTerminalDrop } from "../terminalDrop";
 import { EditorServer } from "../editorServer";
 import { normalizeVaultPath } from "../utils/path";
@@ -652,9 +652,4 @@ export class OpencodeTerminalView extends ItemView {
 		});
 	}
 
-	focusTerminal() {
-		if (this.terminal) {
-			this.terminal.focus();
-		}
-	}
 }

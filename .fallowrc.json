@@ -1,0 +1,33 @@
+{
+  "entry": ["src/main.ts"],
+  "ignorePatterns": ["main.js"],
+  "ignoreDependencies": [
+    "@wdio/local-runner",
+    "wdio-obsidian-reporter",
+    "zigpty"
+  ],
+  "usedClassMembers": [
+    {
+      "extends": "EditorSuggest",
+      "members": [
+        "onTrigger",
+        "getSuggestions",
+        "renderSuggestion",
+        "selectSuggestion"
+      ]
+    },
+    {
+      "extends": "PluginSettingTab",
+      "members": [
+        "getSettingDefinitions",
+        "getControlValue",
+        "setControlValue",
+        "display"
+      ]
+    },
+    {
+      "extends": "ItemView",
+      "members": ["restartPty"]
+    }
+  ]
+}

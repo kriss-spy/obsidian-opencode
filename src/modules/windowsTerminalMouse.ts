@@ -11,8 +11,8 @@ interface TerminalBuffer {
 export const CLEAR_PICKER_QUERY = "\x7f".repeat(200);
 export const SCROLL_PAGE_UP = "\x1b[5~";
 export const SCROLL_PAGE_DOWN = "\x1b[6~";
-export const SCROLL_LINE_UP = "\x1b\x19";
-export const SCROLL_LINE_DOWN = "\x1b\x05";
+const SCROLL_LINE_UP = "\x1b\x19";
+const SCROLL_LINE_DOWN = "\x1b\x05";
 const SCROLLBAR_COLUMN_TOLERANCE = 3;
 
 export interface OpenCodeScrollbarThumb {

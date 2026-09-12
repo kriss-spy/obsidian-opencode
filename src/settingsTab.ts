@@ -1,5 +1,5 @@
 import { App, PluginSettingTab, Setting, SettingDefinitionItem } from "obsidian";
-import OpencodePlugin from "./main";
+import type OpencodePlugin from "./main";
 import { parseEnvironmentVariables, serializeEnvironmentVariables } from "./utils/environment";
 
 const environmentVariableFormat = "NAME=value";

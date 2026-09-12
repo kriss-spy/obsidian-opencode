@@ -186,11 +186,8 @@ export default class OpencodePlugin extends Plugin {
 	private async openOrRestartTerminal() {
 		await this.viewCoordinator.openOrRestartTerminal(async () => {
 			const leaf = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0];
-			if (leaf) {
-				const view = leaf.view;
-				if (view && 'restartPty' in view && typeof (view as unknown as Record<string, unknown>).restartPty === 'function') {
-					await (view as unknown as Record<string, () => Promise<void>>).restartPty();
-				}
+			if (leaf?.view instanceof OpencodeTerminalView) {
+				await leaf.view.restartPty();
 			}
 		});
 	}
