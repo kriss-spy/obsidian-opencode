@@ -22544,6 +22544,7 @@ var BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{
 var CLIPBOARD_RETRY_FUNCTION = [
   "function Invoke-ClipboardOperation {",
   "param([scriptblock]$Operation);",
+  "$ErrorActionPreference = 'Stop';",
   "for ($attempt = 0; $attempt -lt 5; $attempt++) {",
   "try { return (& $Operation) } catch {",
   "if ($attempt -eq 4) { throw };",
