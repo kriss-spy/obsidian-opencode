@@ -49,7 +49,7 @@ Use OpenCode 2's multi-session interface in a full Obsidian editor tab:
 
 - **Terminal:** Use the command palette (`Ctrl/Cmd + P`) and select **"OpenCode: Open Terminal"** to launch the CLI.
 - **Sessions View:** Use the command palette to select **"OpenCode: Open conversations"** to browse, restore, or export past conversations, or start a new session from the panel header.
-- **Close terminal:** Run **"OpenCode: Close terminal"**, or assign it a shortcut in Obsidian's Hotkeys settings. No default shortcut is installed, avoiding conflicts with Obsidian's tab commands.
+- **Close terminal:** Run **"OpenCode: Close terminal"** or press `Ctrl+Shift+W`. The shortcut can be changed in Obsidian's Hotkeys settings.
 - **Settings:** Leave the OpenCode path empty to auto-detect a compatible OpenCode installation, or configure `opencode`, `opencode2`, a `~/…` path, or a full executable path. Bare executable names are resolved from `PATH`, common user-local directories, and NVM installations: nvm-sh version directories on Unix, or the active `NVM_SYMLINK` and installed versions under `NVM_HOME` on Windows. Shell aliases are not executable paths and cannot be launched directly. Default CLI arguments, per-vault environment variables, and terminal styling preferences are available in the Obsidian settings under the "OpenCode" tab.
 - **WSL2 clipboard:** With Linux Obsidian displayed through X410, `Ctrl+C` copies an active terminal selection to Windows; without a selection it still interrupts OpenCode. `Ctrl+V` prefers a Windows clipboard image and otherwise pastes Unicode text. Right-click a rendered terminal image to copy it to the Windows clipboard. PowerShell interop errors appear as Obsidian notices.
 

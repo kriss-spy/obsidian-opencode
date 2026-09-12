@@ -10,12 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Formal OpenCode V2 support** — Recognize the released V2 CLI, continue using its directory-scoped session API, and use the formal `session export` command for conversation previews and note exports. The V2 preview remains a fallback where its commands do not conflict. ([#36](https://github.com/kriss-spy/obsidian-opencode/issues/36))
+- **WSL2/X410 clipboard support** — Bridge selected Unicode text, pasted text and PNG images, OSC 52 clipboard sets, and rendered SIXEL images through Windows PowerShell. Clipboard access retries transient Windows contention, and temporary image attachments are private and cleaned up automatically. ([#52](https://github.com/kriss-spy/obsidian-opencode/issues/52))
 
 ## [2.0.0-beta.1] - 2026-09-10
 
 ### Fixed
 
-- **Close terminal command** — Add a dedicated `OpenCode: Close terminal` command that users can bind in Obsidian's Hotkeys settings, including routing while the terminal is focused. It has no default shortcut, avoiding conflicts with Obsidian's tab commands.
+- **Close terminal command** — Add a dedicated `OpenCode: Close terminal` command with `Ctrl+Shift+W` as its default shortcut, including routing while the terminal is focused.
 - **OpenCode 2 session browsing** — Detect the v2 preview CLI and load its directory-scoped sessions through the v2 API instead of the removed `session list --format json` command. ([#36](https://github.com/kriss-spy/obsidian-opencode/issues/36))
 - **OpenCode 2 pagination** — Treat a null next-page cursor as the end of the v2 session list instead of reporting valid session data as malformed. ([#36](https://github.com/kriss-spy/obsidian-opencode/issues/36))
 - **OpenCode 2 file drops** — Fall back to terminal mention input when the embedded editor WebSocket cannot queue a drop because it has no open client. ([#36](https://github.com/kriss-spy/obsidian-opencode/issues/36))
