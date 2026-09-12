@@ -461,6 +461,20 @@ describe("OpenCode plugin in a fresh vault", function () {
 		if (!isWsl2()) this.skip();
 		const clipboard = createWslWindowsClipboard();
 		if (!clipboard) throw new Error("WSL2 was detected without a Windows clipboard bridge");
+		await browser.executeObsidianCommand("opencode:close-terminal");
+		await browser.waitUntil(() => browser.execute(() => (
+			(window as any).app.workspace.getLeavesOfType("opencode-terminal").length === 0
+		)), { timeoutMsg: "Existing terminal did not close before conditional clipboard testing" });
+		const previousEnvironmentVariables = await browser.execute(async () => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			const previous = { ...plugin.settings.environmentVariables };
+			plugin.settings.environmentVariables = {
+				...previous,
+				OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT: "1",
+			};
+			await plugin.saveSettings();
+			return previous;
+		});
 		await browser.executeObsidianCommand("opencode:open-terminal");
 		await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
 		const originalClipboard = await clipboard.readText();
@@ -470,6 +484,31 @@ describe("OpenCode plugin in a fresh vault", function () {
 		const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 
 		try {
+			const selected = await browser.executeAsync((text: string, done: (value: string) => void) => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				view.terminal.write(`\r\n${text}`, () => {
+					const buffer = view.terminal.buffer.active;
+					view.terminal.select(0, buffer.baseY + buffer.cursorY, view.terminal.cols);
+					view.terminal.textarea.dispatchEvent(new KeyboardEvent("keydown", {
+						key: "c",
+						code: "KeyC",
+						ctrlKey: true,
+						bubbles: true,
+						cancelable: true,
+					}));
+					done(view.terminal.getSelection());
+				});
+			}, copiedText);
+			expect(selected).toBe(copiedText);
+			await browser.waitUntil(async () => (await clipboard.readText()) === copiedText, {
+				timeout: 10_000,
+				timeoutMsg: "Conditional Ctrl+C selection did not reach the Windows clipboard",
+			});
+			await browser.waitUntil(() => browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				return !view.terminal.hasSelection();
+			}), { timeoutMsg: "Successful conditional Ctrl+C copy did not clear the selection" });
+
 			await browser.executeAsync((text: string, done: () => void) => {
 				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
 				const encoded = Buffer.from(text, "utf8").toString("base64");
@@ -571,12 +610,16 @@ describe("OpenCode plugin in a fresh vault", function () {
 			});
 		} finally {
 			await clipboard.writeText(originalClipboard);
-			await browser.execute(() => {
+			await browser.execute(async (serializedEnvironmentVariables: string) => {
 				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0]?.view;
 				if (view?.__wslClipboardOriginalWrite) {
 					view.ptySession.writeStdin = view.__wslClipboardOriginalWrite;
 				}
-			});
+				const plugin = (window as any).app.plugins.plugins.opencode;
+				plugin.settings.environmentVariables = JSON.parse(serializedEnvironmentVariables);
+				await plugin.saveSettings();
+			}, JSON.stringify(previousEnvironmentVariables));
+			await browser.executeObsidianCommand("opencode:close-terminal");
 		}
 	});
 

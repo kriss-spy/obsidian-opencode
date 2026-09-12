@@ -60,6 +60,23 @@ describe("WSL Windows clipboard bridge", () => {
 		await expect(clipboard!.readText()).resolves.toBe(expected);
 	});
 
+	it("clears the Windows clipboard when writing empty text", async () => {
+		const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
+		const clipboard = createWslWindowsClipboard({
+			platform: "linux",
+			release: "6.6.87.2-microsoft-standard-WSL2",
+			powershellExecutable: "powershell.exe",
+			run,
+		});
+
+		await clipboard!.writeText("");
+
+		const [, args] = run.mock.calls[0];
+		const command = Buffer.from(args[4], "base64").toString("utf16le");
+		expect(command).toContain("[Windows.Forms.Clipboard]::Clear()");
+		expect(command).not.toContain("Set-Clipboard");
+	});
+
 	it("surfaces missing interop and process failures", async () => {
 		const unavailable = createWslWindowsClipboard({
 			platform: "linux",

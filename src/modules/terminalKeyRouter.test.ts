@@ -9,10 +9,13 @@ function registerRouter(
 	registeredCommandIds?: ReadonlySet<string>,
 	clipboard?: { readText(): Promise<string>; writeText(text: string): Promise<void> },
 	onClipboardImagePaste?: (png: Buffer) => void | Promise<void>,
+	copySelectionOnCtrlC = false,
 ) {
 	const containerHandlers = new Map<string, (event: Event) => void>();
 
 	const terminalPaste = vi.fn();
+	const terminalClearSelection = vi.fn();
+	let selection = "";
 	let osc52Handler: ((data: string) => boolean | Promise<boolean>) | undefined;
 	const clipboardError = vi.fn();
 	const executeCommandById = vi.fn(() => true);
@@ -41,6 +44,9 @@ function registerRouter(
 		},
 		terminal: {
 			paste: terminalPaste,
+			hasSelection: () => Boolean(selection),
+			getSelection: () => selection,
+			clearSelection: terminalClearSelection,
 			parser: {
 				registerOscHandler: (_identifier: number, handler: typeof osc52Handler) => {
 					osc52Handler = handler;
@@ -50,6 +56,7 @@ function registerRouter(
 		},
 		reservedTerminalHotkeys,
 		clipboard,
+		copySelectionOnCtrlC,
 		onClipboardError: clipboardError,
 		onClipboardImagePaste,
 		container: {
@@ -67,7 +74,9 @@ function registerRouter(
 
 	return {
 		terminalPaste,
+		terminalClearSelection,
 		clipboardError,
+		setSelection: (value: string) => { selection = value; },
 		executeCommandById,
 		pushScope,
 		popScope,
@@ -255,15 +264,57 @@ describe("TerminalKeyRouter", () => {
 		router.dispose();
 	});
 
-	it("leaves Ctrl+C to OpenCode when the WSL clipboard bridge is active", () => {
+	it("leaves Ctrl+C to OpenCode when copy-on-select is enabled", () => {
 		const clipboard = { readText: vi.fn(), writeText: vi.fn().mockResolvedValue(undefined) };
 		const context = registerRouter({}, new Set(), undefined, clipboard);
+		context.setSelection("selected text");
 
 		const event = context.dispatchKeydown({ key: "c", ctrlKey: true });
 
 		expect(clipboard.writeText).not.toHaveBeenCalled();
 		expect(event.preventDefault).not.toHaveBeenCalled();
 		expect(event.stopImmediatePropagation).not.toHaveBeenCalled();
+		context.router.dispose();
+	});
+
+	it("copies a WSL selection with Ctrl+C when OpenCode copy-on-select is disabled", async () => {
+		const clipboard = { readText: vi.fn(), writeText: vi.fn().mockResolvedValue(undefined) };
+		const context = registerRouter({}, new Set(), undefined, clipboard, undefined, true);
+		context.setSelection("Décodage 中文 😀\n$HOME 'quotes'");
+
+		const event = context.dispatchKeydown({ key: "c", ctrlKey: true });
+		await vi.waitFor(() => expect(context.terminalClearSelection).toHaveBeenCalledOnce());
+
+		expect(clipboard.writeText).toHaveBeenCalledWith("Décodage 中文 😀\n$HOME 'quotes'");
+		expect(event.preventDefault).toHaveBeenCalledOnce();
+		expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
+		context.router.dispose();
+	});
+
+	it("still sends Ctrl+C to OpenCode without a selection when copy-on-select is disabled", () => {
+		const clipboard = { readText: vi.fn(), writeText: vi.fn() };
+		const context = registerRouter({}, new Set(), undefined, clipboard, undefined, true);
+
+		const event = context.dispatchKeydown({ key: "c", ctrlKey: true });
+
+		expect(clipboard.writeText).not.toHaveBeenCalled();
+		expect(event.preventDefault).not.toHaveBeenCalled();
+		expect(event.stopImmediatePropagation).not.toHaveBeenCalled();
+		context.router.dispose();
+	});
+
+	it("retains the selection when conditional Ctrl+C copy fails", async () => {
+		const clipboard = {
+			readText: vi.fn(),
+			writeText: vi.fn().mockRejectedValue(new Error("PowerShell interop failed")),
+		};
+		const context = registerRouter({}, new Set(), undefined, clipboard, undefined, true);
+		context.setSelection("keep me");
+
+		context.dispatchKeydown({ key: "c", ctrlKey: true });
+		await vi.waitFor(() => expect(context.clipboardError).toHaveBeenCalledWith(expect.stringMatching(/PowerShell interop failed/)));
+
+		expect(context.terminalClearSelection).not.toHaveBeenCalled();
 		context.router.dispose();
 	});
 

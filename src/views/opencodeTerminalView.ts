@@ -26,7 +26,7 @@ import {
 	scrollbarPageInput,
 } from "../modules/windowsTerminalMouse";
 import { LifecycleQueue } from "../modules/lifecycleQueue";
-import { loadOpenCodeHotkeys } from "../modules/openCodeKeymap";
+import { loadOpenCodeHotkeys, loadOpenCodeManualCopy } from "../modules/openCodeKeymap";
 import { mergeEnvironmentVariables } from "../utils/environment";
 import { OpencodeClient, OpencodeError } from "../utils/opencode";
 import { createWslWindowsClipboard } from "../modules/wslWindowsClipboard";
@@ -484,6 +484,7 @@ export class OpencodeTerminalView extends ItemView {
 			container,
 			reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
 			clipboard: windowsClipboard ?? undefined,
+			copySelectionOnCtrlC: loadOpenCodeManualCopy(terminalCwd, terminalEnvironment),
 			onClipboardError: (message) => new Notice(message),
 			onClipboardImagePaste: (png) => {
 				if (!this.clipboardTempDirectory) {

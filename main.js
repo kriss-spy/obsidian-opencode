@@ -22387,7 +22387,7 @@ function parseJsonc(text) {
   }
   return JSON.parse(withoutTrailingCommas);
 }
-function readOverrides(file, env) {
+function readConfig(file, env) {
   try {
     let source = fs2.readFileSync(file, "utf8").replace(/\{env:([^}]+)\}/g, (_, name) => {
       var _a;
@@ -22405,10 +22405,14 @@ function readOverrides(file, env) {
       }
     });
     const parsed = parseJsonc(source);
-    return parsed && typeof parsed.keybinds === "object" && parsed.keybinds ? parsed.keybinds : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
   } catch (e) {
     return {};
   }
+}
+function readOverrides(file, env) {
+  const keybinds = readConfig(file, env).keybinds;
+  return keybinds && typeof keybinds === "object" ? keybinds : {};
 }
 function configFiles(cwd, env) {
   var _a;
@@ -22443,6 +22447,18 @@ function loadOpenCodeHotkeys(cwd, env = process.env) {
   for (const file of configFiles(cwd, env))
     Object.assign(overrides, readOverrides(file, env));
   return resolveOpenCodeHotkeys(overrides);
+}
+function loadOpenCodeManualCopy(cwd, env = process.env) {
+  var _a, _b;
+  let copyMode;
+  for (const file of configFiles(cwd, env)) {
+    const configured = (_a = readConfig(file, env).terminal) == null ? void 0 : _a.copy;
+    if (configured === "manual" || configured === "select")
+      copyMode = configured;
+  }
+  if (copyMode)
+    return copyMode === "manual";
+  return /^(1|true)$/i.test((_b = env.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) != null ? _b : "");
 }
 
 // src/modules/wslWindowsClipboard.ts
@@ -22572,6 +22588,11 @@ var READ_IMAGE_COMMAND = [
   "finally { $stream.Dispose(); $image.Dispose() }",
   "}"
 ].join(" ");
+var CLEAR_COMMAND = [
+  "Add-Type -AssemblyName System.Windows.Forms;",
+  CLIPBOARD_RETRY_FUNCTION,
+  "Invoke-ClipboardOperation { [Windows.Forms.Clipboard]::Clear() }"
+].join(" ");
 var WRITE_IMAGE_COMMAND = [
   "Add-Type -AssemblyName System.Windows.Forms;",
   "Add-Type -AssemblyName System.Drawing;",
@@ -22637,6 +22658,10 @@ var WslWindowsClipboard = class {
     return decoded;
   }
   async writeText(text) {
+    if (!text) {
+      await this.execute(CLEAR_COMMAND, "clear");
+      return;
+    }
     const encodedText = Buffer.from(text, "utf8").toString("base64");
     const command = [
       CLIPBOARD_RETRY_FUNCTION,
@@ -22736,6 +22761,16 @@ var TerminalKeyRouter = class {
       (_a = context.onClipboardError) == null ? void 0 : _a.call(context, `Windows clipboard: ${detail}`);
     };
     const normalizePaste = (text) => text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const copySelection = () => {
+      if (!context.copySelectionOnCtrlC || !terminal.hasSelection())
+        return false;
+      const selection = terminal.getSelection();
+      void clipboard.writeText(selection).then(() => {
+        if (terminal.getSelection() === selection)
+          terminal.clearSelection();
+      }, reportFailure);
+      return true;
+    };
     const pasteFromWindows = () => {
       void (async () => {
         if (clipboard.readImagePng && context.onClipboardImagePaste) {
@@ -22757,10 +22792,15 @@ var TerminalKeyRouter = class {
     const keydownHandler = (event) => {
       if (event.defaultPrevented || event.isComposing || !event.ctrlKey || event.altKey || event.metaKey)
         return;
-      if (event.key.toLowerCase() !== "v")
-        return;
-      stop(event);
-      pasteFromWindows();
+      const key = event.key.toLowerCase();
+      if (key === "c") {
+        if (!copySelection())
+          return;
+        stop(event);
+      } else if (key === "v") {
+        stop(event);
+        pasteFromWindows();
+      }
     };
     const pasteHandler = (event) => {
       if (event.defaultPrevented)
@@ -23848,6 +23888,7 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
       container,
       reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
       clipboard: windowsClipboard != null ? windowsClipboard : void 0,
+      copySelectionOnCtrlC: loadOpenCodeManualCopy(terminalCwd, terminalEnvironment),
       onClipboardError: (message) => new import_obsidian4.Notice(message),
       onClipboardImagePaste: (png) => {
         if (!this.clipboardTempDirectory) {

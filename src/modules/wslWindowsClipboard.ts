@@ -62,6 +62,11 @@ const READ_IMAGE_COMMAND = [
 	"finally { $stream.Dispose(); $image.Dispose() }",
 	"}",
 ].join(" ");
+const CLEAR_COMMAND = [
+	"Add-Type -AssemblyName System.Windows.Forms;",
+	CLIPBOARD_RETRY_FUNCTION,
+	"Invoke-ClipboardOperation { [Windows.Forms.Clipboard]::Clear() }",
+].join(" ");
 const WRITE_IMAGE_COMMAND = [
 	"Add-Type -AssemblyName System.Windows.Forms;",
 	"Add-Type -AssemblyName System.Drawing;",
@@ -128,6 +133,10 @@ class WslWindowsClipboard implements TerminalClipboard {
 	}
 
 	async writeText(text: string): Promise<void> {
+		if (!text) {
+			await this.execute(CLEAR_COMMAND, "clear");
+			return;
+		}
 		const encodedText = Buffer.from(text, "utf8").toString("base64");
 		const command = [
 			CLIPBOARD_RETRY_FUNCTION,

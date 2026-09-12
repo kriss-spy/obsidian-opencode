@@ -19,6 +19,7 @@ export interface KeyRouterContext {
 	container: HTMLElement;
 	reservedTerminalHotkeys: ReadonlySet<string>;
 	clipboard?: TerminalClipboard;
+	copySelectionOnCtrlC?: boolean;
 	onClipboardError?: (message: string) => void;
 	onClipboardImagePaste?: (png: Buffer) => void | Promise<void>;
 }
@@ -44,6 +45,14 @@ export class TerminalKeyRouter {
 			context.onClipboardError?.(`Windows clipboard: ${detail}`);
 		};
 		const normalizePaste = (text: string) => text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+		const copySelection = () => {
+			if (!context.copySelectionOnCtrlC || !terminal.hasSelection()) return false;
+			const selection = terminal.getSelection();
+			void clipboard.writeText(selection).then(() => {
+				if (terminal.getSelection() === selection) terminal.clearSelection();
+			}, reportFailure);
+			return true;
+		};
 		const pasteFromWindows = () => {
 			void (async () => {
 				if (clipboard.readImagePng && context.onClipboardImagePaste) {
@@ -64,9 +73,14 @@ export class TerminalKeyRouter {
 
 		const keydownHandler = (event: KeyboardEvent) => {
 			if (event.defaultPrevented || event.isComposing || !event.ctrlKey || event.altKey || event.metaKey) return;
-			if (event.key.toLowerCase() !== "v") return;
-			stop(event);
-			pasteFromWindows();
+			const key = event.key.toLowerCase();
+			if (key === "c") {
+				if (!copySelection()) return;
+				stop(event);
+			} else if (key === "v") {
+				stop(event);
+				pasteFromWindows();
+			}
 		};
 		const pasteHandler = (event: ClipboardEvent) => {
 			if (event.defaultPrevented) return;
