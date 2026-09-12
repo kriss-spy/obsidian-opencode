@@ -238,7 +238,12 @@ function readOverrides(file: string, env: NodeJS.ProcessEnv): Record<string, Bin
 
 function configFiles(cwd: string, env: NodeJS.ProcessEnv): string[] {
 	const configHome = env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
-	const files = [path.join(configHome, "opencode", "tui.json"), path.join(configHome, "opencode", "tui.jsonc")];
+	const files = [
+		path.join(configHome, "opencode", "cli.json"),
+		path.join(configHome, "opencode", "cli.jsonc"),
+		path.join(configHome, "opencode", "tui.json"),
+		path.join(configHome, "opencode", "tui.jsonc"),
+	];
 	if (env.OPENCODE_TUI_CONFIG) files.push(env.OPENCODE_TUI_CONFIG);
 
 	const ancestors: string[] = [];

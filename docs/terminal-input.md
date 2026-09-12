@@ -51,7 +51,7 @@ The browser-side input path is shared across operating systems. Only the PTY tra
 | Platform | PTY backend | Input handling difference |
 | --- | --- | --- |
 | Windows 10 1809+ | Node helper -> embedded zigpty native module -> ConPTY | None before `PtySession`; the helper writes UTF-8 strings to zigpty. xterm's `windowsPty` option affects terminal rendering/reflow, not key ownership. |
-| WSL2 + X410 | Unix PTY plus Windows PowerShell clipboard bridge | OpenCode's OSC 52 copy-on-select output, `Ctrl+V`, and rendered-image context-menu copy cross the Windows clipboard boundary as Base64. In V2 `terminal.copy: "manual"` mode, or with the legacy disable-copy environment flag, `Ctrl+C` copies an active xterm selection; without a selection it remains owned by OpenCode. |
+| WSL2 + X410 | Unix PTY plus Windows PowerShell clipboard bridge | OpenCode's OSC 52 copy-on-select output, `Ctrl+V`, and rendered-image context-menu copy cross the Windows clipboard boundary as Base64. In V2 `terminal.copy: "manual"` mode from `cli.json`/`tui.json`, or with the legacy disable-copy environment flag, `Ctrl+C` copies an active xterm selection; without a selection it remains owned by OpenCode. |
 | Linux and macOS | Node child -> Python proxy -> `pty.fork()` | None before `PtySession`; the proxy forwards stdin bytes to the pseudoterminal. |
 
 This means a Windows-only key encoder would be the wrong seam. Platform IMEs differ in their DOM event sequences, but all must be handled by xterm before the PTY backend.

@@ -84,6 +84,20 @@ describe("OpenCode keymap", () => {
 		})).toBe(true);
 	});
 
+	it("loads manual-copy mode from OpenCode 2.0's transitional CLI config", () => {
+		const directory = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-keymap-"));
+		temporaryDirectories.push(directory);
+		const configDirectory = path.join(directory, "opencode");
+		fs.mkdirSync(configDirectory);
+		fs.writeFileSync(path.join(configDirectory, "cli.json"), JSON.stringify({
+			terminal: { copy: "manual" },
+		}));
+
+		expect(loadOpenCodeManualCopy(directory, {
+			XDG_CONFIG_HOME: directory,
+		})).toBe(true);
+	});
+
 	it("supports the legacy copy-on-select environment flag when no V2 mode is configured", () => {
 		const directory = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-keymap-"));
 		temporaryDirectories.push(directory);

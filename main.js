@@ -22417,7 +22417,12 @@ function readOverrides(file, env) {
 function configFiles(cwd, env) {
   var _a;
   const configHome = env.XDG_CONFIG_HOME || path4.join(os3.homedir(), ".config");
-  const files = [path4.join(configHome, "opencode", "tui.json"), path4.join(configHome, "opencode", "tui.jsonc")];
+  const files = [
+    path4.join(configHome, "opencode", "cli.json"),
+    path4.join(configHome, "opencode", "cli.jsonc"),
+    path4.join(configHome, "opencode", "tui.json"),
+    path4.join(configHome, "opencode", "tui.jsonc")
+  ];
   if (env.OPENCODE_TUI_CONFIG)
     files.push(env.OPENCODE_TUI_CONFIG);
   const ancestors = [];
