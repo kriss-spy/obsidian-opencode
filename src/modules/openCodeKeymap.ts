@@ -226,7 +226,7 @@ function readConfig(file: string, env: NodeJS.ProcessEnv): TuiConfig {
 			}
 		});
 		const parsed = parseJsonc(source);
-		return parsed && typeof parsed === "object" ? parsed as TuiConfig : {};
+		return parsed && typeof parsed === "object" ? parsed : {};
 	} catch {
 		return {};
 	}

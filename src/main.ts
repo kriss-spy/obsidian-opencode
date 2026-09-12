@@ -107,7 +107,6 @@ export default class OpencodePlugin extends Plugin {
 		this.addCommand({
 			id: "close-terminal",
 			name: "Close terminal",
-			hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: "w" }],
 			checkCallback: (checking) => {
 				const hasTerminal = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE).length > 0;
 				if (hasTerminal && !checking) void this.viewCoordinator.closeTerminal();

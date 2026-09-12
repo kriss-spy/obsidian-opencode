@@ -175,21 +175,21 @@
     opacity: 1;
 }
 
-.xterm-underline-1 { text-decoration: underline; }
-.xterm-underline-2 { text-decoration: underline; text-decoration-style: double; }
-.xterm-underline-3 { text-decoration: underline; text-decoration-style: wavy; }
-.xterm-underline-4 { text-decoration: underline; text-decoration-style: dotted; }
-.xterm-underline-5 { text-decoration: underline; text-decoration-style: dashed; }
+.xterm-underline-1,
+.xterm-underline-2,
+.xterm-underline-3,
+.xterm-underline-4,
+.xterm-underline-5 { text-decoration: underline; }
 
 .xterm-overline {
     text-decoration: overline;
 }
 
-.xterm-overline.xterm-underline-1 { text-decoration: underline overline; }
-.xterm-overline.xterm-underline-2 { text-decoration: underline overline; text-decoration-style: double; }
-.xterm-overline.xterm-underline-3 { text-decoration: underline overline; text-decoration-style: wavy; }
-.xterm-overline.xterm-underline-4 { text-decoration: underline overline; text-decoration-style: dotted; }
-.xterm-overline.xterm-underline-5 { text-decoration: underline overline; text-decoration-style: dashed; }
+.xterm-overline.xterm-underline-1,
+.xterm-overline.xterm-underline-2,
+.xterm-overline.xterm-underline-3,
+.xterm-overline.xterm-underline-4,
+.xterm-overline.xterm-underline-5 { text-decoration: underline; }
 
 .xterm-strikethrough {
     text-decoration: line-through;
@@ -529,7 +529,7 @@
 }
 
 .opencode-conversation-main.is-error .opencode-session-list {
-	width: auto !important;
+	width: auto;
 	min-width: 0;
 	flex: 1;
 }

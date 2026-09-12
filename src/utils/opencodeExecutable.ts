@@ -63,7 +63,7 @@ export function findExecutableOnPath(
 	return firstExecutable(candidates);
 }
 
-function versionDirectories(versionsDirectory: string, pathApi: typeof path.posix | typeof path.win32): string[] {
+function versionDirectories(versionsDirectory: string, pathApi: typeof path.posix): string[] {
 	try {
 		const versions = fs.readdirSync(versionsDirectory, { withFileTypes: true, encoding: "utf8" });
 		return versions

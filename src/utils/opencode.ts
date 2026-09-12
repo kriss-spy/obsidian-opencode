@@ -285,8 +285,9 @@ function errorCode(error: unknown): string | undefined {
 
 function errorDetails(error: unknown): string {
 	if (typeof error !== "object" || error === null) return String(error);
-	const stderr = "stderr" in error ? String((error as { stderr?: unknown }).stderr ?? "") : "";
-	const message = error instanceof Error ? error.message : String(error);
+	const stderrValue = "stderr" in error ? (error as { stderr?: unknown }).stderr : undefined;
+	const stderr = typeof stderrValue === "string" ? stderrValue : "";
+	const message = error instanceof Error ? error.message : "Unknown error";
 	return `${message}\n${stderr}`.trim();
 }
 

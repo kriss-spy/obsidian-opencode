@@ -86,7 +86,7 @@ export class OpencodeTerminalView extends ItemView {
 		container.addClass("opencode-terminal-container");
 		this.container = container;
 
-		const termContainer = container.createEl("div", {
+		const termContainer = container.createDiv({
 			cls: "opencode-terminal",
 		});
 

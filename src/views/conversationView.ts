@@ -44,9 +44,9 @@ export class OpencodeConversationView extends ItemView {
 		container.empty();
 		container.addClass("opencode-conversation-container");
 
-		const header = container.createEl("div", { cls: "opencode-conversation-header" });
+		const header = container.createDiv({ cls: "opencode-conversation-header" });
 		header.createEl("h3", { text: "Opencode sessions" });
-		const headerActions = header.createEl("div", { cls: "opencode-conversation-header-actions" });
+		const headerActions = header.createDiv({ cls: "opencode-conversation-header-actions" });
 		const newSessionBtn = headerActions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "New session" } });
 		setIcon(newSessionBtn, "plus");
 		newSessionBtn.addEventListener("click", () => { void this.plugin.newSession(); });
@@ -58,10 +58,10 @@ export class OpencodeConversationView extends ItemView {
 		svg.createSvg("path", { attr: { d: "M16 16h5v5" } });
 		refreshBtn.addEventListener("click", () => { void this.loadSessions(); });
 
-		const main = container.createEl("div", { cls: "opencode-conversation-main" });
+		const main = container.createDiv({ cls: "opencode-conversation-main" });
 		this.mainContainer = main;
-		this.listContainer = main.createEl("div", { cls: "opencode-session-list" });
-		const splitter = main.createEl("div", {
+		this.listContainer = main.createDiv({ cls: "opencode-session-list" });
+		const splitter = main.createDiv({
 			cls: "opencode-session-splitter",
 			attr: {
 				role: "separator",
@@ -70,7 +70,7 @@ export class OpencodeConversationView extends ItemView {
 				tabindex: "0",
 			},
 		});
-		this.detailContainer = main.createEl("div", { cls: "opencode-session-detail" });
+		this.detailContainer = main.createDiv({ cls: "opencode-session-detail" });
 
 		const minimumListWidth = 140;
 		const resizeList = (width: number) => {
@@ -136,7 +136,7 @@ export class OpencodeConversationView extends ItemView {
 		if (!this.listContainer) return;
 		this.listContainer.empty();
 		this.mainContainer?.removeClass("is-error");
-		this.listContainer.createEl("div", { cls: "opencode-loading", text: "Loading sessions..." });
+		this.listContainer.createDiv({ cls: "opencode-loading", text: "Loading sessions..." });
 
 		try {
 			const client = this.createClient();
@@ -153,7 +153,7 @@ export class OpencodeConversationView extends ItemView {
 		this.listContainer.empty();
 
 		if (this.sessions.length === 0) {
-			this.listContainer.createEl("div", { cls: "opencode-empty", text: "No sessions found." });
+			this.listContainer.createDiv({ cls: "opencode-empty", text: "No sessions found." });
 			return;
 		}
 
@@ -161,10 +161,10 @@ export class OpencodeConversationView extends ItemView {
 		const sorted = [...this.sessions].sort((a, b) => b.updated - a.updated);
 
 		for (const session of sorted) {
-			const item = this.listContainer.createEl("div", { cls: "opencode-session-item" });
-			item.createEl("div", { cls: "opencode-session-title", text: session.title || "Untitled" });
-			const meta = item.createEl("div", { cls: "opencode-session-meta" });
-			meta.createEl("span", { text: moment(session.updated).format("YYYY-MM-DD HH:mm") });
+			const item = this.listContainer.createDiv({ cls: "opencode-session-item" });
+			item.createDiv({ cls: "opencode-session-title", text: session.title || "Untitled" });
+			const meta = item.createDiv({ cls: "opencode-session-meta" });
+			meta.createSpan({ text: moment(session.updated).format("YYYY-MM-DD HH:mm") });
 
 			item.addEventListener("click", () => {
 				// Highlight selected
@@ -179,9 +179,10 @@ export class OpencodeConversationView extends ItemView {
 		if (!this.listContainer) return;
 		this.mainContainer?.addClass("is-error");
 		this.listContainer.empty();
-		const errorContainer = this.listContainer.createEl("div", { cls: "opencode-session-error" });
-		errorContainer.createEl("div", { cls: "opencode-error", text: sessionListErrorMessage(error) });
-		const actions = errorContainer.createEl("div", { cls: "opencode-session-error-actions" });
+		this.listContainer.style.removeProperty("width");
+		const errorContainer = this.listContainer.createDiv({ cls: "opencode-session-error" });
+		errorContainer.createDiv({ cls: "opencode-error", text: sessionListErrorMessage(error) });
+		const actions = errorContainer.createDiv({ cls: "opencode-session-error-actions" });
 		const retryButton = actions.createEl("button", { text: "Retry", cls: "mod-cta" });
 		retryButton.addEventListener("click", () => { void this.loadSessions(); });
 		const settingsButton = actions.createEl("button", { text: "Open settings" });
@@ -194,7 +195,7 @@ export class OpencodeConversationView extends ItemView {
 
 		this.detailContainer.createEl("h4", { text: session.title || "Untitled" });
 
-		const actions = this.detailContainer.createEl("div", { cls: "opencode-session-actions" });
+		const actions = this.detailContainer.createDiv({ cls: "opencode-session-actions" });
 
 		const restoreBtn = actions.createEl("button", { text: "Restore in terminal", cls: "mod-cta" });
 		restoreBtn.addEventListener("click", () => {
@@ -218,7 +219,7 @@ export class OpencodeConversationView extends ItemView {
 			}).open();
 		});
 
-		this.detailContainer.createEl("div", { cls: "opencode-loading", text: "Loading conversation..." });
+		this.detailContainer.createDiv({ cls: "opencode-loading", text: "Loading conversation..." });
 
 		let data: OpencodeExport | null;
 		try {
@@ -226,44 +227,44 @@ export class OpencodeConversationView extends ItemView {
 		} catch (error) {
 			this.detailContainer.querySelector(".opencode-loading")?.remove();
 			if (error instanceof ExportTooLargeError) {
-				this.detailContainer.createEl("div", { cls: "opencode-warning", text: "Session too large to preview." });
+				this.detailContainer.createDiv({ cls: "opencode-warning", text: "Session too large to preview." });
 			} else {
-				this.detailContainer.createEl("div", { cls: "opencode-error", text: "Failed to load conversation." });
+				this.detailContainer.createDiv({ cls: "opencode-error", text: "Failed to load conversation." });
 			}
 			return;
 		}
 		this.detailContainer.querySelector(".opencode-loading")?.remove();
 
 		if (!data) {
-			this.detailContainer.createEl("div", { cls: "opencode-error", text: "Failed to load conversation." });
+			this.detailContainer.createDiv({ cls: "opencode-error", text: "Failed to load conversation." });
 			return;
 		}
 
-		const info = this.detailContainer.createEl("div", { cls: "opencode-session-info" });
-		info.createEl("div", { text: `Model: ${data.info.model?.id || "unknown"}` });
-		info.createEl("div", { text: `Agent: ${data.info.agent || "default"}` });
-		info.createEl("div", { text: `Tokens: ${data.info.tokens?.input || 0} in / ${data.info.tokens?.output || 0} out` });
-		info.createEl("div", { text: `Cost: $${(data.info.cost || 0).toFixed(4)}` });
+		const info = this.detailContainer.createDiv({ cls: "opencode-session-info" });
+		info.createDiv({ text: `Model: ${data.info.model?.id || "unknown"}` });
+		info.createDiv({ text: `Agent: ${data.info.agent || "default"}` });
+		info.createDiv({ text: `Tokens: ${data.info.tokens?.input || 0} in / ${data.info.tokens?.output || 0} out` });
+		info.createDiv({ text: `Cost: $${(data.info.cost || 0).toFixed(4)}` });
 
-		const messages = this.detailContainer.createEl("div", { cls: "opencode-messages" });
+		const messages = this.detailContainer.createDiv({ cls: "opencode-messages" });
 		for (const msg of data.messages) {
-			const msgEl = messages.createEl("div", { cls: `opencode-message opencode-message-${msg.info.role}` });
-			const header = msgEl.createEl("div", { cls: "opencode-message-header" });
-			header.createEl("span", {
+			const msgEl = messages.createDiv({ cls: `opencode-message opencode-message-${msg.info.role}` });
+			const header = msgEl.createDiv({ cls: "opencode-message-header" });
+			header.createSpan({
 				cls: "opencode-message-role",
 				text: msg.info.role === "assistant" ? "AGENT" : msg.info.role,
 			});
-			header.createEl("span", { cls: "opencode-message-time", text: moment(msg.info.time.created).format("HH:mm:ss") });
+			header.createSpan({ cls: "opencode-message-time", text: moment(msg.info.time.created).format("HH:mm:ss") });
 
-			const body = msgEl.createEl("div", { cls: "opencode-message-body" });
+			const body = msgEl.createDiv({ cls: "opencode-message-body" });
 			for (const part of msg.parts) {
 				if (part.type === "text" && part.text) {
-					const p = body.createEl("div", { cls: "opencode-message-text" });
+					const p = body.createDiv({ cls: "opencode-message-text" });
 					p.innerText = part.text;
 				} else if (part.type === "step-start") {
-					body.createEl("div", { cls: "opencode-message-step", text: "[thinking...]" });
+					body.createDiv({ cls: "opencode-message-step", text: "[thinking...]" });
 				} else if (part.type === "tool-call") {
-					body.createEl("div", { cls: "opencode-message-tool", text: `[tool: ${part.name || part.type}]` });
+					body.createDiv({ cls: "opencode-message-tool", text: `[tool: ${part.name || part.type}]` });
 				}
 			}
 		}

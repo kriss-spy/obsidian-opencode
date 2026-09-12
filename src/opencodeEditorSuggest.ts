@@ -38,7 +38,7 @@ export class OpencodeEditorSuggest extends EditorSuggest<OpencodeSuggestion> {
 	}
 
 	renderSuggestion(suggestion: OpencodeSuggestion, el: HTMLElement): void {
-		el.createEl("div", { cls: "opencode-suggest-title", text: suggestion.label });
+		el.createDiv({ cls: "opencode-suggest-title", text: suggestion.label });
 		if (suggestion.description) {
 			el.createEl("small", { cls: "opencode-suggest-desc", text: suggestion.description });
 		}

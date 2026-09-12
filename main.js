@@ -21814,10 +21814,105 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
     super(app, plugin);
     this.plugin = plugin;
   }
+  getSettingDefinitions() {
+    return [
+      {
+        name: "Opencode path",
+        desc: "Leave empty to auto-detect opencode, or enter an executable name, ~/ path, or full path.",
+        control: { type: "text", key: "opencodePath", placeholder: "Opencode" }
+      },
+      {
+        name: "Default working directory",
+        desc: "Default directory to start opencode in. Leave empty to use the vault root.",
+        control: { type: "text", key: "defaultWorkingDirectory", placeholder: "/path/to/project" }
+      },
+      {
+        name: "Environment variables",
+        desc: `One environment variable per line in ${environmentVariableFormat} format. Values are literal; empty values are allowed.`,
+        control: {
+          type: "textarea",
+          key: "environmentVariables",
+          placeholder: environmentVariableExample,
+          rows: 5,
+          validate: (value) => {
+            try {
+              parseEnvironmentVariables(value);
+            } catch (error) {
+              return error instanceof Error ? error.message : "Invalid environment variables.";
+            }
+          }
+        }
+      },
+      {
+        name: "Terminal font size",
+        desc: "Font size for the integrated terminal.",
+        control: { type: "slider", key: "terminalFontSize", min: 8, max: 32, step: 1 }
+      },
+      {
+        name: "Terminal font family",
+        desc: "Font family for the integrated terminal.",
+        control: { type: "text", key: "terminalFontFamily", placeholder: "Monospace" }
+      },
+      {
+        name: "New session arguments",
+        desc: "Additional arguments to pass when starting a new opencode session (e.g. --model provider/model).",
+        control: { type: "text", key: "newSessionArgs", placeholder: "--model opencode-go/kimi-k2.6" }
+      }
+    ];
+  }
+  getControlValue(key) {
+    switch (key) {
+      case "opencodePath":
+        return this.plugin.settings.opencodePath;
+      case "defaultWorkingDirectory":
+        return this.plugin.settings.defaultWorkingDirectory;
+      case "environmentVariables":
+        return serializeEnvironmentVariables(this.plugin.settings.environmentVariables);
+      case "terminalFontSize":
+        return this.plugin.settings.terminalFontSize;
+      case "terminalFontFamily":
+        return this.plugin.settings.terminalFontFamily;
+      case "newSessionArgs":
+        return this.plugin.settings.newSessionArgs;
+      default:
+        return void 0;
+    }
+  }
+  async setControlValue(key, value) {
+    switch (key) {
+      case "opencodePath":
+        if (typeof value === "string")
+          this.plugin.settings.opencodePath = value.trim();
+        break;
+      case "defaultWorkingDirectory":
+        if (typeof value === "string")
+          this.plugin.settings.defaultWorkingDirectory = value;
+        break;
+      case "environmentVariables":
+        if (typeof value === "string")
+          this.plugin.settings.environmentVariables = parseEnvironmentVariables(value);
+        break;
+      case "terminalFontSize":
+        if (typeof value === "number")
+          this.plugin.settings.terminalFontSize = value;
+        break;
+      case "terminalFontFamily":
+        if (typeof value === "string")
+          this.plugin.settings.terminalFontFamily = value || "monospace";
+        break;
+      case "newSessionArgs":
+        if (typeof value === "string")
+          this.plugin.settings.newSessionArgs = value;
+        break;
+      default:
+        return;
+    }
+    await this.plugin.saveSettings();
+  }
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("Opencode path").setDesc("Leave empty to auto-detect OpenCode, or enter an executable name, ~/ path, or full path.").addText(
+    new import_obsidian.Setting(containerEl).setName("Opencode path").setDesc("Leave empty to auto-detect opencode, or enter an executable name, ~/ path, or full path.").addText(
       (text) => text.setPlaceholder("Opencode").setValue(this.plugin.settings.opencodePath).onChange(async (value) => {
         this.plugin.settings.opencodePath = value.trim();
         await this.plugin.saveSettings();
@@ -23222,11 +23317,11 @@ function errorCode(error) {
   return typeof error === "object" && error !== null && "code" in error ? String(error.code) : void 0;
 }
 function errorDetails(error) {
-  var _a;
   if (typeof error !== "object" || error === null)
     return String(error);
-  const stderr = "stderr" in error ? String((_a = error.stderr) != null ? _a : "") : "";
-  const message = error instanceof Error ? error.message : String(error);
+  const stderrValue = "stderr" in error ? error.stderr : void 0;
+  const stderr = typeof stderrValue === "string" ? stderrValue : "";
+  const message = error instanceof Error ? error.message : "Unknown error";
   return `${message}
 ${stderr}`.trim();
 }
@@ -23515,7 +23610,7 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
     container.empty();
     container.addClass("opencode-terminal-container");
     this.container = container;
-    const termContainer = container.createEl("div", {
+    const termContainer = container.createDiv({
       cls: "opencode-terminal"
     });
     const isDark = activeDocument.body.classList.contains("theme-dark") || ((_b = (_a = this.app.vault).getConfig) == null ? void 0 : _b.call(_a, "theme")) === "obsidian";
@@ -24200,9 +24295,9 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass("opencode-conversation-container");
-    const header = container.createEl("div", { cls: "opencode-conversation-header" });
+    const header = container.createDiv({ cls: "opencode-conversation-header" });
     header.createEl("h3", { text: "Opencode sessions" });
-    const headerActions = header.createEl("div", { cls: "opencode-conversation-header-actions" });
+    const headerActions = header.createDiv({ cls: "opencode-conversation-header-actions" });
     const newSessionBtn = headerActions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "New session" } });
     (0, import_obsidian6.setIcon)(newSessionBtn, "plus");
     newSessionBtn.addEventListener("click", () => {
@@ -24217,10 +24312,10 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     refreshBtn.addEventListener("click", () => {
       void this.loadSessions();
     });
-    const main = container.createEl("div", { cls: "opencode-conversation-main" });
+    const main = container.createDiv({ cls: "opencode-conversation-main" });
     this.mainContainer = main;
-    this.listContainer = main.createEl("div", { cls: "opencode-session-list" });
-    const splitter = main.createEl("div", {
+    this.listContainer = main.createDiv({ cls: "opencode-session-list" });
+    const splitter = main.createDiv({
       cls: "opencode-session-splitter",
       attr: {
         role: "separator",
@@ -24229,7 +24324,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
         tabindex: "0"
       }
     });
-    this.detailContainer = main.createEl("div", { cls: "opencode-session-detail" });
+    this.detailContainer = main.createDiv({ cls: "opencode-session-detail" });
     const minimumListWidth = 140;
     const resizeList = (width) => {
       if (!this.listContainer)
@@ -24299,7 +24394,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
       return;
     this.listContainer.empty();
     (_a = this.mainContainer) == null ? void 0 : _a.removeClass("is-error");
-    this.listContainer.createEl("div", { cls: "opencode-loading", text: "Loading sessions..." });
+    this.listContainer.createDiv({ cls: "opencode-loading", text: "Loading sessions..." });
     try {
       const client = this.createClient();
       const compatibility = await client.checkCompatibility();
@@ -24313,15 +24408,15 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     }
     this.listContainer.empty();
     if (this.sessions.length === 0) {
-      this.listContainer.createEl("div", { cls: "opencode-empty", text: "No sessions found." });
+      this.listContainer.createDiv({ cls: "opencode-empty", text: "No sessions found." });
       return;
     }
     const sorted = [...this.sessions].sort((a, b) => b.updated - a.updated);
     for (const session of sorted) {
-      const item = this.listContainer.createEl("div", { cls: "opencode-session-item" });
-      item.createEl("div", { cls: "opencode-session-title", text: session.title || "Untitled" });
-      const meta = item.createEl("div", { cls: "opencode-session-meta" });
-      meta.createEl("span", { text: moment2(session.updated).format("YYYY-MM-DD HH:mm") });
+      const item = this.listContainer.createDiv({ cls: "opencode-session-item" });
+      item.createDiv({ cls: "opencode-session-title", text: session.title || "Untitled" });
+      const meta = item.createDiv({ cls: "opencode-session-meta" });
+      meta.createSpan({ text: moment2(session.updated).format("YYYY-MM-DD HH:mm") });
       item.addEventListener("click", () => {
         var _a2;
         (_a2 = this.listContainer) == null ? void 0 : _a2.querySelectorAll(".opencode-session-item").forEach((el) => el.removeClass("is-active"));
@@ -24336,9 +24431,10 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
       return;
     (_a = this.mainContainer) == null ? void 0 : _a.addClass("is-error");
     this.listContainer.empty();
-    const errorContainer = this.listContainer.createEl("div", { cls: "opencode-session-error" });
-    errorContainer.createEl("div", { cls: "opencode-error", text: sessionListErrorMessage(error) });
-    const actions = errorContainer.createEl("div", { cls: "opencode-session-error-actions" });
+    this.listContainer.style.removeProperty("width");
+    const errorContainer = this.listContainer.createDiv({ cls: "opencode-session-error" });
+    errorContainer.createDiv({ cls: "opencode-error", text: sessionListErrorMessage(error) });
+    const actions = errorContainer.createDiv({ cls: "opencode-session-error-actions" });
     const retryButton = actions.createEl("button", { text: "Retry", cls: "mod-cta" });
     retryButton.addEventListener("click", () => {
       void this.loadSessions();
@@ -24352,7 +24448,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
       return;
     this.detailContainer.empty();
     this.detailContainer.createEl("h4", { text: session.title || "Untitled" });
-    const actions = this.detailContainer.createEl("div", { cls: "opencode-session-actions" });
+    const actions = this.detailContainer.createDiv({ cls: "opencode-session-actions" });
     const restoreBtn = actions.createEl("button", { text: "Restore in terminal", cls: "mod-cta" });
     restoreBtn.addEventListener("click", () => {
       void this.plugin.openTerminalWithSession(session.id, session.directory);
@@ -24373,47 +24469,47 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
         }
       }).open();
     });
-    this.detailContainer.createEl("div", { cls: "opencode-loading", text: "Loading conversation..." });
+    this.detailContainer.createDiv({ cls: "opencode-loading", text: "Loading conversation..." });
     let data;
     try {
       data = await this.createClient().exportSession(session.id, this.cliGeneration);
     } catch (error) {
       (_a = this.detailContainer.querySelector(".opencode-loading")) == null ? void 0 : _a.remove();
       if (error instanceof ExportTooLargeError) {
-        this.detailContainer.createEl("div", { cls: "opencode-warning", text: "Session too large to preview." });
+        this.detailContainer.createDiv({ cls: "opencode-warning", text: "Session too large to preview." });
       } else {
-        this.detailContainer.createEl("div", { cls: "opencode-error", text: "Failed to load conversation." });
+        this.detailContainer.createDiv({ cls: "opencode-error", text: "Failed to load conversation." });
       }
       return;
     }
     (_b = this.detailContainer.querySelector(".opencode-loading")) == null ? void 0 : _b.remove();
     if (!data) {
-      this.detailContainer.createEl("div", { cls: "opencode-error", text: "Failed to load conversation." });
+      this.detailContainer.createDiv({ cls: "opencode-error", text: "Failed to load conversation." });
       return;
     }
-    const info = this.detailContainer.createEl("div", { cls: "opencode-session-info" });
-    info.createEl("div", { text: `Model: ${((_c = data.info.model) == null ? void 0 : _c.id) || "unknown"}` });
-    info.createEl("div", { text: `Agent: ${data.info.agent || "default"}` });
-    info.createEl("div", { text: `Tokens: ${((_d = data.info.tokens) == null ? void 0 : _d.input) || 0} in / ${((_e = data.info.tokens) == null ? void 0 : _e.output) || 0} out` });
-    info.createEl("div", { text: `Cost: $${(data.info.cost || 0).toFixed(4)}` });
-    const messages = this.detailContainer.createEl("div", { cls: "opencode-messages" });
+    const info = this.detailContainer.createDiv({ cls: "opencode-session-info" });
+    info.createDiv({ text: `Model: ${((_c = data.info.model) == null ? void 0 : _c.id) || "unknown"}` });
+    info.createDiv({ text: `Agent: ${data.info.agent || "default"}` });
+    info.createDiv({ text: `Tokens: ${((_d = data.info.tokens) == null ? void 0 : _d.input) || 0} in / ${((_e = data.info.tokens) == null ? void 0 : _e.output) || 0} out` });
+    info.createDiv({ text: `Cost: $${(data.info.cost || 0).toFixed(4)}` });
+    const messages = this.detailContainer.createDiv({ cls: "opencode-messages" });
     for (const msg of data.messages) {
-      const msgEl = messages.createEl("div", { cls: `opencode-message opencode-message-${msg.info.role}` });
-      const header = msgEl.createEl("div", { cls: "opencode-message-header" });
-      header.createEl("span", {
+      const msgEl = messages.createDiv({ cls: `opencode-message opencode-message-${msg.info.role}` });
+      const header = msgEl.createDiv({ cls: "opencode-message-header" });
+      header.createSpan({
         cls: "opencode-message-role",
         text: msg.info.role === "assistant" ? "AGENT" : msg.info.role
       });
-      header.createEl("span", { cls: "opencode-message-time", text: moment2(msg.info.time.created).format("HH:mm:ss") });
-      const body = msgEl.createEl("div", { cls: "opencode-message-body" });
+      header.createSpan({ cls: "opencode-message-time", text: moment2(msg.info.time.created).format("HH:mm:ss") });
+      const body = msgEl.createDiv({ cls: "opencode-message-body" });
       for (const part of msg.parts) {
         if (part.type === "text" && part.text) {
-          const p = body.createEl("div", { cls: "opencode-message-text" });
+          const p = body.createDiv({ cls: "opencode-message-text" });
           p.innerText = part.text;
         } else if (part.type === "step-start") {
-          body.createEl("div", { cls: "opencode-message-step", text: "[thinking...]" });
+          body.createDiv({ cls: "opencode-message-step", text: "[thinking...]" });
         } else if (part.type === "tool-call") {
-          body.createEl("div", { cls: "opencode-message-tool", text: `[tool: ${part.name || part.type}]` });
+          body.createDiv({ cls: "opencode-message-tool", text: `[tool: ${part.name || part.type}]` });
         }
       }
     }
@@ -24492,7 +24588,7 @@ var OpencodeEditorSuggest = class extends import_obsidian7.EditorSuggest {
     ];
   }
   renderSuggestion(suggestion, el) {
-    el.createEl("div", { cls: "opencode-suggest-title", text: suggestion.label });
+    el.createDiv({ cls: "opencode-suggest-title", text: suggestion.label });
     if (suggestion.description) {
       el.createEl("small", { cls: "opencode-suggest-desc", text: suggestion.description });
     }
@@ -24595,7 +24691,7 @@ var ViewCoordinator = class {
   }
   async closeTerminal() {
     const leaves = [...this.workspace.getLeavesOfType(this.config.terminalViewType)];
-    await Promise.all(leaves.map((leaf) => leaf.detach()));
+    leaves.forEach((leaf) => leaf.detach());
   }
   async openOrRestartTerminal(restartFn) {
     let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
@@ -25271,7 +25367,6 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
     this.addCommand({
       id: "close-terminal",
       name: "Close terminal",
-      hotkeys: [{ modifiers: ["Ctrl", "Shift"], key: "w" }],
       checkCallback: (checking) => {
         const hasTerminal = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE).length > 0;
         if (hasTerminal && !checking)
