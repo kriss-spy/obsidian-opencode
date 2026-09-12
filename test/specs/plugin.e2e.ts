@@ -10,6 +10,7 @@ import { resolveOpencodeExecutable } from "../../src/utils/opencodeExecutable";
 
 const artifactsDir = path.resolve("test-results/obsidian");
 const opencodeStub = path.resolve(`test/fixtures/opencode-stub${process.platform === "win32" ? ".cmd" : ""}`);
+const opencodeCmdStub = path.resolve("test/fixtures/opencode-cmd-stub.cmd");
 const opentuiImageStub = path.resolve("test/fixtures/opentui-image-stub");
 
 function nextMessage(socket: WebSocket): Promise<string> {
@@ -223,9 +224,10 @@ describe("OpenCode plugin in a fresh vault", function () {
 		await browser.executeObsidianCommand("opencode:new-session");
 		await waitForTerminalText("ARGS:[]");
 
-		const textarea = browser.$(".opencode-terminal-container .xterm-helper-textarea");
-		await textarea.click();
-		await browser.keys(["h", "e", "l", "l", "o", "Enter"]);
+		await browser.execute(() => {
+			const app = (window as any).app;
+			app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.paste("hello\r");
+		});
 		await waitForTerminalText("hello");
 	});
 
@@ -652,13 +654,13 @@ describe("OpenCode plugin in a fresh vault", function () {
 
 	it("[issue #22] resizes the running Windows ConPTY", async function () {
 		if (process.platform !== "win32") this.skip();
-		await browser.execute(async () => {
+		await browser.execute(async (cmdStubPath: string) => {
 			const app = (window as any).app;
 			const plugin = app.plugins.plugins.opencode;
-			plugin.settings.opencodePath = "cmd.exe";
+			plugin.settings.opencodePath = cmdStubPath;
 			await plugin.saveSettings();
 			await plugin.newSession();
-		});
+		}, opencodeCmdStub);
 		await waitForTerminalText(">");
 
 		await browser.execute(() => {
