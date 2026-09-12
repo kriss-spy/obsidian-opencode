@@ -22453,17 +22453,26 @@ function loadOpenCodeHotkeys(cwd, env = process.env) {
     Object.assign(overrides, readOverrides(file, env));
   return resolveOpenCodeHotkeys(overrides);
 }
-function loadOpenCodeManualCopy(cwd, env = process.env) {
+function loadOpenCodeManualCopy(cwd, env = process.env, generation = "stable") {
   var _a, _b;
+  const legacyFlag = /^(1|true)$/i.test((_a = env.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) != null ? _a : "");
+  if (generation === "stable")
+    return legacyFlag;
+  const configHome = env.XDG_CONFIG_HOME || path4.join(os3.homedir(), ".config");
+  const cliFiles = [
+    path4.join(configHome, "opencode", "cli.json"),
+    path4.join(configHome, "opencode", "cli.jsonc")
+  ];
+  const files = cliFiles.some((file) => fs2.existsSync(file)) ? cliFiles : configFiles(cwd, env).filter((file) => !cliFiles.includes(file));
   let copyMode;
-  for (const file of configFiles(cwd, env)) {
-    const configured = (_a = readConfig(file, env).terminal) == null ? void 0 : _a.copy;
+  for (const file of files) {
+    const configured = (_b = readConfig(file, env).terminal) == null ? void 0 : _b.copy;
     if (configured === "manual" || configured === "select")
       copyMode = configured;
   }
   if (copyMode)
     return copyMode === "manual";
-  return /^(1|true)$/i.test((_b = env.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) != null ? _b : "");
+  return legacyFlag;
 }
 
 // src/modules/wslWindowsClipboard.ts
@@ -22598,6 +22607,13 @@ var CLEAR_COMMAND = [
   CLIPBOARD_RETRY_FUNCTION,
   "Invoke-ClipboardOperation { [Windows.Forms.Clipboard]::Clear() }"
 ].join(" ");
+var WRITE_TEXT_COMMAND = [
+  CLIPBOARD_RETRY_FUNCTION,
+  "$encoded = [Console]::In.ReadToEnd();",
+  "$bytes = [Convert]::FromBase64String($encoded);",
+  "$text = [Text.Encoding]::UTF8.GetString($bytes);",
+  "Invoke-ClipboardOperation { Set-Clipboard -Value $text }"
+].join(" ");
 var WRITE_IMAGE_COMMAND = [
   "Add-Type -AssemblyName System.Windows.Forms;",
   "Add-Type -AssemblyName System.Drawing;",
@@ -22667,14 +22683,7 @@ var WslWindowsClipboard = class {
       await this.execute(CLEAR_COMMAND, "clear");
       return;
     }
-    const encodedText = Buffer.from(text, "utf8").toString("base64");
-    const command = [
-      CLIPBOARD_RETRY_FUNCTION,
-      `$bytes = [Convert]::FromBase64String('${encodedText}');`,
-      "$text = [Text.Encoding]::UTF8.GetString($bytes);",
-      "Invoke-ClipboardOperation { Set-Clipboard -Value $text }"
-    ].join(" ");
-    await this.execute(command, "write");
+    await this.execute(WRITE_TEXT_COMMAND, "write", Buffer.from(text, "utf8").toString("base64"));
   }
   async readImagePng() {
     const result = await this.execute(READ_IMAGE_COMMAND, "read an image from");
@@ -22767,7 +22776,8 @@ var TerminalKeyRouter = class {
     };
     const normalizePaste = (text) => text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
     const copySelection = () => {
-      if (!context.copySelectionOnCtrlC || !terminal.hasSelection())
+      const manualCopy = typeof context.copySelectionOnCtrlC === "function" ? context.copySelectionOnCtrlC() : context.copySelectionOnCtrlC;
+      if (!manualCopy || !terminal.hasSelection())
         return false;
       const selection = terminal.getSelection();
       void clipboard.writeText(selection).then(() => {
@@ -23479,6 +23489,7 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
     this.clipboardTempDirectory = null;
     this.clipboardImageCounter = 0;
     this.clipboardImageCleanupTimers = [];
+    this.copySelectionOnCtrlC = false;
     this.ptySession = this.plugin.createPtySession();
     this.keyRouter = new TerminalKeyRouter();
   }
@@ -23498,6 +23509,7 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
       process.env,
       this.plugin.settings.environmentVariables
     );
+    this.copySelectionOnCtrlC = loadOpenCodeManualCopy(terminalCwd, terminalEnvironment, "stable");
     const windowsClipboard = createWslWindowsClipboard({ environment: terminalEnvironment });
     const container = this.containerEl.children[1];
     container.empty();
@@ -23893,7 +23905,7 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
       container,
       reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
       clipboard: windowsClipboard != null ? windowsClipboard : void 0,
-      copySelectionOnCtrlC: loadOpenCodeManualCopy(terminalCwd, terminalEnvironment),
+      copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,
       onClipboardError: (message) => new import_obsidian4.Notice(message),
       onClipboardImagePaste: (png) => {
         if (!this.clipboardTempDirectory) {
@@ -23987,6 +23999,11 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
         this.plugin.settings.environmentVariables
       ).checkCompatibility();
       opencodePath = compatibility.executable;
+      const terminalEnvironment = mergeEnvironmentVariables(
+        process.env,
+        this.plugin.settings.environmentVariables
+      );
+      this.copySelectionOnCtrlC = loadOpenCodeManualCopy(cwd, terminalEnvironment, compatibility.generation);
     } catch (error) {
       const message = error instanceof OpencodeError ? error.message : "Unable to verify the configured OpenCode executable.";
       terminal.writeln(`\r

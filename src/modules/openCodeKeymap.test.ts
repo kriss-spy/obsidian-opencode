@@ -81,7 +81,7 @@ describe("OpenCode keymap", () => {
 		expect(loadOpenCodeManualCopy(directory, {
 			XDG_CONFIG_HOME: path.join(directory, "missing"),
 			OPENCODE_TUI_CONFIG: config,
-		})).toBe(true);
+		}, "v2")).toBe(true);
 	});
 
 	it("loads manual-copy mode from OpenCode 2.0's transitional CLI config", () => {
@@ -95,7 +95,26 @@ describe("OpenCode keymap", () => {
 
 		expect(loadOpenCodeManualCopy(directory, {
 			XDG_CONFIG_HOME: directory,
-		})).toBe(true);
+		}, "v2")).toBe(true);
+	});
+
+	it("does not mix conflicting V2 CLI and TUI copy modes", () => {
+		const directory = fs.mkdtempSync(path.join(os.tmpdir(), "opencode-keymap-"));
+		temporaryDirectories.push(directory);
+		const configDirectory = path.join(directory, "opencode");
+		fs.mkdirSync(configDirectory);
+		fs.writeFileSync(path.join(configDirectory, "cli.json"), JSON.stringify({
+			terminal: { copy: "manual" },
+		}));
+		const staleTuiConfig = path.join(directory, "tui.json");
+		fs.writeFileSync(staleTuiConfig, JSON.stringify({ terminal: { copy: "select" } }));
+		const environment = {
+			XDG_CONFIG_HOME: directory,
+			OPENCODE_TUI_CONFIG: staleTuiConfig,
+		};
+
+		expect(loadOpenCodeManualCopy(directory, environment, "v2")).toBe(true);
+		expect(loadOpenCodeManualCopy(directory, environment, "stable")).toBe(false);
 	});
 
 	it("supports the legacy copy-on-select environment flag when no V2 mode is configured", () => {

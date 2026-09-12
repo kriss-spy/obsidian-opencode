@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { Hotkey } from "obsidian";
+import type { OpenCodeCliGeneration } from "../utils/opencodeExecutable";
 
 type KeyStroke = {
 	name: string;
@@ -274,12 +275,27 @@ export function loadOpenCodeHotkeys(cwd: string, env: NodeJS.ProcessEnv = proces
 	return resolveOpenCodeHotkeys(overrides);
 }
 
-export function loadOpenCodeManualCopy(cwd: string, env: NodeJS.ProcessEnv = process.env): boolean {
+export function loadOpenCodeManualCopy(
+	cwd: string,
+	env: NodeJS.ProcessEnv = process.env,
+	generation: OpenCodeCliGeneration = "stable",
+): boolean {
+	const legacyFlag = /^(1|true)$/i.test(env.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ?? "");
+	if (generation === "stable") return legacyFlag;
+
+	const configHome = env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+	const cliFiles = [
+		path.join(configHome, "opencode", "cli.json"),
+		path.join(configHome, "opencode", "cli.jsonc"),
+	];
+	const files = cliFiles.some((file) => fs.existsSync(file))
+		? cliFiles
+		: configFiles(cwd, env).filter((file) => !cliFiles.includes(file));
 	let copyMode: "manual" | "select" | undefined;
-	for (const file of configFiles(cwd, env)) {
+	for (const file of files) {
 		const configured = readConfig(file, env).terminal?.copy;
 		if (configured === "manual" || configured === "select") copyMode = configured;
 	}
 	if (copyMode) return copyMode === "manual";
-	return /^(1|true)$/i.test(env.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ?? "");
+	return legacyFlag;
 }

@@ -30,18 +30,35 @@ describe("WSL Windows clipboard bridge", () => {
 		await clipboard!.writeText(text);
 
 		expect(run).toHaveBeenCalledOnce();
-		const [executable, args] = run.mock.calls[0];
+		const [executable, args, input] = run.mock.calls[0];
 		expect(executable).toBe("/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe");
 		expect(args.slice(0, 4)).toEqual(["-NoProfile", "-NonInteractive", "-STA", "-EncodedCommand"]);
 		expect(args).toHaveLength(5);
 		const command = Buffer.from(args[4], "base64").toString("utf16le");
-		const encodedText = Buffer.from(text, "utf8").toString("base64");
-		expect(command).toContain(encodedText);
+		expect(input).toBe(Buffer.from(text, "utf8").toString("base64"));
 		expect(command).not.toContain(text);
 		expect(command).toContain("$ErrorActionPreference = 'Stop'");
 		expect(command).toContain("$attempt -lt 5");
 		expect(command).toContain("for ($attempt = 0; $attempt -lt 5; $attempt++)");
 		expect(command).toContain("Invoke-ClipboardOperation { Set-Clipboard -Value $text }");
+	});
+
+	it("keeps large text payloads out of the Windows command line", async () => {
+		const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
+		const clipboard = createWslWindowsClipboard({
+			platform: "linux",
+			release: "6.6.87.2-microsoft-standard-WSL2",
+			powershellExecutable: "powershell.exe",
+			run,
+		});
+		const text = "é中😀".repeat(20_000);
+
+		await clipboard!.writeText(text);
+
+		const [, args, input] = run.mock.calls[0];
+		expect(args.join(" ").length).toBeLessThan(10_000);
+		expect(args.join(" ")).not.toContain(Buffer.from(text, "utf8").toString("base64"));
+		expect(input).toBe(Buffer.from(text, "utf8").toString("base64"));
 	});
 
 	it("reads Unicode from Base64 ASCII output", async () => {

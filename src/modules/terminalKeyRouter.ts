@@ -19,7 +19,7 @@ export interface KeyRouterContext {
 	container: HTMLElement;
 	reservedTerminalHotkeys: ReadonlySet<string>;
 	clipboard?: TerminalClipboard;
-	copySelectionOnCtrlC?: boolean;
+	copySelectionOnCtrlC?: boolean | (() => boolean);
 	onClipboardError?: (message: string) => void;
 	onClipboardImagePaste?: (png: Buffer) => void | Promise<void>;
 }
@@ -46,7 +46,10 @@ export class TerminalKeyRouter {
 		};
 		const normalizePaste = (text: string) => text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 		const copySelection = () => {
-			if (!context.copySelectionOnCtrlC || !terminal.hasSelection()) return false;
+			const manualCopy = typeof context.copySelectionOnCtrlC === "function"
+				? context.copySelectionOnCtrlC()
+				: context.copySelectionOnCtrlC;
+			if (!manualCopy || !terminal.hasSelection()) return false;
 			const selection = terminal.getSelection();
 			void clipboard.writeText(selection).then(() => {
 				if (terminal.getSelection() === selection) terminal.clearSelection();

@@ -51,6 +51,7 @@ export class OpencodeTerminalView extends ItemView {
 	private clipboardTempDirectory: string | null = null;
 	private clipboardImageCounter = 0;
 	private clipboardImageCleanupTimers: number[] = [];
+	private copySelectionOnCtrlC = false;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
@@ -78,6 +79,7 @@ export class OpencodeTerminalView extends ItemView {
 			process.env,
 			this.plugin.settings.environmentVariables,
 		);
+		this.copySelectionOnCtrlC = loadOpenCodeManualCopy(terminalCwd, terminalEnvironment, "stable");
 		const windowsClipboard = createWslWindowsClipboard({ environment: terminalEnvironment });
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
@@ -484,7 +486,7 @@ export class OpencodeTerminalView extends ItemView {
 			container,
 			reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
 			clipboard: windowsClipboard ?? undefined,
-			copySelectionOnCtrlC: loadOpenCodeManualCopy(terminalCwd, terminalEnvironment),
+			copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,
 			onClipboardError: (message) => new Notice(message),
 			onClipboardImagePaste: (png) => {
 				if (!this.clipboardTempDirectory) {
@@ -579,6 +581,11 @@ export class OpencodeTerminalView extends ItemView {
 				this.plugin.settings.environmentVariables
 			).checkCompatibility();
 			opencodePath = compatibility.executable;
+			const terminalEnvironment = mergeEnvironmentVariables(
+				process.env,
+				this.plugin.settings.environmentVariables,
+			);
+			this.copySelectionOnCtrlC = loadOpenCodeManualCopy(cwd, terminalEnvironment, compatibility.generation);
 		} catch (error) {
 			const message = error instanceof OpencodeError
 				? error.message

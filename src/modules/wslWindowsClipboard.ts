@@ -67,6 +67,13 @@ const CLEAR_COMMAND = [
 	CLIPBOARD_RETRY_FUNCTION,
 	"Invoke-ClipboardOperation { [Windows.Forms.Clipboard]::Clear() }",
 ].join(" ");
+const WRITE_TEXT_COMMAND = [
+	CLIPBOARD_RETRY_FUNCTION,
+	"$encoded = [Console]::In.ReadToEnd();",
+	"$bytes = [Convert]::FromBase64String($encoded);",
+	"$text = [Text.Encoding]::UTF8.GetString($bytes);",
+	"Invoke-ClipboardOperation { Set-Clipboard -Value $text }",
+].join(" ");
 const WRITE_IMAGE_COMMAND = [
 	"Add-Type -AssemblyName System.Windows.Forms;",
 	"Add-Type -AssemblyName System.Drawing;",
@@ -137,14 +144,7 @@ class WslWindowsClipboard implements TerminalClipboard {
 			await this.execute(CLEAR_COMMAND, "clear");
 			return;
 		}
-		const encodedText = Buffer.from(text, "utf8").toString("base64");
-		const command = [
-			CLIPBOARD_RETRY_FUNCTION,
-			`$bytes = [Convert]::FromBase64String('${encodedText}');`,
-			"$text = [Text.Encoding]::UTF8.GetString($bytes);",
-			"Invoke-ClipboardOperation { Set-Clipboard -Value $text }",
-		].join(" ");
-		await this.execute(command, "write");
+		await this.execute(WRITE_TEXT_COMMAND, "write", Buffer.from(text, "utf8").toString("base64"));
 	}
 
 	async readImagePng(): Promise<Buffer | null> {
