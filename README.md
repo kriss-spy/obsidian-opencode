@@ -55,6 +55,8 @@ Use OpenCode 2's multi-session interface in a full Obsidian editor tab:
 
 ## Development
 
+Development requires Node.js 22.12 or newer.
+
 To develop the plugin, you can run the development script which automatically rebuilds the plugin when files change:
 
 ```bash
