@@ -490,7 +490,8 @@ export class OpencodeClient {
 				return;
 			}
 
-			const tmpFile = path.join(os.tmpdir(), `opencode-export-${sessionId}-${Date.now()}.json`);
+			const safeSessionId = sessionId.replace(/[^a-zA-Z0-9._:-]/g, "_");
+			const tmpFile = path.join(os.tmpdir(), `opencode-export-${safeSessionId}-${Date.now()}.json`);
 			let cleanedUp = false;
 
 			const cleanup = () => {
@@ -501,15 +502,15 @@ export class OpencodeClient {
 
 			const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
 			const exportEnv = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
+			// Defense-in-depth: re-validate immediately before the value reaches the shell sink below,
+			// since sessionId is attacker-influenced input flowing into a shell-invoked child process.
+			if (!SAFE_ID_RE.test(sessionId)) {
+				reject(new Error(`Invalid session ID: ${sessionId}`));
+				return;
+			}
 			const exportArgs = generation === "v2"
 				? ["session", "export", sessionId]
 				: ["export", sessionId];
-			let command = [this.resolvePath(exportEnv), ...exportArgs].map(quoteShell).join(" ")
-				+ ` > ${quoteShell(tmpFile)} 2>/dev/null`;
-			if (isFlatpak) {
-				const environmentArgs = flatpakEnvironmentArgs(this.environmentVariables).map(quoteShell).join(" ");
-				command = `flatpak-spawn --host${environmentArgs ? ` ${environmentArgs}` : ""} ${command}`;
-			}
 
 			let child: import("child_process").ChildProcess;
 			if (process.platform === "win32") {
@@ -527,11 +528,23 @@ export class OpencodeClient {
 					windowsVerbatimArguments: true,
 				});
 			} else {
-				child = spawn(command, [], {
-					cwd: this.cwd,
-					env: exportEnv,
-					shell: true,
-				});
+				// sessionId is validated above against SAFE_ID_RE (allowlist) and is only ever placed
+				// in the argv array below, never interpolated into a shell string, so no shell parses it.
+				const executable = this.resolvePath(exportEnv);
+				const spawnFile = isFlatpak ? "flatpak-spawn" : executable;
+				const spawnArgs = isFlatpak
+					? ["--host", ...flatpakEnvironmentArgs(this.environmentVariables), executable, ...exportArgs]
+					: exportArgs;
+				const outFd = fs.openSync(tmpFile, "w");
+				try {
+					child = spawn(spawnFile, spawnArgs, {
+						cwd: this.cwd,
+						env: exportEnv,
+						stdio: ["ignore", outFd, "ignore"],
+					});
+				} finally {
+					fs.closeSync(outFd);
+				}
 			}
 
 			child.on("error", (err) => {
