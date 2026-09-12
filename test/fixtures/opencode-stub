@@ -5,7 +5,7 @@ const args = process.argv.slice(2);
 
 if (args[0] === "--help") {
 	console.log(process.env.OBSIDIAN_OPENCODE_V2
-		? "OpenCode 2.0 preview command line interface"
+		? "DESCRIPTION\n  OpenCode command line interface"
 		: "opencode [project]  start opencode tui");
 } else if (process.env.OBSIDIAN_OPENCODE_V2 && args[0] === "api" && args[1] === "get" && args[2]?.startsWith("/api/session?directory=")) {
 	console.log(JSON.stringify({
@@ -29,7 +29,8 @@ if (args[0] === "--help") {
 		directory: process.cwd(),
 		updated: 1_700_000_000_000,
 	}]));
-} else if (args[0] === "export" && args[1] === "fixture-session") {
+} else if ((args[0] === "export" && args[1] === "fixture-session")
+	|| (args.slice(0, 2).join(" ") === "session export" && args[2] === "fixture-v2-session")) {
 	console.log(JSON.stringify({
 		info: {
 			model: { id: "fixture-model" },

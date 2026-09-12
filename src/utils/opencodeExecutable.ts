@@ -11,10 +11,13 @@ export interface ExecutableResolutionOptions {
 	homeDirectory?: string;
 }
 
-export type OpenCodeCliGeneration = "stable" | "v2";
+export type OpenCodeCliGeneration = "stable" | "v2-preview" | "v2";
 
 export function identifyOpenCodeCli(helpOutput: string): OpenCodeCliGeneration | null {
-	if (/OpenCode 2\.0 preview command line interface/i.test(helpOutput)) return "v2";
+	// Prefer the formal v2 signature. Preview remains a distinct fallback because
+	// its session export command differs from the formal CLI.
+	if (/\bOpenCode command line interface\b/i.test(helpOutput)) return "v2";
+	if (/OpenCode 2\.0 preview command line interface/i.test(helpOutput)) return "v2-preview";
 	if (/start opencode tui/i.test(helpOutput)) return "stable";
 	return null;
 }

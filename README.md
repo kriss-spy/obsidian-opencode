@@ -49,7 +49,7 @@ Use OpenCode 2's multi-session interface in a full Obsidian editor tab:
 - **Terminal:** Use the command palette (`Ctrl/Cmd + P`) and select **"OpenCode: Open Terminal"** to launch the CLI.
 - **Sessions View:** Use the command palette to select **"OpenCode: Open conversations"** to browse, restore, or export past conversations, or start a new session from the panel header.
 - **Close terminal:** Run **"OpenCode: Close terminal"**, or assign it a shortcut in Obsidian's Hotkeys settings. No default shortcut is installed, avoiding conflicts with Obsidian's tab commands.
-- **Settings:** Leave the OpenCode path empty to auto-detect a compatible stable installation, or configure `opencode`, `opencode2`, a `~/…` path, or a full executable path. Bare executable names are resolved from `PATH`, common user-local directories, and NVM installations: nvm-sh version directories on Unix, or the active `NVM_SYMLINK` and installed versions under `NVM_HOME` on Windows. Shell aliases are not executable paths and cannot be launched directly. Default CLI arguments, per-vault environment variables, and terminal styling preferences are available in the Obsidian settings under the "OpenCode" tab.
+- **Settings:** Leave the OpenCode path empty to auto-detect a compatible OpenCode installation, or configure `opencode`, `opencode2`, a `~/…` path, or a full executable path. Bare executable names are resolved from `PATH`, common user-local directories, and NVM installations: nvm-sh version directories on Unix, or the active `NVM_SYMLINK` and installed versions under `NVM_HOME` on Windows. Shell aliases are not executable paths and cannot be launched directly. Default CLI arguments, per-vault environment variables, and terminal styling preferences are available in the Obsidian settings under the "OpenCode" tab.
 
 ## Development
 
@@ -71,9 +71,9 @@ See [Testing in Obsidian](docs/testing-obsidian.md) for setup, coverage, evidenc
 
 ## Known Issues
 
-- **Empty external-editor prompts are not applied:** In both stable OpenCode and the OpenCode 2 preview, opening the prompt in an external editor, deleting all content, and saving leaves the previous prompt in place. This also reproduces when OpenCode runs outside Obsidian, so it must be fixed upstream.
+- **Empty external-editor prompts are not applied:** In both OpenCode 1 and OpenCode V2, opening the prompt in an external editor, deleting all content, and saving leaves the previous prompt in place. This also reproduces when OpenCode runs outside Obsidian, so it must be fixed upstream.
 
-- **OpenCode 2 can time out while pasting large images:** This reproduces in both the embedded terminal and standalone OpenCode 2, so it is not caused by the plugin. OpenCode 2 beta `0.0.0-beta-19059` configures clipboard reads with a 1-second timeout and an 8 MiB read limit; a 54.5 MB, 2720 x 18447 PNG reports `Clipboard read timed out`. Its separate local-file attachment limit is 20 MiB, so attaching that same file by path is also unsupported. Stable OpenCode 1.4.6 on Linux reads image data through `wl-paste` without OpenCode 2's explicit clipboard deadline and byte limit, so the large image may work there, but that comparison has not yet been verified manually.
+- **OpenCode V2 can time out while pasting large images:** This reproduces in both the embedded terminal and standalone OpenCode V2, so it is not caused by the plugin. A V2 preview build configured clipboard reads with a 1-second timeout and an 8 MiB read limit; a 54.5 MB, 2720 x 18447 PNG reports `Clipboard read timed out`. Its separate local-file attachment limit is 20 MiB, so attaching that same file by path is also unsupported. OpenCode 1.4.6 on Linux reads image data through `wl-paste` without those explicit clipboard limits, so the large image may work there, but that comparison has not yet been verified manually.
 
 - **large session preview:** While the buffer size for exporting sessions has been increased (up to 100MB), exceptionally large or deeply complex OpenCode sessions with massive token counts may still occasionally fail to preview or load properly.
 

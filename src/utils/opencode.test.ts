@@ -102,6 +102,38 @@ describe('OpencodeClient export with large sessions', () => {
 		expect(fs.unlinkSync).toHaveBeenCalled();
 	});
 
+	it('uses the formal OpenCode v2 session export command', async () => {
+		const mockProcess = createMockProcess();
+		mockSpawn.mockReturnValue(mockProcess.process);
+		vi.mocked(fs.statSync).mockReturnValue({ size: 1000 } as unknown as fs.Stats);
+		vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ info: {}, messages: [] }));
+
+		const promise = new OpencodeClient('opencode', '/tmp').exportSession('session-v2', 'v2');
+		expect(mockSpawn).toHaveBeenCalledWith(
+			expect.stringMatching(/^'opencode' 'session' 'export' 'session-v2' > /),
+			[],
+			expect.objectContaining({ cwd: '/tmp', shell: true }),
+		);
+		mockProcess.emitClose(0);
+		await expect(promise).resolves.toEqual({ info: {}, messages: [] });
+	});
+
+	it('keeps the preview OpenCode v2 export command as a fallback', async () => {
+		const mockProcess = createMockProcess();
+		mockSpawn.mockReturnValue(mockProcess.process);
+		vi.mocked(fs.statSync).mockReturnValue({ size: 1000 } as unknown as fs.Stats);
+		vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ info: {}, messages: [] }));
+
+		const promise = new OpencodeClient('opencode2', '/tmp').exportSession('session-preview', 'v2-preview');
+		expect(mockSpawn).toHaveBeenCalledWith(
+			expect.stringMatching(/^'opencode2' 'export' 'session-preview' > /),
+			[],
+			expect.objectContaining({ cwd: '/tmp', shell: true }),
+		);
+		mockProcess.emitClose(0);
+		await expect(promise).resolves.toEqual({ info: {}, messages: [] });
+	});
+
 	it('should return null on non-JSON output', async () => {
 		const mockProcess = createMockProcess();
 
@@ -254,6 +286,19 @@ describe('OpencodeClient listSessions', () => {
 		await expect(new OpencodeClient('opencode2', '/vault').listSessions('v2'))
 			.resolves.toEqual([]);
 		expect(mockExecFile).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps the preview OpenCode v2 session API as a fallback', async () => {
+		mockExecResult(JSON.stringify({ data: [], cursor: {} }), '');
+
+		await expect(new OpencodeClient('opencode2', '/vault').listSessions('v2-preview'))
+			.resolves.toEqual([]);
+		expect(mockExecFile).toHaveBeenCalledWith(
+			'opencode2',
+			['api', 'get', '/api/session?directory=%2Fvault&roots=true'],
+			expect.any(Object),
+			expect.any(Function),
+		);
 	});
 
 	it('rejects malformed OpenCode v2 API envelopes', async () => {
@@ -556,7 +601,8 @@ describe('OpencodeClient compatibility', () => {
 
 	it.each([
 		['stable', 'opencode [project]  start opencode tui'],
-		['v2', 'OpenCode 2.0 preview command line interface'],
+		['v2', 'DESCRIPTION\n  OpenCode command line interface'],
+		['v2-preview', 'OpenCode 2.0 preview command line interface'],
 	] as const)('accepts %s OpenCode help output', async (generation, output) => {
 		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
 			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(null, output, '');

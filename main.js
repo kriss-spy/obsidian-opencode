@@ -22586,8 +22586,10 @@ var path5 = __toESM(require("path"));
 var DEFAULT_EXECUTABLE = "opencode";
 var COMMON_BIN_DIRS2 = [".opencode/bin", ".local/bin", "bin"];
 function identifyOpenCodeCli(helpOutput) {
-  if (/OpenCode 2\.0 preview command line interface/i.test(helpOutput))
+  if (/\bOpenCode command line interface\b/i.test(helpOutput))
     return "v2";
+  if (/OpenCode 2\.0 preview command line interface/i.test(helpOutput))
+    return "v2-preview";
   if (/start opencode tui/i.test(helpOutput))
     return "stable";
   return null;
@@ -22994,9 +22996,9 @@ ${result.stderr}`;
       throw new MalformedCliOutputError(error);
     }
   }
-  async exportSession(sessionId) {
+  async exportSession(sessionId, generation = "stable") {
     try {
-      return await this.exportSessionStreamed(sessionId);
+      return await this.exportSessionStreamed(sessionId, generation);
     } catch (error) {
       if (error instanceof ExportTooLargeError) {
         console.warn("Session too large to preview:", sessionId);
@@ -23007,7 +23009,7 @@ ${result.stderr}`;
       return null;
     }
   }
-  exportSessionStreamed(sessionId, maxBytes = 200 * 1024 * 1024) {
+  exportSessionStreamed(sessionId, generation, maxBytes = 200 * 1024 * 1024) {
     return new Promise((resolve2, reject) => {
       if (!SAFE_ID_RE.test(sessionId)) {
         reject(new Error(`Invalid session ID: ${sessionId}`));
@@ -23023,7 +23025,8 @@ ${result.stderr}`;
       };
       const isFlatpak = fs4.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
       const exportEnv = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
-      let command = `${quoteShell(this.resolvePath(exportEnv))} export ${quoteShell(sessionId)} > ${quoteShell(tmpFile)} 2>/dev/null`;
+      const exportArgs = generation === "v2" ? ["session", "export", sessionId] : ["export", sessionId];
+      let command = [this.resolvePath(exportEnv), ...exportArgs].map(quoteShell).join(" ") + ` > ${quoteShell(tmpFile)} 2>/dev/null`;
       if (isFlatpak) {
         const environmentArgs = flatpakEnvironmentArgs(this.environmentVariables).map(quoteShell).join(" ");
         command = `flatpak-spawn --host${environmentArgs ? ` ${environmentArgs}` : ""} ${command}`;
@@ -23031,7 +23034,7 @@ ${result.stderr}`;
       let child;
       if (process.platform === "win32") {
         const configuredExecutable = this.resolvePath(exportEnv);
-        const commandTokens = /\.ps1$/i.test(configuredExecutable) ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", configuredExecutable, "export", sessionId] : [configuredExecutable, "export", sessionId];
+        const commandTokens = /\.ps1$/i.test(configuredExecutable) ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", configuredExecutable, ...exportArgs] : [configuredExecutable, ...exportArgs];
         const windowsCommand = windowsCommandReferences([...commandTokens, tmpFile], exportEnv);
         const tmpFileRef = windowsCommand.references.at(-1);
         const commandLine = `${windowsCommand.references.slice(0, -1).join(" ")} > ${tmpFileRef} 2>NUL`;
@@ -23592,6 +23595,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     this.listContainer = null;
     this.detailContainer = null;
     this.mainContainer = null;
+    this.cliGeneration = "stable";
     this.exporter = new SessionExporter(this.app);
   }
   createClient() {
@@ -23714,6 +23718,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     try {
       const client = this.createClient();
       const compatibility = await client.checkCompatibility();
+      this.cliGeneration = compatibility.generation;
       this.sessions = await client.listSessions(compatibility.generation);
     } catch (error) {
       console.error("Unable to load OpenCode sessions", error);
@@ -23786,7 +23791,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
     this.detailContainer.createEl("div", { cls: "opencode-loading", text: "Loading conversation..." });
     let data;
     try {
-      data = await this.createClient().exportSession(session.id);
+      data = await this.createClient().exportSession(session.id, this.cliGeneration);
     } catch (error) {
       (_a = this.detailContainer.querySelector(".opencode-loading")) == null ? void 0 : _a.remove();
       if (error instanceof ExportTooLargeError) {
@@ -23830,7 +23835,7 @@ var OpencodeConversationView = class extends import_obsidian6.ItemView {
   }
   async exportSessionToNote(session) {
     try {
-      const data = await this.createClient().exportSession(session.id);
+      const data = await this.createClient().exportSession(session.id, this.cliGeneration);
       if (!data) {
         new import_obsidian6.Notice("Failed to export session");
         return;

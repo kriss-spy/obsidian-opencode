@@ -461,9 +461,12 @@ export class OpencodeClient {
 		}
 	}
 
-	async exportSession(sessionId: string): Promise<OpencodeExport | null> {
+	async exportSession(
+		sessionId: string,
+		generation: OpenCodeCliGeneration = "stable"
+	): Promise<OpencodeExport | null> {
 		try {
-			return await this.exportSessionStreamed(sessionId);
+			return await this.exportSessionStreamed(sessionId, generation);
 		} catch (error) {
 			if (error instanceof ExportTooLargeError) {
 				console.warn("Session too large to preview:", sessionId);
@@ -475,7 +478,11 @@ export class OpencodeClient {
 		}
 	}
 
-	private exportSessionStreamed(sessionId: string, maxBytes = 200 * 1024 * 1024): Promise<OpencodeExport> {
+	private exportSessionStreamed(
+		sessionId: string,
+		generation: OpenCodeCliGeneration,
+		maxBytes = 200 * 1024 * 1024
+	): Promise<OpencodeExport> {
 		return new Promise((resolve, reject) => {
 			if (!SAFE_ID_RE.test(sessionId)) {
 				reject(new Error(`Invalid session ID: ${sessionId}`));
@@ -493,7 +500,11 @@ export class OpencodeClient {
 
 			const isFlatpak = fs.existsSync("/.flatpak-info") || process.env.FLATPAK_ID;
 			const exportEnv = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
-			let command = `${quoteShell(this.resolvePath(exportEnv))} export ${quoteShell(sessionId)} > ${quoteShell(tmpFile)} 2>/dev/null`;
+			const exportArgs = generation === "v2"
+				? ["session", "export", sessionId]
+				: ["export", sessionId];
+			let command = [this.resolvePath(exportEnv), ...exportArgs].map(quoteShell).join(" ")
+				+ ` > ${quoteShell(tmpFile)} 2>/dev/null`;
 			if (isFlatpak) {
 				const environmentArgs = flatpakEnvironmentArgs(this.environmentVariables).map(quoteShell).join(" ");
 				command = `flatpak-spawn --host${environmentArgs ? ` ${environmentArgs}` : ""} ${command}`;
@@ -503,8 +514,8 @@ export class OpencodeClient {
 			if (process.platform === "win32") {
 				const configuredExecutable = this.resolvePath(exportEnv);
 				const commandTokens = /\.ps1$/i.test(configuredExecutable)
-					? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", configuredExecutable, "export", sessionId]
-					: [configuredExecutable, "export", sessionId];
+					? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", configuredExecutable, ...exportArgs]
+					: [configuredExecutable, ...exportArgs];
 				const windowsCommand = windowsCommandReferences([...commandTokens, tmpFile], exportEnv);
 				const tmpFileRef = windowsCommand.references.at(-1)!;
 				const commandLine = `${windowsCommand.references.slice(0, -1).join(" ")} > ${tmpFileRef} 2>NUL`;

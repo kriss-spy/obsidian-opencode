@@ -141,9 +141,10 @@ describe("resolveOpencodeExecutable", () => {
 });
 
 describe("identifyOpenCodeCli", () => {
-	it("recognizes stable OpenCode, OpenCode v2, and rejects Codex", () => {
+	it("recognizes stable OpenCode, formal v2, preview v2, and rejects Codex", () => {
 		expect(identifyOpenCodeCli("opencode [project]  start opencode tui")).toBe("stable");
-		expect(identifyOpenCodeCli("OpenCode 2.0 preview command line interface")).toBe("v2");
+		expect(identifyOpenCodeCli("DESCRIPTION\n  OpenCode command line interface")).toBe("v2");
+		expect(identifyOpenCodeCli("OpenCode 2.0 preview command line interface")).toBe("v2-preview");
 		expect(identifyOpenCodeCli("Codex CLI\nUsage: codex [OPTIONS]")).toBeNull();
 	});
 });

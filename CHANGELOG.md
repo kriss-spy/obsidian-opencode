@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Formal OpenCode V2 support** — Recognize the released V2 CLI, continue using its directory-scoped session API, and use the formal `session export` command for conversation previews and note exports. The V2 preview remains a fallback where its commands do not conflict. ([#36](https://github.com/kriss-spy/obsidian-opencode/issues/36))
+
 ## [2.0.0-beta.1] - 2026-09-10
 
 ### Fixed

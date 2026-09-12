@@ -3,6 +3,7 @@ import OpencodePlugin from "../main";
 import { OpencodeClient, OpencodeSession, OpencodeExport, ExportTooLargeError } from "../utils/opencode";
 import { SessionExporter } from "../modules/sessionExporter";
 import { sessionListErrorMessage } from "./conversationErrors";
+import { OpenCodeCliGeneration } from "../utils/opencodeExecutable";
 
 const moment: (input: number) => { format: (fmt: string) => string } = obsidianMoment;
 
@@ -14,6 +15,7 @@ export class OpencodeConversationView extends ItemView {
 	detailContainer: HTMLElement | null = null;
 	private mainContainer: HTMLElement | null = null;
 	private exporter: SessionExporter;
+	private cliGeneration: OpenCodeCliGeneration = "stable";
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
@@ -139,6 +141,7 @@ export class OpencodeConversationView extends ItemView {
 		try {
 			const client = this.createClient();
 			const compatibility = await client.checkCompatibility();
+			this.cliGeneration = compatibility.generation;
 			this.sessions = await client.listSessions(compatibility.generation);
 		} catch (error) {
 			console.error("Unable to load OpenCode sessions", error);
@@ -219,7 +222,7 @@ export class OpencodeConversationView extends ItemView {
 
 		let data: OpencodeExport | null;
 		try {
-			data = await this.createClient().exportSession(session.id);
+			data = await this.createClient().exportSession(session.id, this.cliGeneration);
 		} catch (error) {
 			this.detailContainer.querySelector(".opencode-loading")?.remove();
 			if (error instanceof ExportTooLargeError) {
@@ -268,7 +271,7 @@ export class OpencodeConversationView extends ItemView {
 
 	async exportSessionToNote(session: OpencodeSession) {
 		try {
-			const data = await this.createClient().exportSession(session.id);
+			const data = await this.createClient().exportSession(session.id, this.cliGeneration);
 			if (!data) {
 				new Notice("Failed to export session");
 				return;

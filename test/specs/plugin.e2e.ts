@@ -129,6 +129,8 @@ describe("OpenCode plugin in a fresh vault", function () {
 			});
 
 			await expect(browser.$(".opencode-session-title")).toHaveText("Fixture v2 session");
+			await browser.$(".opencode-session-item").click();
+			await expect(browser.$(".opencode-session-info")).toHaveText(expect.stringContaining("fixture-model"));
 		} finally {
 			await browser.execute(async (serializedEnvironmentVariables: string) => {
 				const app = (window as any).app;
