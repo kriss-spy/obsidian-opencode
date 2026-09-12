@@ -103,6 +103,7 @@ describe('OpencodeClient export with large sessions', () => {
 	});
 
 	it('uses the formal OpenCode v2 session export command', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
 		const mockProcess = createMockProcess();
 		mockSpawn.mockReturnValue(mockProcess.process);
 		vi.mocked(fs.statSync).mockReturnValue({ size: 1000 } as unknown as fs.Stats);
@@ -119,6 +120,7 @@ describe('OpencodeClient export with large sessions', () => {
 	});
 
 	it('keeps the preview OpenCode v2 export command as a fallback', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
 		const mockProcess = createMockProcess();
 		mockSpawn.mockReturnValue(mockProcess.process);
 		vi.mocked(fs.statSync).mockReturnValue({ size: 1000 } as unknown as fs.Stats);
@@ -209,6 +211,7 @@ describe('OpencodeClient listSessions', () => {
 	});
 
 	it('lists OpenCode v2 sessions through the directory-scoped API', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
 		const pages = [{
 			data: [{
 				id: 'ses_v2',
@@ -289,6 +292,7 @@ describe('OpencodeClient listSessions', () => {
 	});
 
 	it('keeps the preview OpenCode v2 session API as a fallback', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
 		mockExecResult(JSON.stringify({ data: [], cursor: {} }), '');
 
 		await expect(new OpencodeClient('opencode2', '/vault').listSessions('v2-preview'))
@@ -309,7 +313,8 @@ describe('OpencodeClient listSessions', () => {
 	});
 
 	it('uses the shared user-local executable detection when the configured path is empty', async () => {
-		const detected = path.join(os.homedir(), '.opencode/bin/opencode');
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+		const detected = path.posix.join(os.homedir(), '.opencode/bin/opencode');
 		vi.mocked(fs.accessSync).mockImplementation((candidate) => {
 			if (candidate !== detected) throw new Error('not found');
 		});

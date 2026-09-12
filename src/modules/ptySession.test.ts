@@ -207,7 +207,7 @@ describe("PtySession", () => {
 		}
 	});
 
-	it("buffers incomplete Unix resize records and ignores malformed complete records", async () => {
+	it.skipIf(process.platform === "win32")("buffers incomplete Unix resize records and ignores malformed complete records", async () => {
 		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
 		const child = createProcess();
 		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
@@ -273,7 +273,7 @@ print(json.dumps({"after_partial": after_partial, "after_complete": resizes}))
 		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
 		const child = createProcess();
 		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
-		const detected = path.join(os.homedir(), ".opencode/bin/opencode");
+		const detected = path.posix.join(os.homedir(), ".opencode/bin/opencode");
 		vi.mocked(accessSync).mockImplementation((candidate) => {
 			if (candidate !== detected) throw new Error("not found");
 		});
