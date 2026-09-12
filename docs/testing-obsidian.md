@@ -97,9 +97,9 @@ Not yet automatable in this Linux job:
 
 On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:
 
-- `npm test`: 153 passing and 5 platform-only tests skipped.
+- `npm test`: 155 passing and 5 platform-only tests skipped.
 - `npm run build`: passing.
-- `npm run test:obsidian:wsl-x410`: 21 passing and 6 native-Windows tests skipped.
+- `npm run test:obsidian:wsl-x410`: 22 passing and 7 native-Windows tests skipped.
 
 The clipboard test selected Unicode terminal text, verified it through the Windows clipboard API, pasted it into an actual Obsidian note with `Ctrl+V`, and restored the previous clipboard. It also round-tripped a Windows bitmap into formal OpenCode V2 as `[Image 1]` and copied a rendered 32 × 16 SIXEL canvas back to the Windows clipboard as PNG. The isolated XDG profile and clipboard image directory were removed after the terminal closed.
 
