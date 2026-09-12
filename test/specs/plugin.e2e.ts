@@ -223,6 +223,10 @@ describe("OpenCode plugin in a fresh vault", function () {
 	it("[issue #27] accepts input after New Session replaces an existing PTY", async function () {
 		await browser.executeObsidianCommand("opencode:new-session");
 		await waitForTerminalText("ARGS:[]");
+		// The Windows ConPTY host emits the child's first output just before its
+		// stdin forwarding loop settles. A user cannot type this quickly, but the
+		// WebDriver test can, so wait for that final startup boundary.
+		if (process.platform === "win32") await browser.pause(250);
 
 		await browser.execute(() => {
 			const app = (window as any).app;
