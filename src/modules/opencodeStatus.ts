@@ -23,8 +23,8 @@ export interface OpencodeActivityClient {
 
 export class OpencodeActivitySource {
 	private active = new Map<string, OpencodeStatusSession>();
-	private recent: OpencodeStatusSession[] = [];
-	private readonly touched = new Map<string, string[]>();
+	private retainedTouchedSessions: OpencodeStatusSession[] = [];
+	private readonly completedFiles = new Map<string, string[]>();
 
 	constructor(
 		private readonly client: OpencodeActivityClient,
@@ -43,9 +43,9 @@ export class OpencodeActivitySource {
 		const nextActive = new Map<string, OpencodeStatusSession>();
 
 		for (const session of activeSessions) {
-			const previousFiles = this.touched.get(session.id) ?? [];
-			const files = mergeFiles(previousFiles, await this.changedFiles(session.id, previousFiles));
-			this.touched.set(session.id, files);
+			const previousFiles = this.active.get(session.id)?.files ?? [];
+			if (!this.active.has(session.id)) this.completedFiles.delete(session.id);
+			const files = await this.changedFiles(session.id, previousFiles);
 			nextActive.set(session.id, {
 				...session,
 				files,
@@ -55,28 +55,45 @@ export class OpencodeActivitySource {
 
 		const completed = new Map<string, OpencodeStatusSession>();
 		for (const session of Array.from(this.active.values()).filter((item) => !nextActive.has(item.id))) {
-			completed.set(session.id, { ...session, running: false });
+			completed.set(session.id, {
+				...session,
+				files: [],
+				running: false,
+			});
 		}
 		for (const session of recentlyUpdated) {
 			if (!nextActive.has(session.id) && !completed.has(session.id)) {
-				completed.set(session.id, { ...session, files: this.touched.get(session.id) ?? [], running: false });
+				completed.set(session.id, {
+					...session,
+					files: this.completedFiles.get(session.id) ?? [],
+					running: false,
+				});
 			}
 		}
 		for (const session of completed.values()) {
-			session.files = mergeFiles(session.files, await this.changedFiles(session.id, session.files));
-			this.touched.set(session.id, session.files);
+			const observedFiles = this.active.get(session.id)?.files ?? session.files;
+			session.files = await this.changedFiles(session.id, observedFiles);
+			this.completedFiles.set(session.id, session.files);
 		}
 
 		this.active = nextActive;
 		const touchedCompleted = Array.from(completed.values()).filter((session) => session.files.length > 0);
-		if (touchedCompleted.length > 0) this.recent = touchedCompleted;
+		if (completed.size > 0) {
+			const completedIds = new Set(completed.keys());
+			this.retainedTouchedSessions = [
+				...touchedCompleted,
+				...this.retainedTouchedSessions.filter((session) => !completedIds.has(session.id)),
+			];
+		}
 		if (nextActive.size > 0) {
 			return [
 				...Array.from(nextActive.values()),
-				...this.recent.filter((session) => !nextActive.has(session.id) && session.files.length > 0),
+				...this.retainedTouchedSessions.filter(
+					(session) => !nextActive.has(session.id) && session.files.length > 0,
+				),
 			];
 		}
-		return this.recent;
+		return this.retainedTouchedSessions;
 	}
 
 	private async changedFiles(sessionId: string, fallback: string[]): Promise<string[]> {
@@ -86,10 +103,6 @@ export class OpencodeActivitySource {
 			return fallback;
 		}
 	}
-}
-
-function mergeFiles(previous: string[], current: string[]): string[] {
-	return Array.from(new Set([...previous, ...current]));
 }
 
 function directoriesOverlap(left: string, right: string): boolean {

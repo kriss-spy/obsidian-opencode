@@ -68,6 +68,24 @@ describe("OpencodeActivitySource", () => {
 		]);
 	});
 
+	it("drops a file that disappears from the final session diff", async () => {
+		let active = [{ id: "ses_1", directory: "/vault" }];
+		let files = ["Notes/Theo.md"];
+		const source = new OpencodeActivitySource({
+			listActiveSessions: async () => active,
+			listSessionChangedFiles: async () => files,
+		});
+
+		expect(await source.read()).toEqual([
+			{ id: "ses_1", directory: "/vault", files: ["Notes/Theo.md"], running: true },
+		]);
+
+		active = [];
+		files = [];
+
+		expect(await source.read()).toEqual([]);
+	});
+
 	it("still reports running when a new turn does not have a diff yet", async () => {
 		const source = new OpencodeActivitySource({
 			listActiveSessions: async () => [{ id: "ses_1", directory: "/vault" }],
@@ -79,7 +97,7 @@ describe("OpencodeActivitySource", () => {
 		]);
 	});
 
-	it("retains touched files when the same session starts another turn", async () => {
+	it("starts fresh when the same session begins another turn", async () => {
 		let active = [{ id: "ses_1", directory: "/vault" }];
 		let files = ["Notes/plan.md"];
 		const source = new OpencodeActivitySource({
@@ -94,8 +112,11 @@ describe("OpencodeActivitySource", () => {
 		files = [];
 
 		expect(await source.read()).toEqual([
-			{ id: "ses_1", directory: "/vault", files: ["Notes/plan.md"], running: true },
+			{ id: "ses_1", directory: "/vault", files: [], running: true },
 		]);
+
+		active = [];
+		expect(await source.read()).toEqual([]);
 	});
 
 	it("captures a recently completed session that was never observed running", async () => {

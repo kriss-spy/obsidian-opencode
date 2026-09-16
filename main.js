@@ -23632,11 +23632,11 @@ var OpencodeActivitySource = class {
     this.client = client;
     this.scopeDirectory = scopeDirectory;
     this.active = /* @__PURE__ */ new Map();
-    this.recent = [];
-    this.touched = /* @__PURE__ */ new Map();
+    this.retainedTouchedSessions = [];
+    this.completedFiles = /* @__PURE__ */ new Map();
   }
   async read() {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const [activeResult, recentResult] = await Promise.all([
       this.client.listActiveSessions(),
       (_c = (_b = (_a = this.client).listRecentlyUpdatedSessions) == null ? void 0 : _b.call(_a)) != null ? _c : Promise.resolve([])
@@ -23646,9 +23646,9 @@ var OpencodeActivitySource = class {
     const recentlyUpdated = recentResult.filter(inScope);
     const nextActive = /* @__PURE__ */ new Map();
     for (const session of activeSessions) {
-      const previousFiles = (_d = this.touched.get(session.id)) != null ? _d : [];
-      const files = mergeFiles(previousFiles, await this.changedFiles(session.id, previousFiles));
-      this.touched.set(session.id, files);
+      const previousFiles = (_e = (_d = this.active.get(session.id)) == null ? void 0 : _d.files) != null ? _e : [];
+      if (!this.active.has(session.id)) this.completedFiles.delete(session.id);
+      const files = await this.changedFiles(session.id, previousFiles);
       nextActive.set(session.id, {
         ...session,
         files,
@@ -23657,27 +23657,44 @@ var OpencodeActivitySource = class {
     }
     const completed = /* @__PURE__ */ new Map();
     for (const session of Array.from(this.active.values()).filter((item) => !nextActive.has(item.id))) {
-      completed.set(session.id, { ...session, running: false });
+      completed.set(session.id, {
+        ...session,
+        files: [],
+        running: false
+      });
     }
     for (const session of recentlyUpdated) {
       if (!nextActive.has(session.id) && !completed.has(session.id)) {
-        completed.set(session.id, { ...session, files: (_e = this.touched.get(session.id)) != null ? _e : [], running: false });
+        completed.set(session.id, {
+          ...session,
+          files: (_f = this.completedFiles.get(session.id)) != null ? _f : [],
+          running: false
+        });
       }
     }
     for (const session of completed.values()) {
-      session.files = mergeFiles(session.files, await this.changedFiles(session.id, session.files));
-      this.touched.set(session.id, session.files);
+      const observedFiles = (_h = (_g = this.active.get(session.id)) == null ? void 0 : _g.files) != null ? _h : session.files;
+      session.files = await this.changedFiles(session.id, observedFiles);
+      this.completedFiles.set(session.id, session.files);
     }
     this.active = nextActive;
     const touchedCompleted = Array.from(completed.values()).filter((session) => session.files.length > 0);
-    if (touchedCompleted.length > 0) this.recent = touchedCompleted;
+    if (completed.size > 0) {
+      const completedIds = new Set(completed.keys());
+      this.retainedTouchedSessions = [
+        ...touchedCompleted,
+        ...this.retainedTouchedSessions.filter((session) => !completedIds.has(session.id))
+      ];
+    }
     if (nextActive.size > 0) {
       return [
         ...Array.from(nextActive.values()),
-        ...this.recent.filter((session) => !nextActive.has(session.id) && session.files.length > 0)
+        ...this.retainedTouchedSessions.filter(
+          (session) => !nextActive.has(session.id) && session.files.length > 0
+        )
       ];
     }
-    return this.recent;
+    return this.retainedTouchedSessions;
   }
   async changedFiles(sessionId, fallback) {
     try {
@@ -23687,9 +23704,6 @@ var OpencodeActivitySource = class {
     }
   }
 };
-function mergeFiles(previous, current) {
-  return Array.from(/* @__PURE__ */ new Set([...previous, ...current]));
-}
 function directoriesOverlap(left, right) {
   return isSameOrInside(left, right) || isSameOrInside(right, left);
 }
