@@ -86,12 +86,12 @@ It cannot non-interactively create or register an arbitrary fresh vault. `vault:
 | #26 | Pinyin keydowns emitted while `isComposing` do not reach the PTY; only committed Chinese text is sent. Run with `npm run test:obsidian:macos-ime`. |
 | #22 | Unit tests verify the isolated Windows ConPTY helper and resize channel. Windows CI covers stubbed rendering, input, live resizing, restart, and session workflows; `npm run test:obsidian:windows-ui` covers the real CLI and mouse interactions. |
 | #10 | Unit tests cover large-export limits; E2E covers normal preview and export-to-note behavior. |
+| #21 | Unit tests cover activity/diff parsing and idle/running/touched precedence; E2E verifies the rendered status states, tooltip text, warning badge, and terminal action. |
 | #50, #52, #53, #54 | Unit tests cover WSL2 detection, Unicode/Base64 transport, argument safety, failures, routing, OSC 52, and PNG validation. The X410 suite exercises formal V2 startup, exact selection copy, Unicode paste, OSC 52, Windows image paste through a temporary OpenCode attachment path, and rendered SIXEL copy to Windows. |
 
 Not yet automatable in this Linux job:
 
 - #15-#19 describe panel-mode behavior not present on the current branch.
-- #21 concerns OpenCode rollback ownership outside the plugin's current API boundary.
 
 ## WSL2/X410 evidence
 

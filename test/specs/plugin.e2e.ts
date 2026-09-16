@@ -100,6 +100,55 @@ describe("OpenCode plugin in a fresh vault", function () {
 		)), { timeoutMsg: "Close terminal command did not close the OpenCode terminal" });
 	});
 
+	it("[smoke] [issue #21] renders the OpenCode status states and opens the terminal", async function () {
+		const status = browser.$(".opencode-status");
+		await expect(status).toExist();
+
+		await browser.execute(() => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			plugin.statusSource = null;
+			plugin.statusTracker.updateSessions([]);
+			plugin.renderStatus(plugin.statusTracker.status);
+		});
+		await expect(status).toHaveElementClass("is-idle");
+		await expect(status).toHaveAttribute("aria-label", "OpenCode is idle");
+
+		await browser.execute(() => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			plugin.statusTracker.updateSessions([{
+				id: "fixture-status-session",
+				directory: plugin.vaultRoot,
+				files: [],
+				running: true,
+			}]);
+			plugin.renderStatus(plugin.statusTracker.status);
+		});
+		await expect(status).toHaveElementClass("is-running");
+		await expect(status).toHaveAttribute("title", "OpenCode is working");
+
+		await browser.execute(() => {
+			const plugin = (window as any).app.plugins.plugins.opencode;
+			const activeFile = `${plugin.vaultRoot.replace(/[\\/]+$/, "")}/Smoke.md`;
+			plugin.statusTracker.updateActiveFile(activeFile);
+			plugin.statusTracker.updateSessions([{
+				id: "fixture-status-session",
+				directory: plugin.vaultRoot,
+				files: ["Smoke.md"],
+				running: true,
+			}]);
+			plugin.renderStatus(plugin.statusTracker.status);
+		});
+		await expect(status).toHaveElementClass("is-touched");
+		await expect(status).toHaveAttribute("title", "OpenCode changed this note");
+		await expect(status.$(".opencode-status-badge")).toHaveText("!");
+
+		await status.click();
+		await browser.waitUntil(() => browser.execute(() => (
+			(window as any).app.workspace.getLeavesOfType("opencode-terminal").length === 1
+		)), { timeoutMsg: "Status indicator did not open the OpenCode terminal" });
+		await browser.executeObsidianCommand("opencode:close-terminal");
+	});
+
 	it("[smoke] opens the conversations view", async function () {
 		await browser.executeObsidianCommand("opencode:open-conversations");
 

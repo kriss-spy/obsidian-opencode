@@ -305,6 +305,105 @@ describe('OpencodeClient listSessions', () => {
 		);
 	});
 
+	it('reads active OpenCode v2 sessions and resolves their directories', async () => {
+		const responses = [
+			{ data: { ses_1: { type: 'running' } } },
+			{ data: { id: 'ses_1', location: { directory: '/vault' } } },
+		];
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(
+				null,
+				JSON.stringify(responses.shift()),
+				'',
+			);
+			return {} as unknown as ChildProcess;
+		});
+
+		await expect(new OpencodeClient('opencode2', '/vault').listActiveSessions())
+			.resolves.toEqual([{ id: 'ses_1', directory: '/vault' }]);
+		expect(mockExecFile.mock.calls.map((call) => call[1])).toEqual([
+			['api', 'get', '/api/session/active'],
+			['api', 'get', '/api/session/ses_1'],
+		]);
+	});
+
+	it('reads the paths changed by the current OpenCode v2 turn', async () => {
+		mockExecResult(JSON.stringify({
+			data: [
+				{ file: 'Notes/plan.md', patch: '', additions: 1, deletions: 0, status: 'modified' },
+				{ file: '/vault/README.md', patch: '', additions: 2, deletions: 1, status: 'modified' },
+			],
+		}), '');
+
+		await expect(new OpencodeClient('opencode2', '/vault').listSessionChangedFiles('ses_1'))
+			.resolves.toEqual(['Notes/plan.md', '/vault/README.md']);
+		expect(mockExecFile).toHaveBeenCalledWith(
+			'opencode2',
+			['api', 'get', '/api/session/ses_1/diff?context=0'],
+			expect.any(Object),
+			expect.any(Function),
+		);
+	});
+
+	it('finds sessions updated since status tracking began', async () => {
+		const now = vi.spyOn(Date, 'now');
+		now.mockReturnValueOnce(1_000).mockReturnValueOnce(2_000);
+		mockExecResult(JSON.stringify({
+			data: [{
+				id: 'ses_fast',
+				projectID: 'project-v2',
+				location: { directory: '/vault' },
+				time: { created: 900, updated: 1_500 },
+			}],
+			cursor: {},
+		}), '');
+		const client = new OpencodeClient('opencode2', '/vault');
+
+		await expect(client.listRecentlyUpdatedSessions())
+			.resolves.toEqual([{ id: 'ses_fast', directory: '/vault' }]);
+		expect(mockExecFile).toHaveBeenCalledWith(
+			'opencode2',
+			['api', 'get', '/api/session?directory=%2Fvault&limit=5&order=desc'],
+			expect.any(Object),
+			expect.any(Function),
+		);
+	});
+
+	it('does not advance the recent-session watermark when the query fails', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		vi.spyOn(Date, 'now')
+			.mockReturnValueOnce(1_000)
+			.mockReturnValueOnce(2_000)
+			.mockReturnValueOnce(3_000);
+		let attempt = 0;
+		mockExecFile.mockImplementation((_cmd, _args, _opts, callback) => {
+			attempt += 1;
+			if (attempt === 1) {
+				(callback as unknown as (error: Error, stdout: string, stderr: string) => void)(
+					new Error('temporary failure'),
+					'',
+					'temporary failure',
+				);
+			} else {
+				(callback as unknown as (error: null, stdout: string, stderr: string) => void)(null, JSON.stringify({
+					data: [{
+						id: 'ses_not_missed',
+						projectID: 'project-v2',
+						location: { directory: '/vault' },
+						time: { created: 900, updated: 1_500 },
+					}],
+					cursor: {},
+				}), '');
+			}
+			return {} as unknown as ChildProcess;
+		});
+		const client = new OpencodeClient('opencode2', '/vault');
+
+		await expect(client.listRecentlyUpdatedSessions()).rejects.toBeInstanceOf(Error);
+		await expect(client.listRecentlyUpdatedSessions())
+			.resolves.toEqual([{ id: 'ses_not_missed', directory: '/vault' }]);
+	});
+
 	it('rejects malformed OpenCode v2 API envelopes', async () => {
 		mockExecResult(JSON.stringify({ sessions: [] }), '');
 

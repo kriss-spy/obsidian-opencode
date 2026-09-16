@@ -302,6 +302,76 @@
 	cursor: grab;
 }
 
+/* OpenCode activity indicator */
+.opencode-status-bar-item {
+	display: inline-flex;
+	align-items: center;
+}
+
+.opencode-status {
+	--icon-size: var(--icon-s);
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 20px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--text-muted);
+}
+
+.opencode-status.is-running {
+	color: var(--interactive-accent);
+}
+
+.opencode-status.is-touched {
+	color: var(--color-yellow);
+}
+
+.opencode-status-badge {
+	position: absolute;
+	inset-block-start: 1px;
+	inset-inline-end: 0;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	min-width: 7px;
+	height: 7px;
+	border: 1px solid var(--background-secondary);
+	border-radius: 999px;
+	font-size: 7px;
+	font-weight: var(--font-bold);
+	line-height: 1;
+}
+
+.opencode-status.is-running .opencode-status-badge {
+	display: block;
+	background: var(--color-blue);
+	animation: opencode-status-pulse 1.8s ease-in-out infinite;
+}
+
+.opencode-status.is-touched .opencode-status-badge {
+	display: flex;
+	min-width: 9px;
+	height: 9px;
+	background: var(--color-yellow);
+	color: var(--background-primary);
+}
+
+@keyframes opencode-status-pulse {
+	0%, 100% { opacity: 0.45; transform: scale(0.8); }
+	50% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.opencode-status.is-running .opencode-status-badge {
+		animation: none;
+	}
+}
+
 .opencode-terminal-scrollbar-thumb:hover,
 .opencode-terminal-scrollbar.is-dragging .opencode-terminal-scrollbar-thumb {
 	background: var(--scrollbar-active-thumb-bg);

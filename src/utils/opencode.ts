@@ -74,6 +74,11 @@ export interface OpencodeExport {
 	messages: OpencodeMessage[];
 }
 
+export interface OpencodeActiveSession {
+	id: string;
+	directory: string;
+}
+
 const SAFE_ID_RE = /^[a-zA-Z0-9._:-]+$/;
 
 function safeUnlinkSync(filePath: string): void {
@@ -333,7 +338,7 @@ async function runSessionCommand(context: SessionCommandContext, args: string[])
 			// flatpak-spawn's stdout forwarding can drop/truncate the captured
 			// output (see issue #25: empty stdout -> JSON.parse("") crash).
 			// Route through a host-side temp file, matching the export path.
-			const tmpFile = path.join(os.tmpdir(), `opencode-sessions-${Date.now()}.json`);
+			const tmpFile = path.join(os.tmpdir(), `opencode-sessions-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
 			const shellCmd = `${[context.executable, ...args].map(quoteShell).join(" ")} > ${quoteShell(tmpFile)}`;
 			const result = await runExecFile("flatpak-spawn", [
 				"--host",
@@ -360,7 +365,7 @@ async function runSessionCommand(context: SessionCommandContext, args: string[])
 			}
 		}
 	} catch (error) {
-		console.error("Failed to list sessions:", error);
+		console.error("Failed to query OpenCode:", error);
 		throw classifyOperationError(error, context.executable, "session-list");
 	}
 
@@ -406,6 +411,8 @@ export class ExportTooLargeError extends Error {
 }
 
 export class OpencodeClient {
+	private statusUpdatedAfter = Date.now();
+
 	constructor(
 		private opencodePath: string,
 		private cwd: string,
@@ -414,6 +421,18 @@ export class OpencodeClient {
 
 	private resolvePath(environment: NodeJS.ProcessEnv = process.env): string {
 		return resolveOpencodeExecutable(this.opencodePath, { environment });
+	}
+
+	private commandRunner(): SessionCommandRunner {
+		const isFlatpak = fs.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
+		const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
+		return (args: string[]) => runSessionCommand({
+			executable: this.resolvePath(env),
+			cwd: this.cwd,
+			env,
+			isFlatpak,
+			environmentVariables: this.environmentVariables,
+		}, args);
 	}
 
 	async checkCompatibility(): Promise<OpenCodeCompatibility> {
@@ -441,21 +460,75 @@ export class OpencodeClient {
 	}
 
 	async listSessions(generation: OpenCodeCliGeneration = "stable"): Promise<OpencodeSession[]> {
-		const isFlatpak = fs.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
-		const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
-		const executable = this.resolvePath(env);
-		const run = (args: string[]) => runSessionCommand({
-			executable,
-			cwd: this.cwd,
-			env,
-			isFlatpak,
-			environmentVariables: this.environmentVariables,
-		}, args);
+		const run = this.commandRunner();
 
 		try {
 			return generation === "stable"
 				? await listStableSessions(run)
 				: await listV2Sessions(run, this.cwd);
+		} catch (error) {
+			if (error instanceof OpencodeError) throw error;
+			throw new MalformedCliOutputError(error);
+		}
+	}
+
+	async listActiveSessions(): Promise<OpencodeActiveSession[]> {
+		const run = this.commandRunner();
+		try {
+			const activePayload: unknown = JSON.parse(await run(["api", "get", "/api/session/active"]));
+			if (!isRecord(activePayload) || !isRecord(activePayload.data)) {
+				throw new Error("Expected an OpenCode v2 active-session response");
+			}
+			const sessionIds = Object.entries(activePayload.data).flatMap(([id, state]) =>
+				SAFE_ID_RE.test(id) && isRecord(state) && state.type === "running" ? [id] : []
+			);
+			return await Promise.all(sessionIds.map(async (id) => {
+				const payload: unknown = JSON.parse(await run(["api", "get", `/api/session/${id}`]));
+				if (!isRecord(payload) || !isRecord(payload.data) || !isRecord(payload.data.location)
+					|| typeof payload.data.location.directory !== "string") {
+					throw new Error(`Expected a location for active session ${id}`);
+				}
+				return { id, directory: payload.data.location.directory };
+			}));
+		} catch (error) {
+			if (error instanceof OpencodeError) throw error;
+			throw new MalformedCliOutputError(error);
+		}
+	}
+
+	async listSessionChangedFiles(sessionId: string): Promise<string[]> {
+		if (!SAFE_ID_RE.test(sessionId)) throw new Error(`Invalid session ID: ${sessionId}`);
+		try {
+			const payload: unknown = JSON.parse(await this.commandRunner()([
+				"api",
+				"get",
+				`/api/session/${sessionId}/diff?context=0`,
+			]));
+			if (!isRecord(payload) || !Array.isArray(payload.data)) {
+				throw new Error("Expected an OpenCode v2 session-diff response");
+			}
+			return payload.data.map((entry) => {
+				if (!isRecord(entry) || typeof entry.file !== "string") {
+					throw new Error("Expected every OpenCode v2 diff entry to have a file path");
+				}
+				return entry.file;
+			});
+		} catch (error) {
+			if (error instanceof OpencodeError) throw error;
+			throw new MalformedCliOutputError(error);
+		}
+	}
+
+	async listRecentlyUpdatedSessions(): Promise<OpencodeActiveSession[]> {
+		const updatedAfter = this.statusUpdatedAfter;
+		const requestStartedAt = Date.now();
+		try {
+			const query = `/api/session?directory=${encodeURIComponent(this.cwd)}&limit=5&order=desc`;
+			const page = parseV2SessionPage(await this.commandRunner()(["api", "get", query]));
+			this.statusUpdatedAfter = requestStartedAt;
+			return page.sessions
+				.filter((session) => session.updated >= updatedAfter)
+				.map(({ id, directory }) => ({ id, directory }));
 		} catch (error) {
 			if (error instanceof OpencodeError) throw error;
 			throw new MalformedCliOutputError(error);

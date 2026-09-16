@@ -20166,6 +20166,7 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian9 = require("obsidian");
+var path9 = __toESM(require("node:path"));
 
 // src/settings.ts
 var DEFAULT_SETTINGS = {
@@ -20506,7 +20507,7 @@ var EditorServer = class {
     this.publishLock = (_a = options.publishLock) != null ? _a : true;
   }
   async start(vaultRoot) {
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       this.wss = new import_websocket_server.default({ port: 0 }, () => {
         const address = this.wss.address();
         if (typeof address === "object" && address !== null) {
@@ -20525,7 +20526,7 @@ var EditorServer = class {
           };
           fs.writeFileSync(this.lockFilePath, JSON.stringify(lockContent, null, 2));
         }
-        resolve2(this.port);
+        resolve3(this.port);
       });
       this.wss.on("error", (err) => {
         reject(err);
@@ -20570,7 +20571,7 @@ var EditorServer = class {
     }
   }
   async stop() {
-    return new Promise((resolve2) => {
+    return new Promise((resolve3) => {
       if (this.lockFilePath && fs.existsSync(this.lockFilePath)) {
         fs.unlinkSync(this.lockFilePath);
       }
@@ -20582,10 +20583,10 @@ var EditorServer = class {
       if (this.wss) {
         this.wss.close(() => {
           this.wss = null;
-          resolve2();
+          resolve3();
         });
       } else {
-        resolve2();
+        resolve3();
       }
     });
   }
@@ -20623,11 +20624,11 @@ function normalizeVaultPath(filePath, vaultRoot) {
   if (!path3.isAbsolute(filePath)) {
     return filePath;
   }
-  const relative2 = path3.relative(vaultRoot, filePath);
-  if (relative2.startsWith("..") || path3.isAbsolute(relative2)) {
+  const relative3 = path3.relative(vaultRoot, filePath);
+  if (relative3.startsWith("..") || path3.isAbsolute(relative3)) {
     return filePath;
   }
-  return relative2.split(path3.sep).join("/");
+  return relative3.split(path3.sep).join("/");
 }
 
 // src/modules/terminalKeyRouter.ts
@@ -21141,7 +21142,7 @@ function decodeBase64Utf8(encoded) {
   }
 }
 function runProcess(executable, args, input) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     var _a;
     const child = (0, import_node_child_process.execFile)(executable, args, {
       encoding: "utf8",
@@ -21153,7 +21154,7 @@ function runProcess(executable, args, input) {
         reject(new Error(detail ? `${error.message}: ${detail}` : error.message));
         return;
       }
-      resolve2({ stdout: String(stdout), stderr: String(stderr) });
+      resolve3({ stdout: String(stdout), stderr: String(stderr) });
     });
     if (input !== void 0) (_a = child.stdin) == null ? void 0 : _a.end(input, "utf8");
   });
@@ -21612,7 +21613,7 @@ function windowsCommandReferences(tokens, env) {
   return { env: commandEnv, references };
 }
 function runExecFile(executable, args, opts) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     var _a, _b;
     let file = process.platform === "win32" ? (_a = findExecutableOnPath(executable, { platform: "win32", environment: opts.env })) != null ? _a : executable : executable;
     let fileArgs = args;
@@ -21630,7 +21631,7 @@ function runExecFile(executable, args, opts) {
         if (stderr) failure.stderr = stderr.toString();
         reject(failure);
       } else {
-        resolve2({ stdout: (_a2 = stdout == null ? void 0 : stdout.toString()) != null ? _a2 : "", stderr: (_b2 = stderr == null ? void 0 : stderr.toString()) != null ? _b2 : "" });
+        resolve3({ stdout: (_a2 = stdout == null ? void 0 : stdout.toString()) != null ? _a2 : "", stderr: (_b2 = stderr == null ? void 0 : stderr.toString()) != null ? _b2 : "" });
       }
     });
   });
@@ -21707,7 +21708,7 @@ async function runSessionCommand(context, args) {
   let stderrText = "";
   try {
     if (context.isFlatpak) {
-      const tmpFile = path6.join(os5.tmpdir(), `opencode-sessions-${Date.now()}.json`);
+      const tmpFile = path6.join(os5.tmpdir(), `opencode-sessions-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
       const shellCmd = `${[context.executable, ...args].map(quoteShell).join(" ")} > ${quoteShell(tmpFile)}`;
       const result = await runExecFile("flatpak-spawn", [
         "--host",
@@ -21732,7 +21733,7 @@ async function runSessionCommand(context, args) {
       }
     }
   } catch (error) {
-    console.error("Failed to list sessions:", error);
+    console.error("Failed to query OpenCode:", error);
     throw classifyOperationError(error, context.executable, "session-list");
   }
   const trimmed = raw.trim();
@@ -21772,9 +21773,21 @@ var OpencodeClient = class {
     this.opencodePath = opencodePath;
     this.cwd = cwd;
     this.environmentVariables = environmentVariables;
+    this.statusUpdatedAfter = Date.now();
   }
   resolvePath(environment = process.env) {
     return resolveOpencodeExecutable(this.opencodePath, { environment });
+  }
+  commandRunner() {
+    const isFlatpak = fs4.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
+    const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
+    return (args) => runSessionCommand({
+      executable: this.resolvePath(env),
+      cwd: this.cwd,
+      env,
+      isFlatpak,
+      environmentVariables: this.environmentVariables
+    }, args);
   }
   async checkCompatibility() {
     const isFlatpak = fs4.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
@@ -21800,18 +21813,66 @@ ${result.stderr}`;
     throw new IncompatibleCliError(detectedCli);
   }
   async listSessions(generation = "stable") {
-    const isFlatpak = fs4.existsSync("/.flatpak-info") || !!process.env.FLATPAK_ID;
-    const env = createChildEnvironment(process.env, isFlatpak ? {} : this.environmentVariables);
-    const executable = this.resolvePath(env);
-    const run = (args) => runSessionCommand({
-      executable,
-      cwd: this.cwd,
-      env,
-      isFlatpak,
-      environmentVariables: this.environmentVariables
-    }, args);
+    const run = this.commandRunner();
     try {
       return generation === "stable" ? await listStableSessions(run) : await listV2Sessions(run, this.cwd);
+    } catch (error) {
+      if (error instanceof OpencodeError) throw error;
+      throw new MalformedCliOutputError(error);
+    }
+  }
+  async listActiveSessions() {
+    const run = this.commandRunner();
+    try {
+      const activePayload = JSON.parse(await run(["api", "get", "/api/session/active"]));
+      if (!isRecord(activePayload) || !isRecord(activePayload.data)) {
+        throw new Error("Expected an OpenCode v2 active-session response");
+      }
+      const sessionIds = Object.entries(activePayload.data).flatMap(
+        ([id, state]) => SAFE_ID_RE.test(id) && isRecord(state) && state.type === "running" ? [id] : []
+      );
+      return await Promise.all(sessionIds.map(async (id) => {
+        const payload = JSON.parse(await run(["api", "get", `/api/session/${id}`]));
+        if (!isRecord(payload) || !isRecord(payload.data) || !isRecord(payload.data.location) || typeof payload.data.location.directory !== "string") {
+          throw new Error(`Expected a location for active session ${id}`);
+        }
+        return { id, directory: payload.data.location.directory };
+      }));
+    } catch (error) {
+      if (error instanceof OpencodeError) throw error;
+      throw new MalformedCliOutputError(error);
+    }
+  }
+  async listSessionChangedFiles(sessionId) {
+    if (!SAFE_ID_RE.test(sessionId)) throw new Error(`Invalid session ID: ${sessionId}`);
+    try {
+      const payload = JSON.parse(await this.commandRunner()([
+        "api",
+        "get",
+        `/api/session/${sessionId}/diff?context=0`
+      ]));
+      if (!isRecord(payload) || !Array.isArray(payload.data)) {
+        throw new Error("Expected an OpenCode v2 session-diff response");
+      }
+      return payload.data.map((entry) => {
+        if (!isRecord(entry) || typeof entry.file !== "string") {
+          throw new Error("Expected every OpenCode v2 diff entry to have a file path");
+        }
+        return entry.file;
+      });
+    } catch (error) {
+      if (error instanceof OpencodeError) throw error;
+      throw new MalformedCliOutputError(error);
+    }
+  }
+  async listRecentlyUpdatedSessions() {
+    const updatedAfter = this.statusUpdatedAfter;
+    const requestStartedAt = Date.now();
+    try {
+      const query = `/api/session?directory=${encodeURIComponent(this.cwd)}&limit=5&order=desc`;
+      const page = parseV2SessionPage(await this.commandRunner()(["api", "get", query]));
+      this.statusUpdatedAfter = requestStartedAt;
+      return page.sessions.filter((session) => session.updated >= updatedAfter).map(({ id, directory }) => ({ id, directory }));
     } catch (error) {
       if (error instanceof OpencodeError) throw error;
       throw new MalformedCliOutputError(error);
@@ -21831,7 +21892,7 @@ ${result.stderr}`;
     }
   }
   exportSessionStreamed(sessionId, generation, maxBytes = 200 * 1024 * 1024) {
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       if (!SAFE_ID_RE.test(sessionId)) {
         reject(new Error(`Invalid session ID: ${sessionId}`));
         return;
@@ -21891,7 +21952,7 @@ ${result.stderr}`;
           const stdout = fs4.readFileSync(tmpFile, "utf-8");
           cleanup();
           const data = JSON.parse(stdout);
-          resolve2(data);
+          resolve3(data);
         } catch (parseError) {
           cleanup();
           reject(parseError instanceof Error ? parseError : new Error(String(parseError)));
@@ -23237,30 +23298,30 @@ function unixTerminalSize(terminal) {
 }
 function childExit(child) {
   if (!child || !child.pid || child.exitCode != null || child.signalCode != null) return Promise.resolve();
-  return new Promise((resolve2) => {
+  return new Promise((resolve3) => {
     const finish = () => {
       child.removeListener("exit", finish);
-      resolve2();
+      resolve3();
     };
     child.once("exit", finish);
   });
 }
 function childClose(child) {
   if (!child.pid || child.exitCode != null || child.signalCode != null) return Promise.resolve();
-  return new Promise((resolve2) => {
-    child.once("close", resolve2);
+  return new Promise((resolve3) => {
+    child.once("close", resolve3);
   });
 }
 function withTimeout(promise, timeoutMs) {
-  return new Promise((resolve2) => {
+  return new Promise((resolve3) => {
     const timeoutWindow = window;
-    const timeout = timeoutWindow.setTimeout(() => resolve2(null), timeoutMs);
+    const timeout = timeoutWindow.setTimeout(() => resolve3(null), timeoutMs);
     promise.then((value) => {
       timeoutWindow.clearTimeout(timeout);
-      resolve2(value);
+      resolve3(value);
     }, () => {
       timeoutWindow.clearTimeout(timeout);
-      resolve2(null);
+      resolve3(null);
     });
   });
 }
@@ -23457,7 +23518,7 @@ Error: ${err.message}\r
       if (this.backend === 1 /* WindowsConPty */ && ptyProcess.pid) {
         const ptyExited = childExit(ptyProcess);
         const jobExited = childExit(windowsJobProcess);
-        const taskkillSucceeded = await new Promise((resolve2) => {
+        const taskkillSucceeded = await new Promise((resolve3) => {
           const timeoutWindow = window;
           let settled = false;
           let taskkill = null;
@@ -23466,7 +23527,7 @@ Error: ${err.message}\r
             settled = true;
             timeoutWindow.clearTimeout(timeout);
             if (!succeeded) taskkill == null ? void 0 : taskkill.kill();
-            resolve2(succeeded);
+            resolve3(succeeded);
           };
           const timeout = timeoutWindow.setTimeout(() => finish(false), 5e3);
           try {
@@ -23564,6 +23625,100 @@ var PtySessionRegistry = class {
   }
 };
 
+// src/modules/opencodeStatus.ts
+var path8 = __toESM(require("node:path"));
+var OpencodeActivitySource = class {
+  constructor(client, scopeDirectory) {
+    this.client = client;
+    this.scopeDirectory = scopeDirectory;
+    this.active = /* @__PURE__ */ new Map();
+    this.recent = [];
+    this.touched = /* @__PURE__ */ new Map();
+  }
+  async read() {
+    var _a, _b, _c, _d, _e;
+    const [activeResult, recentResult] = await Promise.all([
+      this.client.listActiveSessions(),
+      (_c = (_b = (_a = this.client).listRecentlyUpdatedSessions) == null ? void 0 : _b.call(_a)) != null ? _c : Promise.resolve([])
+    ]);
+    const inScope = (session) => !this.scopeDirectory || directoriesOverlap(this.scopeDirectory, session.directory);
+    const activeSessions = activeResult.filter(inScope);
+    const recentlyUpdated = recentResult.filter(inScope);
+    const nextActive = /* @__PURE__ */ new Map();
+    for (const session of activeSessions) {
+      const previousFiles = (_d = this.touched.get(session.id)) != null ? _d : [];
+      const files = mergeFiles(previousFiles, await this.changedFiles(session.id, previousFiles));
+      this.touched.set(session.id, files);
+      nextActive.set(session.id, {
+        ...session,
+        files,
+        running: true
+      });
+    }
+    const completed = /* @__PURE__ */ new Map();
+    for (const session of Array.from(this.active.values()).filter((item) => !nextActive.has(item.id))) {
+      completed.set(session.id, { ...session, running: false });
+    }
+    for (const session of recentlyUpdated) {
+      if (!nextActive.has(session.id) && !completed.has(session.id)) {
+        completed.set(session.id, { ...session, files: (_e = this.touched.get(session.id)) != null ? _e : [], running: false });
+      }
+    }
+    for (const session of completed.values()) {
+      session.files = mergeFiles(session.files, await this.changedFiles(session.id, session.files));
+      this.touched.set(session.id, session.files);
+    }
+    this.active = nextActive;
+    const touchedCompleted = Array.from(completed.values()).filter((session) => session.files.length > 0);
+    if (touchedCompleted.length > 0) this.recent = touchedCompleted;
+    if (nextActive.size > 0) {
+      return [
+        ...Array.from(nextActive.values()),
+        ...this.recent.filter((session) => !nextActive.has(session.id) && session.files.length > 0)
+      ];
+    }
+    return this.recent;
+  }
+  async changedFiles(sessionId, fallback) {
+    try {
+      return await this.client.listSessionChangedFiles(sessionId);
+    } catch (e) {
+      return fallback;
+    }
+  }
+};
+function mergeFiles(previous, current) {
+  return Array.from(/* @__PURE__ */ new Set([...previous, ...current]));
+}
+function directoriesOverlap(left, right) {
+  return isSameOrInside(left, right) || isSameOrInside(right, left);
+}
+function isSameOrInside(parent, candidate) {
+  const relative3 = path8.relative(path8.resolve(parent), path8.resolve(candidate));
+  return relative3 === "" || !relative3.startsWith(`..${path8.sep}`) && relative3 !== ".." && !path8.isAbsolute(relative3);
+}
+var OpencodeStatusTracker = class {
+  constructor() {
+    this.sessions = [];
+    this.activeFile = null;
+  }
+  get status() {
+    if (this.activeFile && this.sessions.some((session) => session.files.some((file) => {
+      const absoluteFile = path8.isAbsolute(file) ? path8.normalize(file) : path8.resolve(session.directory, file);
+      return absoluteFile === path8.normalize(this.activeFile);
+    }))) {
+      return { kind: "touched", tooltip: "OpenCode changed this note" };
+    }
+    return this.sessions.some((session) => session.running) ? { kind: "running", tooltip: "OpenCode is working" } : { kind: "idle", tooltip: "OpenCode is idle" };
+  }
+  updateSessions(sessions) {
+    this.sessions = sessions;
+  }
+  updateActiveFile(file) {
+    this.activeFile = file;
+  }
+};
+
 // src/main.ts
 var OpencodePlugin = class extends import_obsidian9.Plugin {
   constructor() {
@@ -23571,6 +23726,12 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
     this.vaultRoot = "";
     this.vaultConfigDir = "";
     this.ptySessions = new PtySessionRegistry();
+    this.statusTracker = null;
+    this.statusSource = null;
+    this.statusButton = null;
+    this.statusBadge = null;
+    this.statusRefreshPending = false;
+    this.unloading = false;
   }
   get pendingPrompt() {
     return this.sessionState.pendingPrompt;
@@ -23603,6 +23764,7 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
       this.vaultRoot = "/";
     }
     this.vaultConfigDir = this.app.vault.configDir;
+    this.setupStatusBar();
     this.registerView(
       OPENCODE_TERMINAL_VIEW_TYPE,
       (leaf) => new OpencodeTerminalView(leaf, this)
@@ -23690,9 +23852,76 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
     await this.ptySessions.close(session);
   }
   onunload() {
+    this.unloading = true;
     void this.ptySessions.closeAll().catch((error) => {
       console.error("Unable to stop every OpenCode PTY during plugin unload", error);
     });
+  }
+  setupStatusBar() {
+    if (!import_obsidian9.Platform.isDesktopApp) return;
+    const item = this.addStatusBarItem();
+    item.addClass("opencode-status-bar-item");
+    this.statusButton = item.createEl("button", {
+      cls: ["opencode-status", "clickable-icon", "is-idle"],
+      attr: { type: "button" }
+    });
+    const icon = this.statusButton.createSpan({ cls: "opencode-status-icon", attr: { "aria-hidden": "true" } });
+    (0, import_obsidian9.setIcon)(icon, "terminal");
+    this.statusBadge = this.statusButton.createSpan({
+      cls: "opencode-status-badge",
+      attr: { "aria-hidden": "true" }
+    });
+    this.registerDomEvent(this.statusButton, "click", () => {
+      void this.activateTerminalView();
+    });
+    this.statusTracker = new OpencodeStatusTracker();
+    this.updateStatusActiveFile(this.app.workspace.getActiveFile());
+    this.registerEvent(this.app.workspace.on("file-open", (file) => this.updateStatusActiveFile(file)));
+    void this.startStatusTracking();
+  }
+  async startStatusTracking() {
+    const client = new OpencodeClient(
+      this.settings.opencodePath || "opencode",
+      this.vaultRoot,
+      this.settings.environmentVariables
+    );
+    try {
+      const compatibility = await client.checkCompatibility();
+      if (this.unloading || compatibility.generation === "stable") return;
+      this.statusSource = new OpencodeActivitySource(client, this.vaultRoot);
+      await this.refreshStatus();
+      if (this.unloading) return;
+      this.registerInterval(window.setInterval(() => {
+        void this.refreshStatus();
+      }, 1500));
+    } catch (error) {
+      console.debug("OpenCode status tracking is unavailable", error);
+    }
+  }
+  async refreshStatus() {
+    if (!this.statusSource || !this.statusTracker || this.statusRefreshPending) return;
+    this.statusRefreshPending = true;
+    try {
+      this.statusTracker.updateSessions(await this.statusSource.read());
+      this.renderStatus(this.statusTracker.status);
+    } catch (error) {
+      console.debug("Unable to refresh OpenCode status", error);
+    } finally {
+      this.statusRefreshPending = false;
+    }
+  }
+  updateStatusActiveFile(file) {
+    if (!this.statusTracker) return;
+    this.statusTracker.updateActiveFile(file ? path9.join(this.vaultRoot, file.path) : null);
+    this.renderStatus(this.statusTracker.status);
+  }
+  renderStatus(status) {
+    if (!this.statusButton || !this.statusBadge) return;
+    this.statusButton.removeClass("is-idle", "is-running", "is-touched");
+    this.statusButton.addClass(`is-${status.kind}`);
+    this.statusButton.setAttribute("aria-label", status.tooltip);
+    this.statusButton.setAttribute("title", status.tooltip);
+    this.statusBadge.setText(status.kind === "touched" ? "!" : "");
   }
   async activateTerminalView() {
     await this.viewCoordinator.activateTerminalView();
