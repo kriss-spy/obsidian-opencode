@@ -30,6 +30,11 @@ import { loadOpenCodeHotkeys, loadOpenCodeManualCopy } from "../modules/openCode
 import { mergeEnvironmentVariables } from "../utils/environment";
 import { OpencodeClient, OpencodeError } from "../utils/opencode";
 import { createWslWindowsClipboard } from "../modules/wslWindowsClipboard";
+import {
+	isOpenCodeThemePicker,
+	terminalColorQueryResponse,
+	ThemePreviewInputBatcher,
+} from "../modules/themePreview";
 
 interface VaultWithConfig {
 	getConfig?(key: string): string;
@@ -149,6 +154,24 @@ export class OpencodeTerminalView extends ItemView {
 		this.imageAddon = imageAddon;
 
 		terminal.open(termContainer);
+		// OpenCode changes xterm's OSC colors while previewing. Its `system` theme
+		// must still query Obsidian's host palette, not the preceding preview.
+		for (const [osc, property] of [[10, "--text-normal"], [11, "--background-primary"]] as const) {
+			const handler = terminal.parser.registerOscHandler(osc, (data) => {
+				if (data !== "?") return false;
+				const body = this.containerEl.ownerDocument.body;
+				const dark = body.classList.contains("theme-dark") ||
+					((this.app.vault as unknown as VaultWithConfig).getConfig?.("theme") === "obsidian");
+				const value = getComputedStyle(body).getPropertyValue(property).trim();
+				const fallback = osc === 10
+					? (dark ? "#d4d4d4" : "#333333")
+					: (dark ? "#1e1e1e" : "#ffffff");
+				const response = terminalColorQueryResponse(osc, value) ?? terminalColorQueryResponse(osc, fallback);
+				if (response) terminal.input(response, false);
+				return true;
+			});
+			this.register(() => handler.dispose());
+		}
 		let scrollbarRail: HTMLElement | null = null;
 		let scrollbarThumb: HTMLElement | null = null;
 		if (process.platform === "win32") {
@@ -261,8 +284,13 @@ export class OpencodeTerminalView extends ItemView {
 		window.addEventListener("resize", doFit);
 		this.register(() => window.removeEventListener("resize", doFit));
 
-		terminal.onData((data: string) => {
-			this.ptySession.writeStdin(data);
+		const themePreviewInput = new ThemePreviewInputBatcher((data) => this.ptySession.writeStdin(data));
+		const inputDisposable = terminal.onData((data: string) => {
+			themePreviewInput.send(data, isOpenCodeThemePicker(terminal.buffer.active, terminal.rows));
+		});
+		this.register(() => {
+			inputDisposable.dispose();
+			themePreviewInput.dispose();
 		});
 
 		const terminalCellAt = (event: MouseEvent | WheelEvent) => {

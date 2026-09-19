@@ -21983,6 +21983,77 @@ ${result.stderr}`;
   }
 };
 
+// src/modules/themePreview.ts
+var PREVIEW_INPUT_DEBOUNCE_MS = 50;
+var THEME_NAVIGATION = /^(?:(?:\x1b\[|\x1bO)[AB]|\x10|\x0e)+$/;
+var TERMINAL_COLOR_RESPONSE = /^\x1b\](?:10|11);rgb:[\da-f]{4}\/[\da-f]{4}\/[\da-f]{4}\x1b\\$/i;
+var ThemePreviewInputBatcher = class {
+  constructor(write) {
+    this.write = write;
+    this.pending = "";
+    this.flushTimer = null;
+  }
+  send(data, themePickerOpen) {
+    if (TERMINAL_COLOR_RESPONSE.test(data)) {
+      this.write(data);
+      return;
+    }
+    if (themePickerOpen && data === "\x1B") {
+      this.cancelPending();
+      this.write(data);
+      return;
+    }
+    if (!themePickerOpen || !THEME_NAVIGATION.test(data)) {
+      this.flushWith(data);
+      return;
+    }
+    this.pending += data;
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+    this.flushTimer = setTimeout(() => this.flushWith(""), PREVIEW_INPUT_DEBOUNCE_MS);
+  }
+  dispose() {
+    this.cancelPending();
+  }
+  flushWith(data) {
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+    this.flushTimer = null;
+    const output = this.pending + data;
+    this.pending = "";
+    if (output) this.write(output);
+  }
+  cancelPending() {
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+    this.flushTimer = null;
+    this.pending = "";
+  }
+};
+function isOpenCodeThemePicker(buffer, visibleRows) {
+  var _a, _b;
+  const end = Math.min(buffer.length, buffer.viewportY + visibleRows);
+  for (let index = buffer.viewportY; index < end; index++) {
+    const line = (_b = (_a = buffer.getLine(index)) == null ? void 0 : _a.translateToString(true).trim()) != null ? _b : "";
+    if (line.startsWith("Themes") && line.endsWith("esc")) return true;
+  }
+  return false;
+}
+function oscChannels(color) {
+  const value = color.trim();
+  const shortHex = /^#([\da-f])([\da-f])([\da-f])$/i.exec(value);
+  if (shortHex) return shortHex.slice(1).map((channel) => Number.parseInt(channel.repeat(2), 16));
+  const hex = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(value);
+  if (hex) return hex.slice(1).map((channel) => Number.parseInt(channel, 16));
+  const rgb = /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,[^)]*)?\)$/i.exec(value);
+  if (!rgb) return null;
+  const channels = rgb.slice(1, 4).map(Number);
+  return channels.every((channel) => channel >= 0 && channel <= 255) ? channels : null;
+}
+function terminalColorQueryResponse(osc, color) {
+  const channels = oscChannels(color);
+  if (!channels) return null;
+  const encoded = channels.map((channel) => channel.toString(16).padStart(2, "0").repeat(2));
+  return `\x1B]${osc};rgb:${encoded.join("/")}\x1B\\`;
+}
+
 // src/views/opencodeTerminalView.ts
 var OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
 var OpencodeTerminalView = class extends import_obsidian4.ItemView {
@@ -22076,6 +22147,20 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
     terminal.loadAddon(imageAddon);
     this.imageAddon = imageAddon;
     terminal.open(termContainer);
+    for (const [osc, property] of [[10, "--text-normal"], [11, "--background-primary"]]) {
+      const handler = terminal.parser.registerOscHandler(osc, (data) => {
+        var _a2, _b2, _c;
+        if (data !== "?") return false;
+        const body = this.containerEl.ownerDocument.body;
+        const dark = body.classList.contains("theme-dark") || ((_b2 = (_a2 = this.app.vault).getConfig) == null ? void 0 : _b2.call(_a2, "theme")) === "obsidian";
+        const value = getComputedStyle(body).getPropertyValue(property).trim();
+        const fallback = osc === 10 ? dark ? "#d4d4d4" : "#333333" : dark ? "#1e1e1e" : "#ffffff";
+        const response = (_c = terminalColorQueryResponse(osc, value)) != null ? _c : terminalColorQueryResponse(osc, fallback);
+        if (response) terminal.input(response, false);
+        return true;
+      });
+      this.register(() => handler.dispose());
+    }
     let scrollbarRail = null;
     let scrollbarThumb = null;
     if (process.platform === "win32") {
@@ -22170,8 +22255,13 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
     );
     window.addEventListener("resize", doFit);
     this.register(() => window.removeEventListener("resize", doFit));
-    terminal.onData((data) => {
-      this.ptySession.writeStdin(data);
+    const themePreviewInput = new ThemePreviewInputBatcher((data) => this.ptySession.writeStdin(data));
+    const inputDisposable = terminal.onData((data) => {
+      themePreviewInput.send(data, isOpenCodeThemePicker(terminal.buffer.active, terminal.rows));
+    });
+    this.register(() => {
+      inputDisposable.dispose();
+      themePreviewInput.dispose();
     });
     const terminalCellAt = (event) => {
       var _a2;
