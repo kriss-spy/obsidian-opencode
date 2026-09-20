@@ -20490,7 +20490,7 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // manifest.json
-var version = "2.1.0";
+var version = "2.2.0";
 
 // src/editorServer.ts
 var fs = __toESM(require("fs"));

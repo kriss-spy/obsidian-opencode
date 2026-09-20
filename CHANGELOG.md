@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-20
+
+### Added
+
+- **OpenCode activity status** — Show when an embedded session is working, waiting for input, idle, or has failed. ([#21](https://github.com/kriss-spy/obsidian-opencode/issues/21))
+
+### Fixed
+
+- **Theme preview rendering** — Keep the system theme anchored to Obsidian's current palette and batch rapid theme-picker navigation so stale previews do not replay after switching stops.
+- **Turn status reset** — Clear touched-session state between turns so completed activity does not leak into the next turn.
+
 ## [2.1.0] - 2026-09-12
 
 ### Fixed
