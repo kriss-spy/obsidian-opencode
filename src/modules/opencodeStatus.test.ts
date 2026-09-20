@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import * as path from "node:path";
 import { OpencodeActivitySource, OpencodeStatusTracker } from "./opencodeStatus";
 
 describe("OpencodeStatusTracker", () => {
@@ -14,10 +15,11 @@ describe("OpencodeStatusTracker", () => {
 
 	it("gives a touched note priority over the running state", () => {
 		const tracker = new OpencodeStatusTracker();
-		tracker.updateActiveFile("/vault/Notes/plan.md");
+		const vault = path.resolve("vault");
+		tracker.updateActiveFile(path.join(vault, "Notes", "plan.md"));
 
 		tracker.updateSessions([
-			{ id: "ses_1", directory: "/vault", files: ["Notes/plan.md"], running: true },
+			{ id: "ses_1", directory: vault, files: [path.join("Notes", "plan.md")], running: true },
 		]);
 
 		expect(tracker.status).toEqual({ kind: "touched", tooltip: "OpenCode changed this note" });

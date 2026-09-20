@@ -306,6 +306,7 @@ describe('OpencodeClient listSessions', () => {
 	});
 
 	it('reads active OpenCode v2 sessions and resolves their directories', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
 		const responses = [
 			{ data: { ses_1: { type: 'running' } } },
 			{ data: { id: 'ses_1', location: { directory: '/vault' } } },
@@ -328,6 +329,7 @@ describe('OpencodeClient listSessions', () => {
 	});
 
 	it('reads the paths changed by the current OpenCode v2 turn', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
 		mockExecResult(JSON.stringify({
 			data: [
 				{ file: 'Notes/plan.md', patch: '', additions: 1, deletions: 0, status: 'modified' },
@@ -346,6 +348,7 @@ describe('OpencodeClient listSessions', () => {
 	});
 
 	it('finds sessions updated since status tracking began', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
 		const now = vi.spyOn(Date, 'now');
 		now.mockReturnValueOnce(1_000).mockReturnValueOnce(2_000);
 		mockExecResult(JSON.stringify({
