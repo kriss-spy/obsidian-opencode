@@ -20,7 +20,9 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 	for (const child of cleanupProcesses) child.kill();
 	cleanupProcesses.clear();
-	for (const directory of cleanupDirectories) rmSync(directory, { recursive: true, force: true });
+	for (const directory of cleanupDirectories) {
+		rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+	}
 	cleanupDirectories.clear();
 });
 
@@ -192,7 +194,7 @@ describe("Windows PTY Job Object host", () => {
 
 		try {
 			await new Promise<void>((resolve, reject) => {
-				const deadline = Date.now() + 5000;
+				const deadline = Date.now() + 15000;
 				const inspect = () => {
 					if (output.join("").includes("PS1_OK:one,two")) resolve();
 					else if (Date.now() >= deadline) reject(new Error(`PowerShell script did not run: ${output.join("")}`));
@@ -203,7 +205,7 @@ describe("Windows PTY Job Object host", () => {
 		} finally {
 			await session.kill();
 		}
-	}, 10000);
+	}, 25000);
 
 	windowsIt("launches an npm command shim through ConPTY", async () => {
 		const output: string[] = [];

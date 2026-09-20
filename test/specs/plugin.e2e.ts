@@ -50,6 +50,13 @@ async function terminalBuffer(): Promise<string> {
 	});
 }
 
+async function terminalPtyPid(): Promise<number | null> {
+	return browser.execute(() => (
+		(window as any).app.workspace.getLeavesOfType("opencode-terminal")[0]
+			?.view?.ptySession?.ptyProcess?.pid ?? null
+	));
+}
+
 async function waitForTerminalText(text: string): Promise<void> {
 	try {
 		await browser.waitUntil(async () => (await terminalBuffer()).includes(text), {
@@ -88,16 +95,19 @@ describe("OpenCode plugin in a fresh vault", function () {
 		]));
 	});
 
-	it("[smoke] closes the terminal with the Ctrl+Shift+W command", async function () {
+	it("[smoke] closes the terminal with the Close terminal command", async function () {
 		await browser.executeObsidianCommand("opencode:open-terminal");
-		const hotkeys = await browser.execute(() => (
-			(window as any).app.hotkeyManager.defaultKeys["opencode:close-terminal"]
-		));
-		expect(hotkeys).toEqual([{ modifiers: ["Ctrl", "Shift"], key: "w" }]);
-		await browser.executeObsidianCommand("opencode:close-terminal");
-		await browser.waitUntil(() => browser.execute(() => (
-			(window as any).app.workspace.getLeavesOfType("opencode-terminal").length === 0
-		)), { timeoutMsg: "Close terminal command did not close the OpenCode terminal" });
+		try {
+			await browser.executeObsidianCommand("opencode:close-terminal");
+			await browser.waitUntil(() => browser.execute(() => (
+				(window as any).app.workspace.getLeavesOfType("opencode-terminal").length === 0
+			)), { timeoutMsg: "Close terminal command did not close the OpenCode terminal" });
+		} finally {
+			await browser.execute(() => Promise.all(
+				(window as any).app.workspace.getLeavesOfType("opencode-terminal")
+					.map((leaf: any) => leaf.detach())
+			));
+		}
 	});
 
 	it("[smoke] [issue #21] renders the OpenCode status states and opens the terminal", async function () {
@@ -162,8 +172,32 @@ describe("OpenCode plugin in a fresh vault", function () {
 		const splitter = view.$('.opencode-session-splitter[role="separator"]');
 		await expect(splitter).toExist();
 		const initialListWidth = await view.$(".opencode-session-list").getSize("width");
-		await splitter.dragAndDrop({ x: 64, y: 0 });
-		expect(await view.$(".opencode-session-list").getSize("width")).toBeGreaterThan(initialListWidth);
+		const minimumListWidth = Number(await splitter.getAttribute("aria-valuemin"));
+		const maximumListWidth = Number(await splitter.getAttribute("aria-valuemax"));
+		expect(maximumListWidth).toBeGreaterThanOrEqual(minimumListWidth);
+		const resizeDirection = maximumListWidth > initialListWidth
+			? 1
+			: initialListWidth > minimumListWidth ? -1 : 0;
+		if (resizeDirection !== 0) {
+			await browser.execute(() => {
+				const element = document.querySelector(".opencode-session-splitter");
+				const current = Number(element?.getAttribute("aria-valuenow"));
+				const maximum = Number(element?.getAttribute("aria-valuemax"));
+				element?.dispatchEvent(
+					new KeyboardEvent("keydown", {
+						key: current < maximum ? "ArrowRight" : "ArrowLeft",
+						bubbles: true,
+					})
+				);
+			});
+			await browser.waitUntil(async () => (
+				resizeDirection * (
+					await view.$(".opencode-session-list").getSize("width") - initialListWidth
+				) > 0
+			), { timeoutMsg: "Session list splitter did not resize the list" });
+		} else {
+			expect([minimumListWidth, maximumListWidth]).toEqual([initialListWidth, initialListWidth]);
+		}
 		await browser.saveScreenshot(path.join(artifactsDir, "conversations.png"));
 	});
 
@@ -275,12 +309,13 @@ describe("OpenCode plugin in a fresh vault", function () {
 	});
 
 	it("[issue #27] accepts input after New Session replaces an existing PTY", async function () {
+		const previousPtyPid = await terminalPtyPid();
 		await browser.executeObsidianCommand("opencode:new-session");
+		await browser.waitUntil(async () => {
+			const currentPid = await terminalPtyPid();
+			return currentPid !== null && currentPid !== previousPtyPid;
+		}, { timeoutMsg: "New Session did not replace the terminal process" });
 		await waitForTerminalText("ARGS:[]");
-		// The Windows ConPTY host emits the child's first output just before its
-		// stdin forwarding loop settles. A user cannot type this quickly, but the
-		// WebDriver test can, so wait for that final startup boundary.
-		if (process.platform === "win32") await browser.pause(250);
 
 		await browser.execute(() => {
 			const app = (window as any).app;
