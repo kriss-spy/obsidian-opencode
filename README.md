@@ -30,6 +30,34 @@ Use OpenCode 2's multi-session interface in a full Obsidian editor tab:
 - **Windows**: Beta support on Windows 10 version 1809 and later through ConPTY. Node.js must be available on `PATH` for the isolated PTY helper.
 - **macOS**: Experimental.
 
+## Known Issues
+
+- **Empty external-editor prompts are not applied:** In both OpenCode 1 and OpenCode V2, opening the prompt in an external editor, deleting all content, and saving leaves the previous prompt in place. This also reproduces when OpenCode runs outside Obsidian, so it must be fixed upstream.
+
+- **OpenCode V2 can time out while pasting large images:** This reproduces in both the embedded terminal and standalone OpenCode V2, so it is not caused by the plugin. A V2 preview build configured clipboard reads with a 1-second timeout and an 8 MiB read limit; a 54.5 MB, 2720 x 18447 PNG reports `Clipboard read timed out`. Its separate local-file attachment limit is 20 MiB, so attaching that same file by path is also unsupported. OpenCode 1.4.6 on Linux reads image data through `wl-paste` without those explicit clipboard limits, so the large image may work there, but that comparison has not yet been verified manually.
+
+- **large session preview:** While the buffer size for exporting sessions has been increased (up to 100MB), exceptionally large or deeply complex OpenCode sessions with massive token counts may still occasionally fail to preview or load properly.
+
+- **not tested on all Linux distros:** While the plugin should work on major distros, it's only tested on manjaro, ubuntu, and fedora.
+
+- **Experimental Windows pty:** It's usable but far from linux and macos experience.
+
+- **shortcuts conflicts:**: Default opencode shortcuts like `Ctrl+P` could conflict with obsidian shortcuts. A solution for now is to always use leader key for opencode shortcuts.
+
+## Integrations
+
+### LaTeX render
+
+OpenCode CLI doesn't support LaTeX render natively. I made this opencode plugin for myself: [opencode-latex](https://github.com/kriss-spy/opencode-latex)
+
+<img width="1317" height="1128" alt="Screenshot_20260919_172121" src="https://github.com/user-attachments/assets/13c41062-4eb3-4702-9054-2eaf4deec2b8" />
+
+### Obsidian
+
+Personally, i use kepano's [obsidian skills](https://github.com/kepano/obsidian-skills) and some of my [obsidian skills](https://github.com/kriss-spy/obsidian-skills).
+
+Any other general community project (MCP, skill, framework...) that connects coding agents with obsidian should work out of the box, as long as it doesn't specify the main interface.
+
 ## Installation
 
 ### From Obsidian Community Plugins (Recommended)
@@ -72,20 +100,6 @@ npm run test:obsidian
 Use `npm run test:obsidian:smoke` for the smaller baseline suite. Windows contributors can also run `npm run test:obsidian:windows-ui` to exercise the installed OpenCode CLI and native terminal interactions.
 
 See [Testing in Obsidian](docs/testing-obsidian.md) for setup, coverage, evidence, and limitations.
-
-## Known Issues
-
-- **Empty external-editor prompts are not applied:** In both OpenCode 1 and OpenCode V2, opening the prompt in an external editor, deleting all content, and saving leaves the previous prompt in place. This also reproduces when OpenCode runs outside Obsidian, so it must be fixed upstream.
-
-- **OpenCode V2 can time out while pasting large images:** This reproduces in both the embedded terminal and standalone OpenCode V2, so it is not caused by the plugin. A V2 preview build configured clipboard reads with a 1-second timeout and an 8 MiB read limit; a 54.5 MB, 2720 x 18447 PNG reports `Clipboard read timed out`. Its separate local-file attachment limit is 20 MiB, so attaching that same file by path is also unsupported. OpenCode 1.4.6 on Linux reads image data through `wl-paste` without those explicit clipboard limits, so the large image may work there, but that comparison has not yet been verified manually.
-
-- **large session preview:** While the buffer size for exporting sessions has been increased (up to 100MB), exceptionally large or deeply complex OpenCode sessions with massive token counts may still occasionally fail to preview or load properly.
-
-- **not tested on all Linux distros:** While the plugin should work on major distros, it's only tested on manjaro, ubuntu, and fedora.
-
-- **Experimental Windows pty:** It's usable but far from linux and macos experience.
-
-- **shortcuts conflicts:**: Default opencode shortcuts like `Ctrl+P` could conflict with obsidian shortcuts. A solution for now is to always use leader key for opencode shortcuts.
 
 ## Acknowledgements
 
