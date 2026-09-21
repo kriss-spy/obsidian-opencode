@@ -22,6 +22,8 @@ export interface KeyRouterContext {
 	copySelectionOnCtrlC?: boolean | (() => boolean);
 	onClipboardError?: (message: string) => void;
 	onClipboardImagePaste?: (png: Buffer) => void | Promise<void>;
+	shiftEnterNewline?: boolean;
+	onShiftEnterNewline?: () => void;
 }
 
 export class TerminalKeyRouter {
@@ -29,11 +31,28 @@ export class TerminalKeyRouter {
 
 	register(context: KeyRouterContext): void {
 		this.registerShortcutScope(context);
+		this.registerShiftEnterNewline(context);
 		if (context.clipboard) {
 			this.registerWslClipboard(context);
 		} else {
 			this.registerPasteHandler(context);
 		}
+	}
+
+	private registerShiftEnterNewline(context: KeyRouterContext): void {
+		if (!context.shiftEnterNewline || !context.onShiftEnterNewline) return;
+
+		const { terminal, onShiftEnterNewline } = context;
+		terminal.attachCustomKeyEventHandler((event) => {
+			if (event.type === "keydown" && event.key === "Enter" && event.shiftKey &&
+				!event.ctrlKey && !event.altKey && !event.metaKey) {
+				event.preventDefault();
+				onShiftEnterNewline();
+				return false;
+			}
+			return true;
+		});
+		this.disposers.push(() => terminal.attachCustomKeyEventHandler(() => true));
 	}
 
 	private registerWslClipboard(context: KeyRouterContext): void {

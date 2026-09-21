@@ -512,6 +512,8 @@ export class OpencodeTerminalView extends ItemView {
 			app: this.app,
 			terminal,
 			container,
+			shiftEnterNewline: this.plugin.settings.shiftEnterNewline,
+			onShiftEnterNewline: () => this.ptySession.writeStdin("\x1b[13;2u"),
 			reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
 			clipboard: windowsClipboard ?? undefined,
 			copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,

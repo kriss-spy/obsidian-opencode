@@ -62,6 +62,11 @@ export class OpencodeSettingTab extends PluginSettingTab {
 				desc: "Additional arguments to pass when starting a new opencode session (e.g. --model provider/model).",
 				control: { type: "text", key: "newSessionArgs", placeholder: "--model opencode-go/kimi-k2.6" },
 			},
+			{
+				name: "Shift + Enter for newline",
+				desc: "When enabled, Shift + Enter inserts a newline. The default OpenCode shortcut is Alt + Enter.",
+				control: { type: "toggle", key: "shiftEnterNewline" },
+			},
 		];
 	}
 
@@ -73,6 +78,7 @@ export class OpencodeSettingTab extends PluginSettingTab {
 			case "terminalFontSize": return this.plugin.settings.terminalFontSize;
 			case "terminalFontFamily": return this.plugin.settings.terminalFontFamily;
 			case "newSessionArgs": return this.plugin.settings.newSessionArgs;
+			case "shiftEnterNewline": return this.plugin.settings.shiftEnterNewline;
 			default: return undefined;
 		}
 	}
@@ -96,6 +102,9 @@ export class OpencodeSettingTab extends PluginSettingTab {
 				break;
 			case "newSessionArgs":
 				if (typeof value === "string") this.plugin.settings.newSessionArgs = value;
+				break;
+			case "shiftEnterNewline":
+				if (typeof value === "boolean") this.plugin.settings.shiftEnterNewline = value;
 				break;
 			default:
 				return;
@@ -189,6 +198,18 @@ export class OpencodeSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.newSessionArgs)
 					.onChange(async (value) => {
 						this.plugin.settings.newSessionArgs = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Shift + Enter for newline")
+			.setDesc("When enabled, Shift + Enter inserts a newline. The default OpenCode shortcut is Alt + Enter.")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.shiftEnterNewline)
+					.onChange(async (value) => {
+						this.plugin.settings.shiftEnterNewline = value;
 						await this.plugin.saveSettings();
 					})
 			);
