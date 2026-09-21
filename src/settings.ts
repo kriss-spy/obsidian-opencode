@@ -7,6 +7,7 @@ export interface OpencodePluginSettings {
 	terminalFontSize: number;
 	terminalFontFamily: string;
 	newSessionArgs: string;
+	shiftEnterNewline: boolean;
 }
 
 export const DEFAULT_SETTINGS: OpencodePluginSettings = {
@@ -16,4 +17,5 @@ export const DEFAULT_SETTINGS: OpencodePluginSettings = {
 	terminalFontSize: 14,
 	terminalFontFamily: "monospace",
 	newSessionArgs: "",
+	shiftEnterNewline: false,
 };

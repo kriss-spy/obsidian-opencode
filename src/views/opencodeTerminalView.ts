@@ -76,6 +76,15 @@ export class OpencodeTerminalView extends ItemView {
 		return "terminal";
 	}
 
+	setShiftEnterNewline(enabled: boolean): void {
+		if (!this.terminal) return;
+		this.keyRouter.setShiftEnterNewline(
+			this.terminal,
+			enabled,
+			() => this.ptySession.writeStdin("\x1b[13;2u"),
+		);
+	}
+
 	async onOpen() {
 		const terminalCwd = this.plugin.sessionCwd
 			|| this.plugin.settings.defaultWorkingDirectory
@@ -512,6 +521,8 @@ export class OpencodeTerminalView extends ItemView {
 			app: this.app,
 			terminal,
 			container,
+			shiftEnterNewline: this.plugin.settings.shiftEnterNewline,
+			onShiftEnterNewline: () => this.ptySession.writeStdin("\x1b[13;2u"),
 			reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
 			clipboard: windowsClipboard ?? undefined,
 			copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,
