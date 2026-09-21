@@ -28,10 +28,11 @@ export interface KeyRouterContext {
 
 export class TerminalKeyRouter {
 	private disposers: Array<() => void> = [];
+	private shiftEnterDisposer: (() => void) | null = null;
 
 	register(context: KeyRouterContext): void {
 		this.registerShortcutScope(context);
-		this.registerShiftEnterNewline(context);
+		this.setShiftEnterNewline(context.terminal, context.shiftEnterNewline ?? false, context.onShiftEnterNewline);
 		if (context.clipboard) {
 			this.registerWslClipboard(context);
 		} else {
@@ -39,10 +40,11 @@ export class TerminalKeyRouter {
 		}
 	}
 
-	private registerShiftEnterNewline(context: KeyRouterContext): void {
-		if (!context.shiftEnterNewline || !context.onShiftEnterNewline) return;
+	setShiftEnterNewline(terminal: Terminal, enabled: boolean, onShiftEnterNewline?: () => void): void {
+		this.shiftEnterDisposer?.();
+		this.shiftEnterDisposer = null;
+		if (!enabled || !onShiftEnterNewline) return;
 
-		const { terminal, onShiftEnterNewline } = context;
 		terminal.attachCustomKeyEventHandler((event) => {
 			if (event.type === "keydown" && event.key === "Enter" && event.shiftKey &&
 				!event.ctrlKey && !event.altKey && !event.metaKey) {
@@ -52,7 +54,7 @@ export class TerminalKeyRouter {
 			}
 			return true;
 		});
-		this.disposers.push(() => terminal.attachCustomKeyEventHandler(() => true));
+		this.shiftEnterDisposer = () => terminal.attachCustomKeyEventHandler(() => true);
 	}
 
 	private registerWslClipboard(context: KeyRouterContext): void {
@@ -218,6 +220,8 @@ export class TerminalKeyRouter {
 	}
 
 	dispose(): void {
+		this.shiftEnterDisposer?.();
+		this.shiftEnterDisposer = null;
 		for (const disposer of this.disposers) {
 			try { disposer(); } catch { /* ignore */ }
 		}
