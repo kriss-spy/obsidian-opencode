@@ -81,7 +81,7 @@ export class OpencodeTerminalView extends ItemView {
 		this.keyRouter.setShiftEnterNewline(
 			this.terminal,
 			enabled,
-			() => this.ptySession.writeStdin("\x1b[13;2u"),
+			() => this.terminal?.input("\x1b[13;2u", true),
 		);
 	}
 
@@ -522,7 +522,7 @@ export class OpencodeTerminalView extends ItemView {
 			terminal,
 			container,
 			shiftEnterNewline: this.plugin.settings.shiftEnterNewline,
-			onShiftEnterNewline: () => this.ptySession.writeStdin("\x1b[13;2u"),
+			onShiftEnterNewline: () => terminal.input("\x1b[13;2u", true),
 			reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
 			clipboard: windowsClipboard ?? undefined,
 			copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,

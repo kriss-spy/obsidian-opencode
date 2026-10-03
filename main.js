@@ -20175,7 +20175,8 @@ var DEFAULT_SETTINGS = {
   environmentVariables: {},
   terminalFontSize: 14,
   terminalFontFamily: "monospace",
-  newSessionArgs: ""
+  newSessionArgs: "",
+  shiftEnterNewline: false
 };
 
 // src/settingsTab.ts
@@ -20309,6 +20310,11 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
         name: "New session arguments",
         desc: "Additional arguments to pass when starting a new opencode session (e.g. --model provider/model).",
         control: { type: "text", key: "newSessionArgs", placeholder: "--model opencode-go/kimi-k2.6" }
+      },
+      {
+        name: "Shift + Enter for newline",
+        desc: "When enabled, Shift + Enter inserts a newline. The default OpenCode shortcut is Alt + Enter.",
+        control: { type: "toggle", key: "shiftEnterNewline" }
       }
     ];
   }
@@ -20326,6 +20332,8 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
         return this.plugin.settings.terminalFontFamily;
       case "newSessionArgs":
         return this.plugin.settings.newSessionArgs;
+      case "shiftEnterNewline":
+        return this.plugin.settings.shiftEnterNewline;
       default:
         return void 0;
     }
@@ -20349,6 +20357,9 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
         break;
       case "newSessionArgs":
         if (typeof value === "string") this.plugin.settings.newSessionArgs = value;
+        break;
+      case "shiftEnterNewline":
+        if (typeof value === "boolean") this.plugin.settings.shiftEnterNewline = value;
         break;
       default:
         return;
@@ -20399,6 +20410,12 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
     new import_obsidian.Setting(containerEl).setName("New session arguments").setDesc("Additional arguments to pass when starting a new opencode session (e.g. --model provider/model).").addText(
       (text) => text.setPlaceholder("--model opencode-go/kimi-k2.6").setValue(this.plugin.settings.newSessionArgs).onChange(async (value) => {
         this.plugin.settings.newSessionArgs = value;
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("Shift + Enter for newline").setDesc("When enabled, Shift + Enter inserts a newline. The default OpenCode shortcut is Alt + Enter.").addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.shiftEnterNewline).onChange(async (value) => {
+        this.plugin.settings.shiftEnterNewline = value;
         await this.plugin.saveSettings();
       })
     );
@@ -21247,14 +21264,33 @@ function decodeOsc52ClipboardSet(data) {
 var TerminalKeyRouter = class {
   constructor() {
     this.disposers = [];
+    this.shiftEnterDisposer = null;
   }
   register(context) {
+    var _a;
     this.registerShortcutScope(context);
+    this.setShiftEnterNewline(context.terminal, (_a = context.shiftEnterNewline) != null ? _a : false, context.onShiftEnterNewline);
     if (context.clipboard) {
       this.registerWslClipboard(context);
     } else {
       this.registerPasteHandler(context);
     }
+  }
+  setShiftEnterNewline(terminal, enabled, onShiftEnterNewline) {
+    var _a;
+    (_a = this.shiftEnterDisposer) == null ? void 0 : _a.call(this);
+    this.shiftEnterDisposer = null;
+    if (!enabled || !onShiftEnterNewline) return;
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.isComposing || event.keyCode === 229) return true;
+      if (event.type === "keydown" && event.key === "Enter" && event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        event.preventDefault();
+        onShiftEnterNewline();
+        return false;
+      }
+      return true;
+    });
+    this.shiftEnterDisposer = () => terminal.attachCustomKeyEventHandler(() => true);
   }
   registerWslClipboard(context) {
     const { clipboard, container, terminal } = context;
@@ -21399,6 +21435,9 @@ var TerminalKeyRouter = class {
     this.disposers.push(() => container.removeEventListener("paste", pasteHandler, true));
   }
   dispose() {
+    var _a;
+    (_a = this.shiftEnterDisposer) == null ? void 0 : _a.call(this);
+    this.shiftEnterDisposer = null;
     for (const disposer of this.disposers) {
       try {
         disposer();
@@ -22083,6 +22122,17 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
   getIcon() {
     return "terminal";
   }
+  setShiftEnterNewline(enabled) {
+    if (!this.terminal) return;
+    this.keyRouter.setShiftEnterNewline(
+      this.terminal,
+      enabled,
+      () => {
+        var _a;
+        return (_a = this.terminal) == null ? void 0 : _a.input("\x1B[13;2u", true);
+      }
+    );
+  }
   async onOpen() {
     var _a, _b;
     const terminalCwd = this.plugin.sessionCwd || this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
@@ -22477,6 +22527,8 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
       app: this.app,
       terminal,
       container,
+      shiftEnterNewline: this.plugin.settings.shiftEnterNewline,
+      onShiftEnterNewline: () => terminal.input("\x1B[13;2u", true),
       reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
       clipboard: windowsClipboard != null ? windowsClipboard : void 0,
       copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,
@@ -23943,6 +23995,11 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
   }
   async saveSettings() {
     await this.saveData(this.settings);
+    for (const leaf of this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)) {
+      if (leaf.view instanceof OpencodeTerminalView) {
+        leaf.view.setShiftEnterNewline(this.settings.shiftEnterNewline);
+      }
+    }
   }
   openSettings() {
     const settings = this.app.setting;

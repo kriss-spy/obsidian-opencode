@@ -12,6 +12,7 @@ function registerRouter(
 	copySelectionOnCtrlC = false,
 ) {
 	const containerHandlers = new Map<string, (event: Event) => void>();
+	let customKeyEventHandler: ((event: KeyboardEvent) => boolean) | undefined;
 
 	const terminalPaste = vi.fn();
 	const terminalClearSelection = vi.fn();
@@ -43,6 +44,9 @@ function registerRouter(
 			keymap: { pushScope, popScope },
 		},
 		terminal: {
+			attachCustomKeyEventHandler: (handler: (event: KeyboardEvent) => boolean) => {
+				customKeyEventHandler = handler;
+			},
 			paste: terminalPaste,
 			hasSelection: () => Boolean(selection),
 			getSelection: () => selection,
@@ -106,6 +110,24 @@ function registerRouter(
 			return { preventDefault, stopImmediatePropagation };
 		},
 		dispatchOsc52: (data: string) => osc52Handler?.(data),
+		dispatchTerminalKey: (event: Partial<KeyboardEvent> = {}) => {
+			const preventDefault = vi.fn();
+			const result = customKeyEventHandler?.({
+				type: "keydown",
+				key: "Enter",
+				shiftKey: true,
+				ctrlKey: false,
+				altKey: false,
+				metaKey: false,
+				isComposing: false,
+				keyCode: 13,
+				preventDefault,
+				...event,
+			} as unknown as KeyboardEvent);
+			return { result, preventDefault };
+		},
+		setShiftEnterNewline: (enabled: boolean, callback?: () => void) =>
+			router.setShiftEnterNewline(context.terminal, enabled, callback),
 		router,
 	};
 }
@@ -238,6 +260,48 @@ describe("TerminalKeyRouter", () => {
 		expect(result).toBeUndefined();
 		expect(executeCommandById).not.toHaveBeenCalled();
 		router.dispose();
+	});
+
+	it("routes enabled Shift+Enter to the callback and preserves ordinary Enter and Alt+Enter", () => {
+		const onShiftEnterNewline = vi.fn();
+		const context = registerRouter();
+		context.setShiftEnterNewline(true, onShiftEnterNewline);
+
+		const shiftEnter = context.dispatchTerminalKey();
+		expect(shiftEnter.result).toBe(false);
+		expect(shiftEnter.preventDefault).toHaveBeenCalledOnce();
+		expect(onShiftEnterNewline).toHaveBeenCalledOnce();
+
+		expect(context.dispatchTerminalKey({ shiftKey: false }).result).toBe(true);
+		expect(context.dispatchTerminalKey({ altKey: true }).result).toBe(true);
+		expect(onShiftEnterNewline).toHaveBeenCalledOnce();
+		context.router.dispose();
+	});
+
+	it("passes composing and legacy IME Shift+Enter events to xterm", () => {
+		const onShiftEnterNewline = vi.fn();
+		const context = registerRouter();
+		context.setShiftEnterNewline(true, onShiftEnterNewline);
+
+		expect(context.dispatchTerminalKey({ isComposing: true }).result).toBe(true);
+		expect(context.dispatchTerminalKey({ keyCode: 229 }).result).toBe(true);
+		expect(onShiftEnterNewline).not.toHaveBeenCalled();
+		context.router.dispose();
+	});
+
+	it("applies disabling and re-enabling of Shift+Enter immediately", () => {
+		const onShiftEnterNewline = vi.fn();
+		const context = registerRouter();
+		context.setShiftEnterNewline(true, onShiftEnterNewline);
+		expect(context.dispatchTerminalKey().result).toBe(false);
+
+		context.setShiftEnterNewline(false, onShiftEnterNewline);
+		expect(context.dispatchTerminalKey().result).toBe(true);
+
+		context.setShiftEnterNewline(true, onShiftEnterNewline);
+		expect(context.dispatchTerminalKey().result).toBe(false);
+		expect(onShiftEnterNewline).toHaveBeenCalledTimes(2);
+		context.router.dispose();
 	});
 
 	it("pushes the terminal scope once on focus and removes it on blur", () => {

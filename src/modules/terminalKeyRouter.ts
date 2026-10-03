@@ -46,6 +46,7 @@ export class TerminalKeyRouter {
 		if (!enabled || !onShiftEnterNewline) return;
 
 		terminal.attachCustomKeyEventHandler((event) => {
+			if (event.isComposing || event.keyCode === 229) return true;
 			if (event.type === "keydown" && event.key === "Enter" && event.shiftKey &&
 				!event.ctrlKey && !event.altKey && !event.metaKey) {
 				event.preventDefault();
