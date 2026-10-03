@@ -58,6 +58,10 @@ Personally, i use kepano's [obsidian skills](https://github.com/kepano/obsidian-
 
 Any other general community project (MCP, skill, framework...) that connects coding agents with obsidian should work out of the box, as long as it doesn't specify the main interface.
 
+### Templates
+
+I've always wanted a natural way to let opencode discover and use folder templates. [Templater](https://github.com/silentvoid13/Templater) doesn't do that out of the box. So i made [frontmatter-templater](https://github.com/kriss-spy/frontmatter-templater) to let you define folder template in folder note. In that way opencode should naturally discover and use the template when exploring a folder.
+
 ## Installation
 
 ### From Obsidian Community Plugins (Recommended)
