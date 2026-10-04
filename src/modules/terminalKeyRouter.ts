@@ -22,18 +22,53 @@ export interface KeyRouterContext {
 	copySelectionOnCtrlC?: boolean | (() => boolean);
 	onClipboardError?: (message: string) => void;
 	onClipboardImagePaste?: (png: Buffer) => void | Promise<void>;
+	shiftEnterNewline?: boolean;
+	onShiftEnterNewline?: () => void;
 }
 
 export class TerminalKeyRouter {
 	private disposers: Array<() => void> = [];
+	private shiftEnterDisposer: (() => void) | null = null;
+	private shiftEnterTimers = new Set<ReturnType<typeof setTimeout>>();
 
 	register(context: KeyRouterContext): void {
 		this.registerShortcutScope(context);
+		this.setShiftEnterNewline(context.terminal, context.shiftEnterNewline ?? false, context.onShiftEnterNewline);
 		if (context.clipboard) {
 			this.registerWslClipboard(context);
 		} else {
 			this.registerPasteHandler(context);
 		}
+	}
+
+	setShiftEnterNewline(terminal: Terminal, enabled: boolean, onShiftEnterNewline?: () => void): void {
+		this.shiftEnterDisposer?.();
+		this.shiftEnterDisposer = null;
+		this.clearShiftEnterTimers();
+		if (!enabled || !onShiftEnterNewline) return;
+
+		terminal.attachCustomKeyEventHandler((event) => {
+			if (event.isComposing || event.keyCode === 229) return true;
+			if (event.type === "keydown" && event.key === "Enter" && event.shiftKey &&
+				!event.ctrlKey && !event.altKey && !event.metaKey) {
+				event.preventDefault();
+				// xterm defers compositionend commits by one task. Queue this after
+				// that task so composed text reaches onData before the newline.
+				const timer = setTimeout(() => {
+					this.shiftEnterTimers.delete(timer);
+					onShiftEnterNewline();
+				}, 0);
+				this.shiftEnterTimers.add(timer);
+				return false;
+			}
+			return true;
+		});
+		this.shiftEnterDisposer = () => terminal.attachCustomKeyEventHandler(() => true);
+	}
+
+	private clearShiftEnterTimers(): void {
+		for (const timer of this.shiftEnterTimers) clearTimeout(timer);
+		this.shiftEnterTimers.clear();
 	}
 
 	private registerWslClipboard(context: KeyRouterContext): void {
@@ -199,6 +234,9 @@ export class TerminalKeyRouter {
 	}
 
 	dispose(): void {
+		this.shiftEnterDisposer?.();
+		this.shiftEnterDisposer = null;
+		this.clearShiftEnterTimers();
 		for (const disposer of this.disposers) {
 			try { disposer(); } catch { /* ignore */ }
 		}
