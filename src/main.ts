@@ -141,12 +141,12 @@ export default class OpencodePlugin extends Plugin {
 	}
 
 	async saveSettings() {
-		await this.saveData(this.settings);
 		for (const leaf of this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)) {
 			if (leaf.view instanceof OpencodeTerminalView) {
 				leaf.view.setShiftEnterNewline(this.settings.shiftEnterNewline);
 			}
 		}
+		await this.saveData(this.settings);
 	}
 
 	openSettings(): void {

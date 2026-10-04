@@ -41,6 +41,7 @@ interface VaultWithConfig {
 }
 
 export const OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
+const SHIFT_ENTER_NEWLINE_SEQUENCE = "\x1b[13;2u";
 
 export class OpencodeTerminalView extends ItemView {
 	terminal: Terminal | null = null;
@@ -77,12 +78,17 @@ export class OpencodeTerminalView extends ItemView {
 	}
 
 	setShiftEnterNewline(enabled: boolean): void {
-		if (!this.terminal) return;
+		const terminal = this.terminal;
+		if (!terminal) return;
 		this.keyRouter.setShiftEnterNewline(
-			this.terminal,
+			terminal,
 			enabled,
-			() => this.terminal?.input("\x1b[13;2u", true),
+			() => this.sendShiftEnterNewline(terminal),
 		);
+	}
+
+	private sendShiftEnterNewline(terminal: Terminal): void {
+		terminal.input(SHIFT_ENTER_NEWLINE_SEQUENCE, true);
 	}
 
 	async onOpen() {
@@ -522,7 +528,7 @@ export class OpencodeTerminalView extends ItemView {
 			terminal,
 			container,
 			shiftEnterNewline: this.plugin.settings.shiftEnterNewline,
-			onShiftEnterNewline: () => terminal.input("\x1b[13;2u", true),
+			onShiftEnterNewline: () => this.sendShiftEnterNewline(terminal),
 			reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
 			clipboard: windowsClipboard ?? undefined,
 			copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,

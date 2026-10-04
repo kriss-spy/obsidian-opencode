@@ -263,19 +263,25 @@ describe("TerminalKeyRouter", () => {
 	});
 
 	it("routes enabled Shift+Enter to the callback and preserves ordinary Enter and Alt+Enter", () => {
-		const onShiftEnterNewline = vi.fn();
-		const context = registerRouter();
-		context.setShiftEnterNewline(true, onShiftEnterNewline);
+		vi.useFakeTimers();
+		try {
+			const onShiftEnterNewline = vi.fn();
+			const context = registerRouter();
+			context.setShiftEnterNewline(true, onShiftEnterNewline);
 
-		const shiftEnter = context.dispatchTerminalKey();
-		expect(shiftEnter.result).toBe(false);
-		expect(shiftEnter.preventDefault).toHaveBeenCalledOnce();
-		expect(onShiftEnterNewline).toHaveBeenCalledOnce();
+			const shiftEnter = context.dispatchTerminalKey();
+			expect(shiftEnter.result).toBe(false);
+			expect(shiftEnter.preventDefault).toHaveBeenCalledOnce();
+			vi.runAllTimers();
+			expect(onShiftEnterNewline).toHaveBeenCalledOnce();
 
-		expect(context.dispatchTerminalKey({ shiftKey: false }).result).toBe(true);
-		expect(context.dispatchTerminalKey({ altKey: true }).result).toBe(true);
-		expect(onShiftEnterNewline).toHaveBeenCalledOnce();
-		context.router.dispose();
+			expect(context.dispatchTerminalKey({ shiftKey: false }).result).toBe(true);
+			expect(context.dispatchTerminalKey({ altKey: true }).result).toBe(true);
+			expect(onShiftEnterNewline).toHaveBeenCalledOnce();
+			context.router.dispose();
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("passes composing and legacy IME Shift+Enter events to xterm", () => {
@@ -289,19 +295,46 @@ describe("TerminalKeyRouter", () => {
 		context.router.dispose();
 	});
 
+	it("defers Shift+Enter until xterm can flush a completed composition", () => {
+		vi.useFakeTimers();
+		try {
+			const onShiftEnterNewline = vi.fn();
+			const context = registerRouter();
+			context.setShiftEnterNewline(true, onShiftEnterNewline);
+
+			const shiftEnter = context.dispatchTerminalKey();
+			expect(shiftEnter.result).toBe(false);
+			expect(onShiftEnterNewline).not.toHaveBeenCalled();
+
+			vi.runAllTimers();
+			expect(onShiftEnterNewline).toHaveBeenCalledOnce();
+			context.router.dispose();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("applies disabling and re-enabling of Shift+Enter immediately", () => {
-		const onShiftEnterNewline = vi.fn();
-		const context = registerRouter();
-		context.setShiftEnterNewline(true, onShiftEnterNewline);
-		expect(context.dispatchTerminalKey().result).toBe(false);
+		vi.useFakeTimers();
+		try {
+			const onShiftEnterNewline = vi.fn();
+			const context = registerRouter();
+			context.setShiftEnterNewline(true, onShiftEnterNewline);
+			expect(context.dispatchTerminalKey().result).toBe(false);
 
-		context.setShiftEnterNewline(false, onShiftEnterNewline);
-		expect(context.dispatchTerminalKey().result).toBe(true);
+			context.setShiftEnterNewline(false, onShiftEnterNewline);
+			expect(context.dispatchTerminalKey().result).toBe(true);
+			vi.runAllTimers();
+			expect(onShiftEnterNewline).not.toHaveBeenCalled();
 
-		context.setShiftEnterNewline(true, onShiftEnterNewline);
-		expect(context.dispatchTerminalKey().result).toBe(false);
-		expect(onShiftEnterNewline).toHaveBeenCalledTimes(2);
-		context.router.dispose();
+			context.setShiftEnterNewline(true, onShiftEnterNewline);
+			expect(context.dispatchTerminalKey().result).toBe(false);
+			vi.runAllTimers();
+			expect(onShiftEnterNewline).toHaveBeenCalledOnce();
+			context.router.dispose();
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("pushes the terminal scope once on focus and removes it on blur", () => {

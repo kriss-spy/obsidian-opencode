@@ -21265,6 +21265,7 @@ var TerminalKeyRouter = class {
   constructor() {
     this.disposers = [];
     this.shiftEnterDisposer = null;
+    this.shiftEnterTimers = /* @__PURE__ */ new Set();
   }
   register(context) {
     var _a;
@@ -21280,17 +21281,26 @@ var TerminalKeyRouter = class {
     var _a;
     (_a = this.shiftEnterDisposer) == null ? void 0 : _a.call(this);
     this.shiftEnterDisposer = null;
+    this.clearShiftEnterTimers();
     if (!enabled || !onShiftEnterNewline) return;
     terminal.attachCustomKeyEventHandler((event) => {
       if (event.isComposing || event.keyCode === 229) return true;
       if (event.type === "keydown" && event.key === "Enter" && event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
         event.preventDefault();
-        onShiftEnterNewline();
+        const timer = setTimeout(() => {
+          this.shiftEnterTimers.delete(timer);
+          onShiftEnterNewline();
+        }, 0);
+        this.shiftEnterTimers.add(timer);
         return false;
       }
       return true;
     });
     this.shiftEnterDisposer = () => terminal.attachCustomKeyEventHandler(() => true);
+  }
+  clearShiftEnterTimers() {
+    for (const timer of this.shiftEnterTimers) clearTimeout(timer);
+    this.shiftEnterTimers.clear();
   }
   registerWslClipboard(context) {
     const { clipboard, container, terminal } = context;
@@ -21438,6 +21448,7 @@ var TerminalKeyRouter = class {
     var _a;
     (_a = this.shiftEnterDisposer) == null ? void 0 : _a.call(this);
     this.shiftEnterDisposer = null;
+    this.clearShiftEnterTimers();
     for (const disposer of this.disposers) {
       try {
         disposer();
@@ -22095,6 +22106,7 @@ function terminalColorQueryResponse(osc, color) {
 
 // src/views/opencodeTerminalView.ts
 var OPENCODE_TERMINAL_VIEW_TYPE = "opencode-terminal";
+var SHIFT_ENTER_NEWLINE_SEQUENCE = "\x1B[13;2u";
 var OpencodeTerminalView = class extends import_obsidian4.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -22123,15 +22135,16 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
     return "terminal";
   }
   setShiftEnterNewline(enabled) {
-    if (!this.terminal) return;
+    const terminal = this.terminal;
+    if (!terminal) return;
     this.keyRouter.setShiftEnterNewline(
-      this.terminal,
+      terminal,
       enabled,
-      () => {
-        var _a;
-        return (_a = this.terminal) == null ? void 0 : _a.input("\x1B[13;2u", true);
-      }
+      () => this.sendShiftEnterNewline(terminal)
     );
+  }
+  sendShiftEnterNewline(terminal) {
+    terminal.input(SHIFT_ENTER_NEWLINE_SEQUENCE, true);
   }
   async onOpen() {
     var _a, _b;
@@ -22528,7 +22541,7 @@ var OpencodeTerminalView = class extends import_obsidian4.ItemView {
       terminal,
       container,
       shiftEnterNewline: this.plugin.settings.shiftEnterNewline,
-      onShiftEnterNewline: () => terminal.input("\x1B[13;2u", true),
+      onShiftEnterNewline: () => this.sendShiftEnterNewline(terminal),
       reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
       clipboard: windowsClipboard != null ? windowsClipboard : void 0,
       copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,
@@ -23994,12 +24007,12 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, data != null ? data : {});
   }
   async saveSettings() {
-    await this.saveData(this.settings);
     for (const leaf of this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)) {
       if (leaf.view instanceof OpencodeTerminalView) {
         leaf.view.setShiftEnterNewline(this.settings.shiftEnterNewline);
       }
     }
+    await this.saveData(this.settings);
   }
   openSettings() {
     const settings = this.app.setting;

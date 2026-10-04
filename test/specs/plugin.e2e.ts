@@ -541,6 +541,68 @@ describe("OpenCode plugin in a fresh vault", function () {
 		expect(output).toContain(`INPUT:"안녕 ${newline}"`);
 	});
 
+	it("[issue #60] keeps Shift+Enter after committed Korean text", async function () {
+		await browser.execute(async () => {
+			const app = (window as any).app;
+			for (const leaf of app.workspace.getLeavesOfType("opencode-terminal")) {
+				await leaf.detach();
+			}
+			await app.plugins.plugins.opencode.activateTerminalView();
+		});
+		await expect(browser.$(".opencode-terminal-container .xterm-helper-textarea")).toExist();
+		await waitForTerminalText("OpenCode isolated test stub");
+
+		try {
+			const input = await browser.execute(async () => {
+				const app = (window as any).app;
+				const plugin = app.plugins.plugins.opencode;
+				plugin.settings.shiftEnterNewline = true;
+				await plugin.saveSettings();
+
+				const view = app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				const terminal = view.terminal;
+				const textarea = terminal.textarea as HTMLTextAreaElement;
+				const received: string[] = [];
+				const listener = terminal.onData((data: string) => received.push(data));
+				textarea.focus();
+				textarea.dispatchEvent(new CompositionEvent("compositionstart", {
+					bubbles: true,
+					data: "",
+				}));
+				textarea.value = "안녕";
+				textarea.dispatchEvent(new CompositionEvent("compositionupdate", {
+					bubbles: true,
+					data: "안녕",
+				}));
+				await new Promise((resolve) => window.setTimeout(resolve, 0));
+				textarea.dispatchEvent(new CompositionEvent("compositionend", {
+					bubbles: true,
+					data: "안녕",
+				}));
+				const shiftEnter = new KeyboardEvent("keydown", {
+					key: "Enter",
+					code: "Enter",
+					shiftKey: true,
+					bubbles: true,
+					cancelable: true,
+				});
+				Object.defineProperty(shiftEnter, "keyCode", { value: 13 });
+				textarea.dispatchEvent(shiftEnter);
+				await new Promise((resolve) => window.setTimeout(resolve, 20));
+				listener.dispose();
+				return received;
+			});
+
+			expect(input).toEqual(["안녕", "\x1b[13;2u"]);
+		} finally {
+			await browser.execute(async () => {
+				const plugin = (window as any).app.plugins.plugins.opencode;
+				plugin.settings.shiftEnterNewline = false;
+				await plugin.saveSettings();
+			});
+		}
+	});
+
 	it("[issues #50, #53] bridges text and image clipboard input under WSL2", async function () {
 		if (!isWsl2()) this.skip();
 		const clipboard = createWslWindowsClipboard();
