@@ -100,11 +100,11 @@ export function findTerminalLinks(text: string, options: Pick<TerminalLinkOption
 		const end = match.index + match[0].length;
 		// Restrict candidates to the current delimiter-bounded phrase.
 		let segmentStart = match.index;
-		while (segmentStart > previousEnd && !/[\n\r\t`"'<>\[\](){}|,;]/.test(text[segmentStart - 1])) segmentStart--;
+		while (segmentStart > previousEnd && !/[\n\r\t`"'<>\[\]{}|,;]/.test(text[segmentStart - 1])) segmentStart--;
 		previousEnd = end;
 		if (end - segmentStart > 4096) continue;
 		for (let start = segmentStart; start <= match.index; start++) {
-			if (start > segmentStart && !/\s/.test(text[start - 1])) continue;
+			if (start > segmentStart && !/[\s()]/.test(text[start - 1])) continue;
 			if (/\s/.test(text[start])) continue;
 			const value = text.slice(start, end);
 			// Never recover a relative suffix from an explicit rejected absolute/traversal path.
@@ -165,6 +165,7 @@ export class TerminalLinks implements ILinkProvider {
 	private disposed = false;
 	private revision = 0;
 	private hovered: ILink | null = null;
+	private validations = new WeakMap<ILink, () => boolean>();
 	private pressed: { link: ILink; x: number; y: number; modified: boolean; dragged: boolean } | null = null;
 	private cleanups: Array<() => void> = [];
 
@@ -176,17 +177,23 @@ export class TerminalLinks implements ILinkProvider {
 		if (!line) { callback(undefined); return; }
 		const links = findTerminalLinks(line.text, this.options).map(match => {
 			let released = false;
-			const revision = this.revision;
+			const cols = this.terminal.cols;
+			const viewportY = this.terminal.buffer.active.viewportY;
+			const buffer = this.terminal.buffer.active;
+			const valid = () => !released && !this.disposed && this.terminal.cols === cols &&
+				this.terminal.buffer.active === buffer && buffer.viewportY === viewportY &&
+				logicalLine(this.terminal, y)?.text === line.text;
 			const link: ILink = {
 				text: match.text,
 				range: { start: line.starts[match.start], end: line.ends[match.end - 1] },
 				activate: event => {
-					if (!released && revision === this.revision) void this.activate(match.text, event);
+					if (valid()) void this.activate(match.text, event);
 				},
-				hover: () => { this.hovered = link; },
+				hover: () => { if (valid()) this.hovered = link; },
 				leave: () => { if (this.hovered === link) this.hovered = null; },
 				dispose: () => { released = true; if (this.hovered === link) this.hovered = null; },
 			};
+			this.validations.set(link, valid);
 			return link;
 		}).filter(link => link.range.start.y <= y && link.range.end.y >= y);
 		callback(links.length ? links : undefined);
@@ -269,7 +276,16 @@ export class TerminalLinks implements ILinkProvider {
 		container.addEventListener("mouseleave", clear);
 		const resize = this.terminal.onResize(clear);
 		const scroll = this.terminal.onScroll(clear);
-		const write = this.terminal.onWriteParsed(clear);
+		const write = this.terminal.onWriteParsed(() => {
+			// A write callback can run before onWriteParsed. xterm may already have
+			// cached the links from that frame: retain unchanged hovered content.
+			// Pending async filesystem work is still cancelled when another frame arrives.
+			this.revision++;
+			if (this.hovered && this.validations.get(this.hovered)?.() === false) {
+				this.hovered = null;
+				this.pressed = null;
+			}
+		});
 		this.cleanups.push(() => {
 			container.removeEventListener("mousedown", down, true);
 			container.removeEventListener("mousemove", move, true);

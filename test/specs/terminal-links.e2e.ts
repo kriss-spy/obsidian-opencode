@@ -10,7 +10,10 @@ async function render(text: string, mouse = false): Promise<void> {
 		const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
 		view.terminal.clearSelection();
 		view.terminal.resize(24, 12);
-		view.terminal.write(`\x1bc\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l${mouse ? "\x1b[?1000h\x1b[?1006h" : ""}${text}`, done);
+		view.terminal.write(`\x1bc\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l${mouse ? "\x1b[?1000h\x1b[?1006h" : ""}${text}`, () => {
+			// xterm buffers the render after parsing; use its actual painted geometry.
+			requestAnimationFrame(() => requestAnimationFrame(() => done()));
+		});
 	}, text, mouse);
 }
 
@@ -38,7 +41,19 @@ async function linkPoint(text: string, end = false): Promise<{ x: number; y: num
 async function clickLink(text: string, modified = false, end = false): Promise<void> {
 	const point = await linkPoint(text, end);
 	await browser.action("pointer").move({ x: point.x, y: point.y, origin: "viewport" }).perform();
-	await browser.waitUntil(() => browser.execute(() => Boolean(document.querySelector(".opencode-terminal .xterm-cursor-pointer"))), { timeoutMsg: "xterm did not hover link under pointer" });
+	try {
+		await browser.waitUntil(() => browser.execute(() => Boolean(document.querySelector(".opencode-terminal .xterm-cursor-pointer"))), { timeoutMsg: "xterm did not hover link under pointer" });
+	} catch (error) {
+		const context = await browser.execute((point: { x: number; y: number }) => {
+			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			const terminal = view.terminal;
+			const rect = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
+			return { point, hit: document.elementFromPoint(point.x, point.y)?.outerHTML.slice(0, 300), cols: terminal.cols, rows: terminal.rows,
+				rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, hovered: view.terminalLinks.hovered?.text,
+				buffer: Array.from({ length: terminal.buffer.active.length }, (_, row) => terminal.buffer.active.getLine(row)?.translateToString(true)) };
+		}, point);
+		throw new Error(`${String(error)} ${JSON.stringify(context)}`);
+	}
 	if (modified) await browser.action("key").down(process.platform === "darwin" ? Key.Command : Key.Control).perform(true);
 	try {
 		await browser.action("pointer").down({ button: 0 }).up({ button: 0 }).perform();
@@ -115,10 +130,10 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 
 	it("opens Cmd/Ctrl-click in a new tab and accepts absolute in-vault paths", async function () {
 		const absolute = await browser.execute((notePath: string) => `${(window as any).app.plugins.plugins.opencode.vaultRoot.replace(/[\\/]+$/, "")}/${notePath}:999:999`, notePath);
-		const before = await browser.execute(() => (window as any).app.workspace.getLeavesOfType("markdown").length);
+		const tabCount = Number(await browser.execute(() => (window as any).app.workspace.getLeavesOfType("markdown").length));
 		await render(`Side terminal: ${absolute}`);
 		await clickLink(absolute, true, true);
-		await browser.waitUntil(() => browser.execute(() => (window as any).app.workspace.getLeavesOfType("markdown").length > before));
+		await browser.waitUntil(() => browser.execute((tabCount: number) => (window as any).app.workspace.getLeavesOfType("markdown").length > tabCount, tabCount));
 		const cursor = await browser.execute(() => (window as any).app.workspace.activeLeaf.view.editor.getCursor());
 		expect(cursor.line).toBe(4);
 		expect(cursor.ch).toBe(0);

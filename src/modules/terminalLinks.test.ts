@@ -71,6 +71,12 @@ describe("terminal link parsing and containment", () => {
 		expect(findTerminalLinks("(Notes/Project.md:42) [read note](Notes/My note.md:3:5)", options()).map(link => link.text))
 			.toEqual(["Notes/Project.md:42", "Notes/My note.md:3:5"]);
 	});
+	it("keeps interior parentheses in quoted and Markdown note destinations", () => {
+		const config = options({ hasNote: value => value === "Notes/My (draft).md" });
+		expect(findTerminalLinks("`Notes/My (draft).md:3` [note](Notes/My (draft).md:3)", config).map(link => link.text))
+			.toEqual(["Notes/My (draft).md:3", "Notes/My (draft).md:3"]);
+		expect(findTerminalLinks("/outside/Notes/My (draft).md", config)).toEqual([]);
+	});
 	it("finds multiple absolute links and notes after URL paths", () => {
 		expect(findTerminalLinks("/vault/Other.md /vault/Notes/My note.md https://example.com/a.md Other.md", options()).map(link => link.text))
 			.toEqual(["/vault/Other.md", "/vault/Notes/My note.md", "https://example.com/a.md", "Other.md"]);
@@ -229,10 +235,23 @@ describe("mouse capture ownership and link lifecycle", () => {
 		for (const cause of ["resize", "scroll", "write", "dispose"]) {
 			const context = interactionFixture();
 			if (cause === "dispose") context.link.dispose!();
-			else context.subscriptions.get(cause)!();
+			else {
+				if (cause === "resize") Object.assign(context.term, { cols: 25 });
+				if (cause === "scroll") Object.assign(context.term.buffer.active, { viewportY: 1 });
+				if (cause === "write") Object.assign(context.term.buffer.active, { getLine: () => undefined });
+				context.subscriptions.get(cause)!();
+			}
 			context.link.activate(event(), context.link.text);
 			expect(context.config.openExternal).not.toHaveBeenCalled();
 		}
+	});
+	it("keeps a freshly cached link usable when onWriteParsed follows the write callback", () => {
+		const context = interactionFixture();
+		context.link.hover!(event(), context.link.text);
+		context.subscriptions.get("write")!();
+		context.mouse("mousedown", { ctrlKey: true });
+		context.mouse("mouseup", { ctrlKey: true });
+		expect(context.config.openExternal).toHaveBeenCalledExactlyOnceWith("https://github.com/");
 	});
 	it("cancels async note validation after resize/write/scroll and removes every handler on close", async () => {
 		for (const cause of ["resize", "write", "scroll"]) {
