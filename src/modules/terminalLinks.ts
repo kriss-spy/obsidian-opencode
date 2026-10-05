@@ -204,6 +204,14 @@ export class TerminalLinks implements ILinkProvider {
 
 	async activate(text: string, event: MouseEvent): Promise<void> {
 		if (this.disposed || event.button !== 0 || this.terminal.hasSelection()) return;
+		const cell = this.cellAt(event);
+		if (cell) {
+			const osc = currentOsc8Link(this.terminal, cell);
+			// xterm ignores unsafe OSC 8 providers and can then offer a textual
+			// URL from the label. Never let that lower-priority callback bypass
+			// the actual current OSC 8 target (including an unavailable registry).
+			if (osc.present && osc.uri !== text) return;
+		}
 		if (this.pressed?.dragged) return;
 		if (this.terminal.modes.mouseTrackingMode !== "none" && !this.options.isModEvent(event)) return;
 		const revision = this.revision;
@@ -227,6 +235,17 @@ export class TerminalLinks implements ILinkProvider {
 		}
 	}
 
+	private cellAt(event: MouseEvent): IBufferCellPosition | null {
+		const screen = this.terminal.element?.querySelector(".xterm-screen");
+		if (!screen || !screen.contains(event.target as Node)) return null;
+		const rect = screen.getBoundingClientRect();
+		if (!rect.width || !rect.height) return null;
+		const x = Math.floor((event.clientX - rect.left) / (rect.width / this.terminal.cols)) + 1;
+		const row = Math.floor((event.clientY - rect.top) / (rect.height / this.terminal.rows));
+		if (x < 1 || x > this.terminal.cols || row < 0 || row >= this.terminal.rows) return null;
+		return { x, y: row + this.terminal.buffer.active.viewportY + 1 };
+	}
+
 	attach(container: HTMLElement): void {
 		const registration = this.terminal.registerLinkProvider(this);
 		this.cleanups.push(() => registration.dispose());
@@ -246,16 +265,7 @@ export class TerminalLinks implements ILinkProvider {
 			leave: () => { this.hovered = null; },
 		};
 		this.cleanups.push(() => { this.terminal.options.linkHandler = previous; });
-		const cellAt = (event: MouseEvent): IBufferCellPosition | null => {
-			const screen = this.terminal.element?.querySelector(".xterm-screen");
-			if (!screen || !screen.contains(event.target as Node)) return null;
-			const rect = screen.getBoundingClientRect();
-			if (!rect.width || !rect.height) return null;
-			const x = Math.floor((event.clientX - rect.left) / (rect.width / this.terminal.cols)) + 1;
-			const row = Math.floor((event.clientY - rect.top) / (rect.height / this.terminal.rows));
-			if (x < 1 || x > this.terminal.cols || row < 0 || row >= this.terminal.rows) return null;
-			return { x, y: row + this.terminal.buffer.active.viewportY + 1 };
-		};
+		const cellAt = (event: MouseEvent) => this.cellAt(event);
 		const contains = (link: ILink, cell: IBufferCellPosition): boolean => cell.y >= link.range.start.y && cell.y <= link.range.end.y &&
 			(cell.y !== link.range.start.y || cell.x >= link.range.start.x) &&
 			(cell.y !== link.range.end.y || cell.x <= link.range.end.x);

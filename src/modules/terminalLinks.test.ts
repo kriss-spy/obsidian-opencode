@@ -326,6 +326,7 @@ describe("mouse capture ownership and link lifecycle", () => {
 		vi.mocked(context.config.openExternal).mockClear();
 		id = 3; // A safe-looking visible URL must not override an unsafe OSC 8 URI.
 		context.mouse("mousedown", { ctrlKey: true }); context.mouse("mouseup", { ctrlKey: true });
+		context.link.activate(event({ clientX: 5, clientY: 5, target: {} as Node }), context.link.text); // xterm's lower-priority textual fallback
 		expect(context.config.openExternal).not.toHaveBeenCalled();
 		id = 0; // Plain text replaces OSC 8: the stale URI must not remain active.
 		context.term.options.linkHandler!.activate(event({ clientX: 5, clientY: 5, target: {} as Node }), "https://old.example", range);
