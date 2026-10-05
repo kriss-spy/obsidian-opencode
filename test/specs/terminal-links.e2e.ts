@@ -43,8 +43,12 @@ async function linkPoint(text: string, end = false): Promise<{ x: number; y: num
 async function clickLink(text: string, modified = false, end = false): Promise<void> {
 	const point = await linkPoint(text, end);
 	await browser.action("pointer").move({ x: point.x, y: point.y, origin: "viewport" }).perform();
+	const mouseReporting = await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.modes.mouseTrackingMode !== "none");
 	try {
-		await browser.waitUntil(() => browser.execute(() => Boolean(document.querySelector(".opencode-terminal .xterm-cursor-pointer"))), { timeoutMsg: "xterm did not hover link under pointer" });
+		// xterm may reuse a same-row hover cache across redraws outside the
+		// pointer. TUI activation uses fresh buffer hit testing and must not
+		// depend on decorative hover state; verify its real input effects below.
+		if (!mouseReporting) await browser.waitUntil(() => browser.execute(() => Boolean(document.querySelector(".opencode-terminal .xterm-cursor-pointer"))), { timeoutMsg: "xterm did not hover link under pointer" });
 	} catch (error) {
 		const context = await browser.execute((point: { x: number; y: number }) => {
 			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
@@ -192,6 +196,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		await browser.execute(() => { (window as any).__terminalLinkInput = []; });
 		const before = (await externalCalls()).length;
 		await render("Side terminal: https://github.com", true);
+		expect(await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.modes.mouseTrackingMode)).toBe("vt200");
 		await clickLink("https://github.com");
 		expect((await externalCalls()).length).toBe(before);
 		await waitActivation(() => browser.execute(() => (window as any).__terminalLinkInput.some((data: string) => data.startsWith("\x1b[<"))));
