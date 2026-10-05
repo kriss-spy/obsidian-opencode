@@ -183,6 +183,18 @@ The earlier overflow fix limited native hover decoration to one row. The final b
 
 The GUI runs remained serial in fresh vaults/profiles. Installation preserved user settings and the running session. Other desktop platforms still require fresh CI verification.
 
+### Mixed row breaks in long note paths (2026-10-06)
+
+The live cloudnotes terminal displayed an indexed note across five hard rows, combining slash boundaries, a word break, and a break between `.` and `md`. The previous matcher tried only a uniformly spaced or uniformly joined path; both failed. The provider now chooses spaces independently at each boundary, retaining the eight-row/4,096-unit bounds and exact indexed-note requirement. Reconstructed matches must begin in their initial source row; a per-call resolution cache avoids repeated suffix lookups.
+
+- The exact live buffer now yields the same complete note target on all five rows, with confined cell ranges. This diagnostic did not attach handlers or alter the session.
+- Production build/typechecking passed; full unit suite: 286 passed, 5 platform-only skipped. A lookup-count regression covers worst-case eight-row ambiguity at 68 columns and verifies that the next provider call refreshes the note index.
+- The initial complete terminal-link app spec passed all nine tests, including real Ctrl/Cmd-clicks on all five note rows, repeated navigation to the correct file, and zero PTY input leakage.
+- The final optimized build passed the focused five-row pointer regression. Each click opened the full note in a new tab with no PTY leakage; the test restores its fixture and closes the new tab between checks to prevent stub resize writes and wrapping tab headers from invalidating subsequent coordinates. Other diagnostic attempts encountered unsupported window-control commands or stale test coordinates; those test-only window changes were removed.
+- A subsequent broader app run passed six spec files, then failed the existing native-wrap hover precondition with a single-character suffix in column one and stalled. Its test processes were stopped without touching the user's app. The previous full-suite result above remains the last clean full Linux run; this follow-up does not claim a new full-suite pass.
+- Standards and Spec reviews cleared the fix and cache. Wide-output lookup cost remains a possible follow-up optimization within the existing fixed limits.
+- Installed `main.js` SHA-256: `ffe0acdc389f8bd7199099259d1547977922c6a54e6833f8690fcb0b7318fc09`. Artifact hashes were verified, settings preserved, and the user's active terminal was not reloaded. Backup: `/tmp/opencode-before-mixed-note-yv5hl616`.
+
 ## WSL2/X410 evidence
 
 On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:

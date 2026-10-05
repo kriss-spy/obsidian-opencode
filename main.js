@@ -20367,7 +20367,7 @@ function resolveNoteTarget(text, root, distro) {
   if (line !== void 0 && !Number.isSafeInteger(line) || column !== void 0 && !Number.isSafeInteger(column)) return null;
   return { path: relative3, line, column };
 }
-function findTerminalLinks(text, options) {
+function findTerminalLinks(text, options, noteStartLimit = text.length, noteCache) {
   const links = [];
   const urls = /https?:\/\/[^\s<>"'`]+/gi;
   let match;
@@ -20389,14 +20389,19 @@ function findTerminalLinks(text, options) {
     while (segmentStart > previousEnd && !/[\n\r\t`"'<>\[\]{}|,;]/.test(text[segmentStart - 1])) segmentStart--;
     previousEnd = end;
     if (end - segmentStart > 4096) continue;
-    for (let start = segmentStart; start <= match.index; start++) {
+    for (let start = segmentStart; start <= Math.min(match.index, noteStartLimit); start++) {
       if (start > segmentStart && !/[\s()]/.test(text[start - 1])) continue;
       if (/\s/.test(text[start])) continue;
       const value = text.slice(start, end);
       const explicit = /^(?:[a-z]:[\\/]|[\\/]|\.\.[\\/]|[a-z][a-z\d+.-]*:\/\/)/i.test(value);
       if (links.some((link) => start < link.end && end > link.start)) break;
-      const note = resolveNoteTarget(value, options.vaultRoot, options.wslDistro);
-      if (note && options.hasNote(note.path)) {
+      let note = noteCache == null ? void 0 : noteCache.get(value);
+      if (note === void 0) {
+        const target = resolveNoteTarget(value, options.vaultRoot, options.wslDistro);
+        note = target && options.hasNote(target.path) ? target : null;
+        noteCache == null ? void 0 : noteCache.set(value, note);
+      }
+      if (note) {
         links.push({ start, end, text: value, note });
         break;
       }
@@ -20514,6 +20519,7 @@ function linkLines(terminal, y) {
     const initialEnd = initial.text.trimEnd().length;
     if (initialEnd <= indent) continue;
     let candidates = [{ text: initial.text.slice(indent, initialEnd), starts: initial.starts.slice(indent, initialEnd), ends: initial.ends.slice(indent, initialEnd) }];
+    const noteStartLimit = candidates[0].text.length - 1;
     const pathPrefix = /[\\/]/.test(candidates[0].text) && !/\.md(?:[:\s`"')]|$)/i.test(candidates[0].text);
     let continuationStart;
     for (let row = initial.ends[initial.ends.length - 1].y + 1; row < first + 8; ) {
@@ -20541,7 +20547,7 @@ function linkLines(terminal, y) {
       for (const candidate of candidates) {
         const noteEnd = pathPrefix ? /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/i.exec(candidate.text) : null;
         const suffix = noteEnd && continuationStart ? { start: continuationStart, end: candidate.ends[noteEnd.index + noteEnd[0].length - 1] } : void 0;
-        result.push({ line: candidate, current, continuation: "note", suffix });
+        result.push({ line: candidate, current, continuation: "note", suffix, noteStartLimit });
       }
     }
   }
@@ -20589,10 +20595,11 @@ var TerminalLinks = class {
       return;
     }
     const seen = /* @__PURE__ */ new Set();
+    const noteCache = /* @__PURE__ */ new Map();
     const lines = [...wrappedWebLines(this.terminal, y), ...linkLines(this.terminal, y)];
     const suffixes = lines.flatMap((line) => line.suffix ? [line.suffix] : []);
     const before = (a, b) => a.y < b.y || a.y === b.y && a.x <= b.x;
-    const links = lines.flatMap(({ line, current, continuation, blocked }) => blocked ? [] : findTerminalLinks(line.text, this.options).flatMap((match) => {
+    const links = lines.flatMap(({ line, current, continuation, blocked, noteStartLimit }) => blocked ? [] : findTerminalLinks(line.text, this.options, noteStartLimit, noteCache).flatMap((match) => {
       const wholeRange = { start: line.starts[match.start], end: line.ends[match.end - 1] };
       if (continuation && (wholeRange.start.y === wholeRange.end.y || (continuation === "note" ? !match.note : match.note))) return [];
       if (!continuation && suffixes.some((suffix) => before(wholeRange.start, suffix.end) && before(suffix.start, wholeRange.end))) return [];

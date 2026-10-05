@@ -80,7 +80,8 @@ export function resolveNoteTarget(text: string, root: string, distro?: string): 
 interface TextMatch { start: number; end: number; text: string; note?: NoteTarget }
 
 /** Spaces are resolved against existing notes rather than guessed from prose. */
-export function findTerminalLinks(text: string, options: Pick<TerminalLinkOptions, "vaultRoot" | "hasNote" | "wslDistro">): TextMatch[] {
+export function findTerminalLinks(text: string, options: Pick<TerminalLinkOptions, "vaultRoot" | "hasNote" | "wslDistro">, noteStartLimit = text.length,
+	noteCache?: Map<string, NoteTarget | null>): TextMatch[] {
 	const links: TextMatch[] = [];
 	const urls = /https?:\/\/[^\s<>"'`]+/gi;
 	let match: RegExpExecArray | null;
@@ -104,15 +105,20 @@ export function findTerminalLinks(text: string, options: Pick<TerminalLinkOption
 		while (segmentStart > previousEnd && !/[\n\r\t`"'<>\[\]{}|,;]/.test(text[segmentStart - 1])) segmentStart--;
 		previousEnd = end;
 		if (end - segmentStart > 4096) continue;
-		for (let start = segmentStart; start <= match.index; start++) {
+		for (let start = segmentStart; start <= Math.min(match.index, noteStartLimit); start++) {
 			if (start > segmentStart && !/[\s()]/.test(text[start - 1])) continue;
 			if (/\s/.test(text[start])) continue;
 			const value = text.slice(start, end);
 			// Never recover a relative suffix from an explicit rejected absolute/traversal path.
 			const explicit = /^(?:[a-z]:[\\/]|[\\/]|\.\.[\\/]|[a-z][a-z\d+.-]*:\/\/)/i.test(value);
 			if (links.some(link => start < link.end && end > link.start)) break;
-			const note = resolveNoteTarget(value, options.vaultRoot, options.wslDistro);
-			if (note && options.hasNote(note.path)) {
+			let note = noteCache?.get(value);
+			if (note === undefined) {
+				const target = resolveNoteTarget(value, options.vaultRoot, options.wslDistro);
+				note = target && options.hasNote(target.path) ? target : null;
+				noteCache?.set(value, note);
+			}
+			if (note) {
 				links.push({ start, end, text: value, note });
 				break;
 			}
@@ -163,7 +169,7 @@ function logicalLine(terminal: Terminal, y: number): LogicalLine | null {
 	return result;
 }
 
-interface LinkLine { line: LogicalLine; current(): boolean; continuation?: "note" | "web"; suffix?: ILink["range"]; blocked?: boolean }
+interface LinkLine { line: LogicalLine; current(): boolean; continuation?: "note" | "web"; suffix?: ILink["range"]; blocked?: boolean; noteStartLimit?: number }
 
 /** Join URL tokens only within a bounded, consistently indented TUI wrap. */
 function wrappedWebLines(terminal: Terminal, y: number): LinkLine[] {
@@ -229,6 +235,7 @@ function linkLines(terminal: Terminal, y: number): LinkLine[] {
 		const initialEnd = initial.text.trimEnd().length;
 		if (initialEnd <= indent) continue;
 		let candidates: LogicalLine[] = [{ text: initial.text.slice(indent, initialEnd), starts: initial.starts.slice(indent, initialEnd), ends: initial.ends.slice(indent, initialEnd) }];
+		const noteStartLimit = candidates[0].text.length - 1;
 		const pathPrefix = /[\\/]/.test(candidates[0].text) && !/\.md(?:[:\s`"')]|$)/i.test(candidates[0].text);
 		let continuationStart: IBufferCellPosition | undefined;
 		for (let row = initial.ends[initial.ends.length - 1].y + 1; row < first + 8;) {
@@ -261,7 +268,7 @@ function linkLines(terminal: Terminal, y: number): LinkLine[] {
 				// Do not offer the root basename from a continuation of a longer
 				// path, even when that full path is missing or outside the vault.
 				const suffix = noteEnd && continuationStart ? { start: continuationStart, end: candidate.ends[noteEnd.index + noteEnd[0].length - 1] } : undefined;
-				result.push({ line: candidate, current, continuation: "note", suffix });
+				result.push({ line: candidate, current, continuation: "note", suffix, noteStartLimit });
 			}
 		}
 	}
@@ -307,10 +314,13 @@ export class TerminalLinks implements ILinkProvider {
 	provideLinks(y: number, callback: (links: ILink[] | undefined) => void): void {
 		if (this.disposed) { callback(undefined); return; }
 		const seen = new Set<string>();
+		// Repeated suffixes across boundary combinations share one indexed
+		// lookup. The cache lives only for this buffer snapshot.
+		const noteCache = new Map<string, NoteTarget | null>();
 		const lines = [...wrappedWebLines(this.terminal, y), ...linkLines(this.terminal, y)];
 		const suffixes = lines.flatMap(line => line.suffix ? [line.suffix] : []);
 		const before = (a: IBufferCellPosition, b: IBufferCellPosition) => a.y < b.y || (a.y === b.y && a.x <= b.x);
-		const links = lines.flatMap(({ line, current, continuation, blocked }) => blocked ? [] : findTerminalLinks(line.text, this.options).flatMap(match => {
+		const links = lines.flatMap(({ line, current, continuation, blocked, noteStartLimit }) => blocked ? [] : findTerminalLinks(line.text, this.options, noteStartLimit, noteCache).flatMap(match => {
 			const wholeRange = { start: line.starts[match.start], end: line.ends[match.end - 1] };
 			if (continuation && (wholeRange.start.y === wholeRange.end.y || (continuation === "note" ? !match.note : match.note))) return [];
 			if (!continuation && suffixes.some(suffix => before(wholeRange.start, suffix.end) && before(suffix.start, wholeRange.end))) return [];

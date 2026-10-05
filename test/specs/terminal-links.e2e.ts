@@ -300,16 +300,23 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 			await app.vault.create(note, "mixed wrap regression\n");
 		}, mixedNotePath);
 		try {
-			await render(mixedFragments.map(fragment => `     ${fragment}`).join("\r\n"), true);
+			await browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				view.terminal.element.parentElement.style.width = "700px";
+				view.fitAddon.fit();
+			});
 			await browser.execute(() => { (window as any).__terminalLinkInput = []; });
 			for (let row = 1; row <= mixedFragments.length; row++) {
+				// Opening a tab resizes the test stub PTY, which can write another
+				// frame. Restore this fixture before each independent row click.
+				await render(mixedFragments.map(fragment => `     ${fragment}`).join("\r\n"), true);
 				const point = await browser.execute((row: number, note: string) => {
 					const app = (window as any).app;
 					const view = app.workspace.getLeavesOfType("opencode-terminal")[0].view;
 					const terminal = view.terminal;
 					let link: any;
 					view.terminalLinks.provideLinks(row, (found: any[]) => { link = found?.find(value => value.text === note); });
-					if (!link) throw new Error(`Missing full note target on row ${row}`);
+					if (!link) throw new Error(`Missing full note target on row ${row}; cols=${terminal.cols}; rows=${JSON.stringify(Array.from({ length: terminal.buffer.active.length }, (_, y) => terminal.buffer.active.getLine(y)?.translateToString(true)))}`);
 					const rect = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
 					return { x: Math.round(rect.left + (link.range.start.x - 0.5) * rect.width / terminal.cols),
 						y: Math.round(rect.top + (row - 0.5) * rect.height / terminal.rows),
@@ -323,6 +330,12 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 					const app = (window as any).app;
 					return app.workspace.getActiveFile()?.path === note && app.workspace.getLeavesOfType("markdown").length === tabs + 1;
 				}, mixedNotePath, Number(point.tabs)));
+				// Keep tab headers from wrapping and moving the terminal while
+				// testing the next row. The new-tab assertion above remains real.
+				await browser.execute((note: string) => {
+					const app = (window as any).app;
+					app.workspace.getLeavesOfType("markdown").filter((leaf: any) => leaf.view.file?.path === note).forEach((leaf: any) => leaf.detach());
+				}, mixedNotePath);
 			}
 			expect(await browser.execute(() => (window as any).__terminalLinkInput)).toEqual([]);
 		} finally {

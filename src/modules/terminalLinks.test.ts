@@ -235,6 +235,21 @@ describe("public xterm provider and activation", () => {
 		for (const row of [1, 2, 3]) expect(links(provider, row)[0].text).toBe("Notes/My note.md:3:2");
 	});
 
+	it("bounds indexed lookups across mixed-boundary candidates and refreshes them on the next call", () => {
+		const rows = Array.from({ length: 8 }, (_, row) => ({
+			chars: Array.from("    " + "segment ".repeat(7) + (row === 7 ? "note.md" : "tail")),
+		}));
+		const term = terminal(rows);
+		Object.assign(term, { cols: 68 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const hasNote = vi.fn(() => false);
+		const provider = new TerminalLinks(term, options({ hasNote }));
+		expect(links(provider, 8)).toEqual([]);
+		expect(hasNote.mock.calls.length).toBeLessThanOrEqual(2500);
+		hasNote.mockImplementation(() => true);
+		expect(links(provider, 8).length).toBeGreaterThan(0);
+	});
+
 	it("prefers the whole wrapped path over a root basename and preserves following references", () => {
 		const term = terminal([
 			{ chars: Array.from("  - Notes/") },
