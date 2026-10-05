@@ -5,12 +5,15 @@ import { ViewCoordinator } from './viewCoordinator';
 interface MockLeaf {
 	id: string;
 	type?: string;
-	view: { focusTerminal: ReturnType<typeof vi.fn> };
+	view: { focusTerminal: ReturnType<typeof vi.fn>; containerEl: { contains: ReturnType<typeof vi.fn>; isConnected: boolean; clientWidth: number; clientHeight: number } };
 	setViewState: ReturnType<typeof vi.fn>;
 	detach: ReturnType<typeof vi.fn>;
 }
 
 interface MockWorkspace {
+	activeLeaf: MockLeaf | null;
+	containerEl: { ownerDocument: { activeElement: object | null } };
+	setActiveLeaf: ReturnType<typeof vi.fn>;
 	getLeavesOfType: ReturnType<typeof vi.fn>;
 	getRightLeaf: ReturnType<typeof vi.fn>;
 	revealLeaf: ReturnType<typeof vi.fn>;
@@ -23,7 +26,7 @@ interface MockWorkspace {
 
 const createMockLeaf = (id: string): MockLeaf => ({
 	id,
-	view: { focusTerminal: vi.fn() },
+	view: { focusTerminal: vi.fn(), containerEl: { contains: vi.fn().mockReturnValue(false), isConnected: true, clientWidth: 640, clientHeight: 480 } },
 	setViewState: vi.fn().mockResolvedValue(undefined),
 	detach: vi.fn().mockResolvedValue(undefined),
 });
@@ -31,8 +34,18 @@ const createMockLeaf = (id: string): MockLeaf => ({
 const createMockWorkspace = (): MockWorkspace => {
 	const leaves: MockLeaf[] = [];
 	return {
+		activeLeaf: null,
+		containerEl: { ownerDocument: { activeElement: null } },
+		setActiveLeaf: vi.fn(),
 		getLeavesOfType: vi.fn((type: string): MockLeaf[] => leaves.filter(leaf => leaf.type === type)),
-		getRightLeaf: vi.fn(() => createMockLeaf('right-leaf')),
+		getRightLeaf: vi.fn(() => {
+			const leaf = createMockLeaf('right-leaf');
+			leaf.setViewState.mockImplementation(async (state: { type: string }) => {
+				leaf.type = state.type;
+				leaves.push(leaf);
+			});
+			return leaf;
+		}),
 		revealLeaf: vi.fn(),
 		rightSplit: {
 			collapsed: false,
@@ -199,6 +212,40 @@ describe('ViewCoordinator', () => {
 		finishRestart();
 		await restarting;
 		expect(workspace.revealLeaf).not.toHaveBeenCalled();
+		expect(terminal.view.focusTerminal).not.toHaveBeenCalled();
+	});
+
+	it('activates an existing sidebar leaf even when reveal does not change the active editor', async () => {
+		const workspace = createMockWorkspace();
+		const editor = createMockLeaf('editor');
+		const terminal = { ...createMockLeaf('terminal'), type: 'opencode-terminal' };
+		workspace.activeLeaf = editor;
+		workspace._leaves.push(terminal);
+		const coordinator = new ViewCoordinator(workspace as unknown as Workspace, {
+			terminalViewType: 'opencode-terminal', conversationViewType: 'opencode-conversations',
+		});
+		await coordinator.activateTerminalView();
+		expect(workspace.setActiveLeaf).toHaveBeenCalledWith(terminal, { focus: true });
+		expect(terminal.view.focusTerminal).toHaveBeenCalledOnce();
+	});
+
+	it.each(['note', 'editor-focus', 'closed', 'collapsed'] as const)('does not focus after %s changes during deferred reveal', async change => {
+		const workspace = createMockWorkspace();
+		const terminal = { ...createMockLeaf('terminal'), type: 'opencode-terminal' };
+		workspace._leaves.push(terminal);
+		let finishReveal!: () => void;
+		workspace.revealLeaf.mockReturnValue(new Promise<void>(resolve => { finishReveal = resolve; }));
+		const coordinator = new ViewCoordinator(workspace as unknown as Workspace, {
+			terminalViewType: 'opencode-terminal', conversationViewType: 'opencode-conversations',
+		});
+		const opening = coordinator.activateTerminalView();
+		if (change === 'note') workspace.activeLeaf = createMockLeaf('note');
+		if (change === 'editor-focus') workspace.containerEl.ownerDocument.activeElement = {};
+		if (change === 'closed') workspace._leaves.length = 0;
+		if (change === 'collapsed') terminal.view.containerEl.clientWidth = 0;
+		finishReveal();
+		await opening;
+		expect(workspace.setActiveLeaf).not.toHaveBeenCalled();
 		expect(terminal.view.focusTerminal).not.toHaveBeenCalled();
 	});
 

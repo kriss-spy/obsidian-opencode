@@ -15,6 +15,7 @@ async function focusNote(): Promise<void> {
 		const app = (window as any).app;
 		const leaf = app.workspace.getLeavesOfType('markdown')[0] ?? app.workspace.getLeaf(false);
 		await leaf.openFile(app.vault.getAbstractFileByPath('Smoke.md'));
+		app.workspace.setActiveLeaf(leaf, { focus: true });
 		leaf.view.editor.focus();
 	});
 }

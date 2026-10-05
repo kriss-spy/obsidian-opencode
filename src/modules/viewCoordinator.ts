@@ -89,7 +89,19 @@ export class ViewCoordinator {
 	}
 
 	private async revealTerminal(leaf: WorkspaceLeaf): Promise<void> {
+		const activeLeaf = this.workspace.activeLeaf;
+		const document = this.workspace.containerEl.ownerDocument;
+		const activeElement = document.activeElement;
 		await this.workspace.revealLeaf(leaf);
+		// Revealing an already-selected sidebar tab does not activate its leaf.
+		// Do so explicitly, unless focus moved elsewhere while a deferred view
+		// was loading, or the terminal was closed during that wait.
+		if (!this.workspace.getLeavesOfType(this.config.terminalViewType).includes(leaf)) return;
+		const container = leaf.view.containerEl;
+		if (!container.isConnected || container.clientWidth === 0 || container.clientHeight === 0) return;
+		if (this.workspace.activeLeaf !== activeLeaf && this.workspace.activeLeaf !== leaf) return;
+		if (document.activeElement !== activeElement && !container.contains(document.activeElement)) return;
+		this.workspace.setActiveLeaf(leaf, { focus: true });
 		const view = leaf.view as unknown as Partial<TerminalFocusView>;
 		view.focusTerminal?.();
 	}
