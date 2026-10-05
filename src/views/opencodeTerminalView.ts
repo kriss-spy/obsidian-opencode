@@ -8,6 +8,7 @@ import { ImageAddon } from "@xterm/addon-image";
 import { release, tmpdir } from "node:os";
 import { mkdtempSync, readdirSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { absoluteLineReference, deliverLineReference, FileLineReference, ReferenceDelivery } from "../modules/activeLineReference";
 import type OpencodePlugin from "../main";
 import { handleTerminalDrop } from "../terminalDrop";
 import { EditorServer } from "../editorServer";
@@ -89,6 +90,20 @@ export class OpencodeTerminalView extends ItemView {
 
 	private sendShiftEnterNewline(terminal: Terminal): void {
 		terminal.input(SHIFT_ENTER_NEWLINE_SEQUENCE, true);
+	}
+
+	addFileReference(reference: FileLineReference): ReferenceDelivery {
+		const terminal = this.terminal;
+		const stdin = this.ptySession.getStdin();
+		// Use an absolute path: the terminal can run outside the vault or resume a
+		// session with a different working directory.
+		const absolute = absoluteLineReference(reference, this.plugin.vaultRoot);
+		return deliverLineReference(absolute, {
+			ready: !this.closing && !!terminal && !!stdin && stdin.writable && !stdin.destroyed,
+			notify: (ref) => this.editorServer?.notifyAtMentioned(ref.filePath, ref.lineStart, ref.lineEnd) ?? false,
+			// xterm remains the sole ordered input producer; never write to the PTY.
+			paste: (text) => terminal!.paste(text),
+		});
 	}
 
 	async onOpen() {

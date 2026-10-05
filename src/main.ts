@@ -1,4 +1,4 @@
-import { Plugin, FileSystemAdapter, Platform, setIcon, TFile } from "obsidian";
+import { Plugin, FileSystemAdapter, Notice, Platform, setIcon, TFile } from "obsidian";
 import * as path from "node:path";
 import { OpencodePluginSettings, DEFAULT_SETTINGS } from "./settings";
 import { OpencodeSettingTab } from "./settingsTab";
@@ -11,6 +11,7 @@ import { PtySession } from "./modules/ptySession";
 import { PtySessionRegistry } from "./modules/ptySessionRegistry";
 import { OpencodeActivitySource, OpencodeStatus, OpencodeStatusTracker } from "./modules/opencodeStatus";
 import { OpencodeClient } from "./utils/opencode";
+import { activeLineReferenceCommand } from "./modules/activeLineReference";
 
 export default class OpencodePlugin extends Plugin {
 	settings: OpencodePluginSettings;
@@ -129,6 +130,15 @@ export default class OpencodePlugin extends Plugin {
 			name: "Restart terminal (reset size)",
 			callback: () => { void this.openOrRestartTerminal(); },
 		});
+
+		this.addCommand(activeLineReferenceCommand({
+			findTerminal: () => {
+				const view = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)[0]?.view;
+				return view instanceof OpencodeTerminalView ? view : null;
+			},
+			revealTerminal: () => this.activateTerminalView(),
+			notice: (message) => { new Notice(message); },
+		}));
 
 		this.addSettingTab(new OpencodeSettingTab(this.app, this));
 
