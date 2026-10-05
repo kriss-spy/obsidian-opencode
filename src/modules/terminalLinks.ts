@@ -228,9 +228,8 @@ function linkLines(terminal: Terminal, y: number): LinkLine[] {
 		const sources = [{ y: first, text: initial.text }];
 		const initialEnd = initial.text.trimEnd().length;
 		if (initialEnd <= indent) continue;
-		let spaced: LogicalLine = { text: initial.text.slice(indent, initialEnd), starts: initial.starts.slice(indent, initialEnd), ends: initial.ends.slice(indent, initialEnd) };
-		let joined = spaced;
-		const pathPrefix = /[\\/]/.test(spaced.text) && !/\.md(?:[:\s`"')]|$)/i.test(spaced.text);
+		let candidates: LogicalLine[] = [{ text: initial.text.slice(indent, initialEnd), starts: initial.starts.slice(indent, initialEnd), ends: initial.ends.slice(indent, initialEnd) }];
+		const pathPrefix = /[\\/]/.test(candidates[0].text) && !/\.md(?:[:\s`"')]|$)/i.test(candidates[0].text);
 		let continuationStart: IBufferCellPosition | undefined;
 		for (let row = initial.ends[initial.ends.length - 1].y + 1; row < first + 8;) {
 			const next = logicalLine(terminal, row);
@@ -244,21 +243,26 @@ function linkLines(terminal: Terminal, y: number): LinkLine[] {
 				starts: [...previous.starts, ...(separator ? [previous.ends[previous.ends.length - 1]] : []), ...fragment.starts],
 				ends: [...previous.ends, ...(separator ? [previous.ends[previous.ends.length - 1]] : []), ...fragment.ends],
 			});
-			spaced = append(spaced, /[\\/]$/.test(spaced.text) ? "" : " ");
-			joined = append(joined, "");
-			if (spaced.text.length > 4096) break;
+			// Each boundary can independently be a word break or a mid-word
+			// break (including inside .md). Eight rows bound this to 128
+			// candidates; only an exact indexed note becomes a link.
+			candidates = candidates.flatMap(candidate => /[\\/]$/.test(candidate.text)
+				? [append(candidate, "")] : [append(candidate, " "), append(candidate, "")])
+				.filter(candidate => candidate.text.length <= 4096);
+			if (!candidates.length) break;
 			sources.push({ y: row, text: next.text });
 			const last = next.ends[next.ends.length - 1].y;
 			row = last + 1;
 			if (last < y) continue;
 			const snapshot = sources.slice();
 			const current = () => snapshot.every(source => logicalLine(terminal, source.y)?.text === source.text);
-			const noteEnd = pathPrefix ? /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/i.exec(spaced.text) : null;
-			// Do not offer the root basename from a continuation of a longer
-			// path, even when that full path is missing or outside the vault.
-			const suffix = noteEnd && continuationStart ? { start: continuationStart, end: spaced.ends[noteEnd.index + noteEnd[0].length - 1] } : undefined;
-			result.push({ line: spaced, current, continuation: "note", suffix });
-			if (joined.text !== spaced.text) result.push({ line: joined, current, continuation: "note", suffix });
+			for (const candidate of candidates) {
+				const noteEnd = pathPrefix ? /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/i.exec(candidate.text) : null;
+				// Do not offer the root basename from a continuation of a longer
+				// path, even when that full path is missing or outside the vault.
+				const suffix = noteEnd && continuationStart ? { start: continuationStart, end: candidate.ends[noteEnd.index + noteEnd[0].length - 1] } : undefined;
+				result.push({ line: candidate, current, continuation: "note", suffix });
+			}
 		}
 	}
 	return [...result, ordinary];

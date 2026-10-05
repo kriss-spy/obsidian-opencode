@@ -3,6 +3,14 @@ import { browser, expect } from "@wdio/globals";
 import { Key } from "webdriverio";
 
 const notePath = "Terminal links/中文 My note.md";
+const mixedFragments = [
+	"study/Science/formal sciences/mathematics/pure mathematics/",
+	"analysis/calculus/Single-variable integral calculus/",
+	"definite integral/mean value theorems of definite",
+	"integrals/second mean value theorem for definite integrals.",
+	"md",
+];
+const mixedNotePath = mixedFragments.slice(0, 3).join("") + " " + mixedFragments.slice(3).join("");
 const stub = path.resolve(`test/fixtures/opencode-stub${process.platform === "win32" ? ".cmd" : ""}`);
 
 async function render(text: string, mouse = false, wrap = false): Promise<void> {
@@ -280,6 +288,51 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		expect(cursor.line).toBe(2);
 		expect(cursor.ch).toBe(4);
 		expect(await browser.execute(() => (window as any).__terminalLinkInput)).toEqual([]);
+	});
+	it("opens the full five-row note with mixed word and .md breaks from every row", async function () {
+		await browser.execute(async (note: string) => {
+			const app = (window as any).app;
+			const folders = note.split("/").slice(0, -1);
+			for (let i = 1; i <= folders.length; i++) {
+				const folder = folders.slice(0, i).join("/");
+				if (!app.vault.getAbstractFileByPath(folder)) await app.vault.createFolder(folder);
+			}
+			await app.vault.create(note, "mixed wrap regression\n");
+		}, mixedNotePath);
+		try {
+			await render(mixedFragments.map(fragment => `     ${fragment}`).join("\r\n"), true);
+			await browser.execute(() => { (window as any).__terminalLinkInput = []; });
+			for (let row = 1; row <= mixedFragments.length; row++) {
+				const point = await browser.execute((row: number, note: string) => {
+					const app = (window as any).app;
+					const view = app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+					const terminal = view.terminal;
+					let link: any;
+					view.terminalLinks.provideLinks(row, (found: any[]) => { link = found?.find(value => value.text === note); });
+					if (!link) throw new Error(`Missing full note target on row ${row}`);
+					const rect = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
+					return { x: Math.round(rect.left + (link.range.start.x - 0.5) * rect.width / terminal.cols),
+						y: Math.round(rect.top + (row - 0.5) * rect.height / terminal.rows),
+						tabs: app.workspace.getLeavesOfType("markdown").length };
+				}, row, mixedNotePath);
+				await browser.action("key").down(process.platform === "darwin" ? Key.Command : Key.Control).perform(true);
+				try {
+					await browser.action("pointer").move({ x: point.x, y: point.y, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
+				} finally { await browser.releaseActions(); }
+				await waitActivation(() => browser.execute((note: string, tabs: number) => {
+					const app = (window as any).app;
+					return app.workspace.getActiveFile()?.path === note && app.workspace.getLeavesOfType("markdown").length === tabs + 1;
+				}, mixedNotePath, Number(point.tabs)));
+			}
+			expect(await browser.execute(() => (window as any).__terminalLinkInput)).toEqual([]);
+		} finally {
+			await browser.execute(async (note: string) => {
+				const app = (window as any).app;
+				app.workspace.getLeavesOfType("markdown").filter((leaf: any) => leaf.view.file?.path === note).forEach((leaf: any) => leaf.detach());
+				const folder = app.vault.getAbstractFileByPath("study");
+				if (folder) await app.vault.delete(folder, true);
+			}, mixedNotePath);
+		}
 	});
 	it("opens the complete HTTP URL from the first, middle and last TUI rows", async function () {
 		const fragments = ["https://resources.anthropic.", "com/hubfs/", "Claude%20Code%20Advanced%20P", "atterns_%20Subagents%2C%20MC", "P%2C%20and%20Scaling%20to%20", "Real%20Codebases.pdf"];

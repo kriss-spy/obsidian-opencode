@@ -20513,9 +20513,8 @@ function linkLines(terminal, y) {
     const sources = [{ y: first, text: initial.text }];
     const initialEnd = initial.text.trimEnd().length;
     if (initialEnd <= indent) continue;
-    let spaced = { text: initial.text.slice(indent, initialEnd), starts: initial.starts.slice(indent, initialEnd), ends: initial.ends.slice(indent, initialEnd) };
-    let joined = spaced;
-    const pathPrefix = /[\\/]/.test(spaced.text) && !/\.md(?:[:\s`"')]|$)/i.test(spaced.text);
+    let candidates = [{ text: initial.text.slice(indent, initialEnd), starts: initial.starts.slice(indent, initialEnd), ends: initial.ends.slice(indent, initialEnd) }];
+    const pathPrefix = /[\\/]/.test(candidates[0].text) && !/\.md(?:[:\s`"')]|$)/i.test(candidates[0].text);
     let continuationStart;
     for (let row = initial.ends[initial.ends.length - 1].y + 1; row < first + 8; ) {
       const next = logicalLine(terminal, row);
@@ -20528,9 +20527,8 @@ function linkLines(terminal, y) {
         starts: [...previous.starts, ...separator ? [previous.ends[previous.ends.length - 1]] : [], ...fragment.starts],
         ends: [...previous.ends, ...separator ? [previous.ends[previous.ends.length - 1]] : [], ...fragment.ends]
       });
-      spaced = append(spaced, /[\\/]$/.test(spaced.text) ? "" : " ");
-      joined = append(joined, "");
-      if (spaced.text.length > 4096) break;
+      candidates = candidates.flatMap((candidate) => /[\\/]$/.test(candidate.text) ? [append(candidate, "")] : [append(candidate, " "), append(candidate, "")]).filter((candidate) => candidate.text.length <= 4096);
+      if (!candidates.length) break;
       sources.push({ y: row, text: next.text });
       const last = next.ends[next.ends.length - 1].y;
       row = last + 1;
@@ -20540,10 +20538,11 @@ function linkLines(terminal, y) {
         var _a2;
         return ((_a2 = logicalLine(terminal, source.y)) == null ? void 0 : _a2.text) === source.text;
       });
-      const noteEnd = pathPrefix ? /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/i.exec(spaced.text) : null;
-      const suffix = noteEnd && continuationStart ? { start: continuationStart, end: spaced.ends[noteEnd.index + noteEnd[0].length - 1] } : void 0;
-      result.push({ line: spaced, current, continuation: "note", suffix });
-      if (joined.text !== spaced.text) result.push({ line: joined, current, continuation: "note", suffix });
+      for (const candidate of candidates) {
+        const noteEnd = pathPrefix ? /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/i.exec(candidate.text) : null;
+        const suffix = noteEnd && continuationStart ? { start: continuationStart, end: candidate.ends[noteEnd.index + noteEnd[0].length - 1] } : void 0;
+        result.push({ line: candidate, current, continuation: "note", suffix });
+      }
     }
   }
   return [...result, ordinary];

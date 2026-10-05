@@ -197,6 +197,33 @@ describe("public xterm provider and activation", () => {
 		}
 	});
 
+	it("opens every row of a note with mixed word, slash and extension breaks", async () => {
+		const fragments = [
+			"study/Science/formal sciences/mathematics/pure mathematics/",
+			"analysis/calculus/Single-variable integral calculus/",
+			"definite integral/mean value theorems of definite",
+			"integrals/second mean value theorem for definite integrals.",
+			"md",
+		];
+		const note = fragments.slice(0, 3).join("") + " " + fragments.slice(3).join("");
+		const rows = fragments.map(fragment => ({ chars: Array.from(`     ${fragment}`.padEnd(68)) }));
+		const term = terminal(rows);
+		Object.assign(term, { cols: 68 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const config = options({ hasNote: value => value === note });
+		const provider = new TerminalLinks(term, config);
+		for (let y = 1; y <= rows.length; y++) {
+			const found = links(provider, y);
+			expect(found.map(link => link.text)).toEqual([note]);
+			expect(found[0].range).toEqual({ start: { x: 6, y }, end: { x: 5 + fragments[y - 1].length, y } });
+			await found[0].activate(event({ ctrlKey: true }), note);
+			await vi.waitFor(() => expect(config.openNote).toHaveBeenCalledTimes(y));
+		}
+		expect(config.openNote).toHaveBeenCalledTimes(5);
+		rows[4].chars = Array.from("     txt");
+		expect(links(provider, 1)).toEqual([]);
+	});
+
 	it("combines TUI indentation with native xterm wraps in a continuation", () => {
 		const term = terminal([
 			{ chars: Array.from("  - Notes/") },
