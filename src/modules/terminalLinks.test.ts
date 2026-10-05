@@ -89,6 +89,62 @@ describe("terminal link parsing and containment", () => {
 });
 
 describe("public xterm provider and activation", () => {
+	it("reconnects OpenCode's indented hard-row path layout using exact indexed notes", () => {
+		const note = "study/AI/explore AI/agent/subjects/harness engineering/harness engineering.md";
+		const rows = [
+			{ chars: Array.from("     - study/AI/explore AI/agent/subjects/harness engineering/      ") },
+			{ chars: Array.from("       harness engineering.md — added the case study") },
+		];
+		const term = terminal(rows);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const config = options({ hasNote: value => value === note });
+		const provider = new TerminalLinks(term, config);
+		const first = links(provider, 1)[0];
+		expect(first.text).toBe(note);
+		expect(first.range.start).toEqual({ x: 8, y: 1 });
+		expect(first.range.end).toEqual({ x: 29, y: 2 });
+		expect(links(provider, 2)[0].range).toEqual(first.range);
+		rows[1].chars = Array.from("       other engineering.md — replaced output");
+		first.activate(event(), first.text);
+		expect(config.openNote).not.toHaveBeenCalled();
+	});
+
+	it("supports indented word and mid-word breaks while keeping ordinary output separate", () => {
+		for (const [first, second] of [["  - Notes/My", "    note.md:3"], ["  - Notes/My no", "    te.md:3"]]) {
+			const term = terminal([{ chars: Array.from(first) }, { chars: Array.from(second) }]);
+			const provider = new TerminalLinks(term, options());
+			expect(links(provider)).toEqual([]);
+			Object.assign(term.modes, { mouseTrackingMode: "any" });
+			expect(links(provider)[0].text).toBe("Notes/My note.md:3");
+		}
+	});
+
+	it("combines TUI indentation with native xterm wraps in a continuation", () => {
+		const term = terminal([
+			{ chars: Array.from("  - Notes/") },
+			{ chars: Array.from("    My ") },
+			{ chars: Array.from("note.md:3:2"), wrapped: true },
+		]);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options());
+		for (const row of [1, 2, 3]) expect(links(provider, row)[0].text).toBe("Notes/My note.md:3:2");
+	});
+
+	it("does not reconnect missing, outside, differently indented or separate bullet paths", () => {
+		for (const [first, second] of [
+			["  - /outside/Notes/", "    My note.md"],
+			["  - ../../Notes/", "    My note.md"],
+			["  - file:///vault/Notes/", "    My note.md"],
+			["  - Notes/", "     My note.md"],
+			["  - Notes/", "  - My note.md"],
+			["  - Notes/", "    Missing.md"],
+		]) {
+			const term = terminal([{ chars: Array.from(first) }, { chars: Array.from(second) }]);
+			Object.assign(term.modes, { mouseTrackingMode: "any" });
+			expect(links(new TerminalLinks(term, options()))).toEqual([]);
+		}
+	});
+
 	it("returns links for each wrapped row using inclusive cell ranges", () => {
 		const term = terminal([{ chars: Array.from("See Notes/My ") }, { chars: Array.from("note.md:42:8"), wrapped: true }]);
 		const provider = new TerminalLinks(term, options());

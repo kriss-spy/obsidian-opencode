@@ -138,6 +138,17 @@ The installed OpenCode 2.0.22 CLI reproduced a frozen embedded renderer after Ct
 
 All app runs remained serialized under the shared lock and used isolated vaults/profiles. Native Windows, WSL2/X410, and macOS were not checked for this follow-up.
 
+### TUI-wrapped session references (2026-10-05)
+
+A read-only diagnostic in the running cloudnotes vault (Obsidian 1.14.4, installer 1.13.7) confirmed that OpenCode rendered an existing note path across two indented rows, both with `isWrapped=false`. The installed detector found neither fragment. The corrected detector, queried without attaching handlers or changing the session, returned the complete path and its cell range from both rows.
+
+- Production build and `npm test`: passing, with 276 tests passed and 5 platform-only tests skipped.
+- The isolated Obsidian 1.12.7 terminal-links suite: all 7 tests passed, covering TUI-managed and native wraps, Unicode/spaces, line/column jumps, selection, mouse ownership, external URLs, and OSC 8 guards.
+- Regression tests retain ordinary hard-line separation and reject missing notes, outside-vault paths, inconsistent indentation, and separate bullets. A changed continuation invalidates cached activation.
+- Tested `main.js` SHA-256: `077f0a8027fff83ffd04ba27ef2b15a219b2227ce1f0268587057cee01bb430b`.
+
+Real pointer tests used a fresh vault/profile under the shared app-test lock. The broader app suite was not repeated for this follow-up; the earlier full-focus-sequence failures remain unresolved.
+
 ## WSL2/X410 evidence
 
 On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:

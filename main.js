@@ -20438,6 +20438,52 @@ function logicalLine(terminal, y) {
   }
   return result;
 }
+function linkLines(terminal, y) {
+  var _a, _b, _c, _d;
+  const normal = logicalLine(terminal, y);
+  if (!normal) return [];
+  const result = [{ line: normal, current: () => {
+    var _a2;
+    return ((_a2 = logicalLine(terminal, y)) == null ? void 0 : _a2.text) === normal.text;
+  } }];
+  if (terminal.modes.mouseTrackingMode === "none") return result;
+  for (let first = Math.max(1, y - 7); first <= y; first++) {
+    const initial = logicalLine(terminal, first);
+    if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first) continue;
+    const indent = (_b = /^ {2,}(?:[-*•] )?/.exec(initial.text)) == null ? void 0 : _b[0].length;
+    if (!indent) continue;
+    const sources = [{ y: first, text: initial.text }];
+    const initialEnd = initial.text.trimEnd().length;
+    let spaced = { text: initial.text.slice(indent, initialEnd), starts: initial.starts.slice(indent, initialEnd), ends: initial.ends.slice(indent, initialEnd) };
+    let joined = spaced;
+    for (let row = initial.ends[initial.ends.length - 1].y + 1; row < first + 8; ) {
+      const next = logicalLine(terminal, row);
+      if (!next || ((_c = next.starts[0]) == null ? void 0 : _c.y) !== row || !next.text.startsWith(" ".repeat(indent)) || /\s/.test((_d = next.text[indent]) != null ? _d : " ")) break;
+      const end = next.text.trimEnd().length;
+      const fragment = { text: next.text.slice(indent, end), starts: next.starts.slice(indent, end), ends: next.ends.slice(indent, end) };
+      const append = (previous, separator) => ({
+        text: previous.text + separator + fragment.text,
+        starts: [...previous.starts, ...separator ? [previous.ends[previous.ends.length - 1]] : [], ...fragment.starts],
+        ends: [...previous.ends, ...separator ? [previous.ends[previous.ends.length - 1]] : [], ...fragment.ends]
+      });
+      spaced = append(spaced, /[\\/]$/.test(spaced.text) ? "" : " ");
+      joined = append(joined, "");
+      if (spaced.text.length > 4096) break;
+      sources.push({ y: row, text: next.text });
+      const last = next.ends[next.ends.length - 1].y;
+      row = last + 1;
+      if (last < y) continue;
+      const snapshot = sources.slice();
+      const current = () => snapshot.every((source) => {
+        var _a2;
+        return ((_a2 = logicalLine(terminal, source.y)) == null ? void 0 : _a2.text) === source.text;
+      });
+      result.push({ line: spaced, current, continuation: true });
+      if (joined.text !== spaced.text) result.push({ line: joined, current, continuation: true });
+    }
+  }
+  return result;
+}
 var TerminalLinks = class {
   constructor(terminal, options) {
     this.terminal = terminal;
@@ -20455,23 +20501,22 @@ var TerminalLinks = class {
       callback(void 0);
       return;
     }
-    const line = logicalLine(this.terminal, y);
-    if (!line) {
-      callback(void 0);
-      return;
-    }
-    const links = findTerminalLinks(line.text, this.options).map((match) => {
+    const seen = /* @__PURE__ */ new Set();
+    const links = linkLines(this.terminal, y).flatMap(({ line, current, continuation }) => findTerminalLinks(line.text, this.options).flatMap((match) => {
+      const range = { start: line.starts[match.start], end: line.ends[match.end - 1] };
+      if (continuation && (!match.note || range.start.y === range.end.y)) return [];
+      if (range.start.y > y || range.end.y < y) return [];
+      const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
       let released = false;
       const cols = this.terminal.cols;
       const viewportY = this.terminal.buffer.active.viewportY;
       const buffer = this.terminal.buffer.active;
-      const valid = () => {
-        var _a;
-        return !released && !this.disposed && this.terminal.cols === cols && this.terminal.buffer.active === buffer && buffer.viewportY === viewportY && ((_a = logicalLine(this.terminal, y)) == null ? void 0 : _a.text) === line.text;
-      };
+      const valid = () => !released && !this.disposed && this.terminal.cols === cols && this.terminal.buffer.active === buffer && buffer.viewportY === viewportY && current();
       const link = {
         text: match.text,
-        range: { start: line.starts[match.start], end: line.ends[match.end - 1] },
+        range,
         activate: (event) => {
           var _a;
           if (valid() && !((_a = this.pressed) == null ? void 0 : _a.handled)) void this.activate(match.text, event);
@@ -20488,8 +20533,8 @@ var TerminalLinks = class {
         }
       };
       this.validations.set(link, valid);
-      return link;
-    }).filter((link) => link.range.start.y <= y && link.range.end.y >= y);
+      return [link];
+    }));
     callback(links.length ? links : void 0);
   }
   async activate(text, event) {

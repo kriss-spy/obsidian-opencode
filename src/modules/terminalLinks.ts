@@ -163,6 +163,53 @@ function logicalLine(terminal: Terminal, y: number): LogicalLine | null {
 	return result;
 }
 
+interface LinkLine { line: LogicalLine; current(): boolean; continuation?: boolean }
+
+/** OpenCode lays out indented paragraphs itself, without xterm's wrap flag. */
+function linkLines(terminal: Terminal, y: number): LinkLine[] {
+	const normal = logicalLine(terminal, y);
+	if (!normal) return [];
+	const result: LinkLine[] = [{ line: normal, current: () => logicalLine(terminal, y)?.text === normal.text }];
+	if (terminal.modes.mouseTrackingMode === "none") return result;
+	// Only consider a short, consistently indented TUI paragraph. Real newlines
+	// in ordinary terminal output remain separate; lookup still requires an
+	// exact existing Markdown path and never salvages an outside-vault suffix.
+	for (let first = Math.max(1, y - 7); first <= y; first++) {
+		const initial = logicalLine(terminal, first);
+		if (!initial || initial.starts[0]?.y !== first) continue;
+		const indent = /^ {2,}(?:[-*•] )?/.exec(initial.text)?.[0].length;
+		if (!indent) continue;
+		const sources = [{ y: first, text: initial.text }];
+		const initialEnd = initial.text.trimEnd().length;
+		let spaced: LogicalLine = { text: initial.text.slice(indent, initialEnd), starts: initial.starts.slice(indent, initialEnd), ends: initial.ends.slice(indent, initialEnd) };
+		let joined = spaced;
+		for (let row = initial.ends[initial.ends.length - 1].y + 1; row < first + 8;) {
+			const next = logicalLine(terminal, row);
+			if (!next || next.starts[0]?.y !== row ||
+				!next.text.startsWith(" ".repeat(indent)) || /\s/.test(next.text[indent] ?? " ")) break;
+			const end = next.text.trimEnd().length;
+			const fragment: LogicalLine = { text: next.text.slice(indent, end), starts: next.starts.slice(indent, end), ends: next.ends.slice(indent, end) };
+			const append = (previous: LogicalLine, separator: string): LogicalLine => ({
+				text: previous.text + separator + fragment.text,
+				starts: [...previous.starts, ...(separator ? [previous.ends[previous.ends.length - 1]] : []), ...fragment.starts],
+				ends: [...previous.ends, ...(separator ? [previous.ends[previous.ends.length - 1]] : []), ...fragment.ends],
+			});
+			spaced = append(spaced, /[\\/]$/.test(spaced.text) ? "" : " ");
+			joined = append(joined, "");
+			if (spaced.text.length > 4096) break;
+			sources.push({ y: row, text: next.text });
+			const last = next.ends[next.ends.length - 1].y;
+			row = last + 1;
+			if (last < y) continue;
+			const snapshot = sources.slice();
+			const current = () => snapshot.every(source => logicalLine(terminal, source.y)?.text === source.text);
+			result.push({ line: spaced, current, continuation: true });
+			if (joined.text !== spaced.text) result.push({ line: joined, current, continuation: true });
+		}
+	}
+	return result;
+}
+
 export class TerminalLinks implements ILinkProvider {
 	private disposed = false;
 	private revision = 0;
@@ -176,19 +223,24 @@ export class TerminalLinks implements ILinkProvider {
 
 	provideLinks(y: number, callback: (links: ILink[] | undefined) => void): void {
 		if (this.disposed) { callback(undefined); return; }
-		const line = logicalLine(this.terminal, y);
-		if (!line) { callback(undefined); return; }
-		const links = findTerminalLinks(line.text, this.options).map(match => {
+		const seen = new Set<string>();
+		const links = linkLines(this.terminal, y).flatMap(({ line, current, continuation }) => findTerminalLinks(line.text, this.options).flatMap(match => {
+			const range = { start: line.starts[match.start], end: line.ends[match.end - 1] };
+			if (continuation && (!match.note || range.start.y === range.end.y)) return [];
+			if (range.start.y > y || range.end.y < y) return [];
+			const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;
+			if (seen.has(key)) return [];
+			seen.add(key);
 			let released = false;
 			const cols = this.terminal.cols;
 			const viewportY = this.terminal.buffer.active.viewportY;
 			const buffer = this.terminal.buffer.active;
 			const valid = () => !released && !this.disposed && this.terminal.cols === cols &&
 				this.terminal.buffer.active === buffer && buffer.viewportY === viewportY &&
-				logicalLine(this.terminal, y)?.text === line.text;
+				current();
 			const link: ILink = {
 				text: match.text,
-				range: { start: line.starts[match.start], end: line.ends[match.end - 1] },
+				range,
 				activate: event => {
 					if (valid() && !this.pressed?.handled) void this.activate(match.text, event);
 				},
@@ -197,8 +249,8 @@ export class TerminalLinks implements ILinkProvider {
 				dispose: () => { released = true; if (this.hovered === link) this.hovered = null; },
 			};
 			this.validations.set(link, valid);
-			return link;
-		}).filter(link => link.range.start.y <= y && link.range.end.y >= y);
+			return [link];
+		}));
 		callback(links.length ? links : undefined);
 	}
 

@@ -42,6 +42,16 @@ async function linkPoint(text: string, end = false): Promise<{ x: number; y: num
 
 async function clickLink(text: string, modified = false, end = false): Promise<void> {
 	const point = await linkPoint(text, end);
+	// xterm 5.5 keeps same-row provider replies after mouseleave/redraw.
+	// Cross another buffer row to request fresh hover decoration for this frame.
+	const neutral = await browser.execute((point: { y: number }) => {
+		const terminal = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+		const rect = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
+		const height = rect.height / terminal.rows;
+		const row = Math.floor((point.y - rect.top) / height) === 0 ? 1 : 0;
+		return { x: Math.round(rect.left + rect.width / terminal.cols / 2), y: Math.round(rect.top + (row + 0.5) * height) };
+	}, point);
+	await browser.action("pointer").move({ ...neutral, origin: "viewport" }).perform();
 	await browser.action("pointer").move({ x: point.x, y: point.y, origin: "viewport" }).perform();
 	const mouseReporting = await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.modes.mouseTrackingMode !== "none");
 	try {
@@ -155,6 +165,20 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 			const folder = app.vault.getAbstractFileByPath("Terminal links");
 			if (folder) await app.vault.delete(folder, true);
 		});
+	});
+
+	it("opens note paths wrapped by OpenCode into indented hard rows", async function () {
+		const text = `${notePath}:3:5`;
+		await render("  - Terminal links/\r\n    中文 My note.md:3:5 — session summary", true);
+		const point = await linkPoint(text, true);
+		expect(point.range.start.y).toBeLessThan(point.range.end.y);
+		await browser.execute(() => { (window as any).__terminalLinkInput = []; });
+		await clickLink(text, true, true);
+		await waitActivation(() => browser.execute((notePath: string) => (window as any).app.workspace.getActiveFile()?.path === notePath, notePath));
+		const cursor = await browser.execute(() => (window as any).app.workspace.activeLeaf.view.editor.getCursor());
+		expect(cursor.line).toBe(2);
+		expect(cursor.ch).toBe(4);
+		expect(await browser.execute(() => (window as any).__terminalLinkInput)).toEqual([]);
 	});
 
 	it("opens wrapped space/Unicode note paths and cursor locations while preserving terminal leaf/PTY", async function () {
