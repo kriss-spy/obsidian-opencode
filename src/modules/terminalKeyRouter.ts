@@ -18,6 +18,8 @@ export interface KeyRouterContext {
 	terminal: Terminal;
 	container: HTMLElement;
 	reservedTerminalHotkeys: ReadonlySet<string>;
+	suspendTerminalHotkeys?: ReadonlySet<string>;
+	onSuspendBlocked?: () => void;
 	clipboard?: TerminalClipboard;
 	copySelectionOnCtrlC?: boolean | (() => boolean);
 	onClipboardError?: (message: string) => void;
@@ -32,6 +34,7 @@ export class TerminalKeyRouter {
 	private shiftEnterTimers = new Set<ReturnType<typeof setTimeout>>();
 
 	register(context: KeyRouterContext): void {
+		this.registerSuspendGuard(context);
 		this.registerShortcutScope(context);
 		this.setShiftEnterNewline(context.terminal, context.shiftEnterNewline ?? false, context.onShiftEnterNewline);
 		if (context.clipboard) {
@@ -39,6 +42,23 @@ export class TerminalKeyRouter {
 		} else {
 			this.registerPasteHandler(context);
 		}
+	}
+
+	private registerSuspendGuard(context: KeyRouterContext): void {
+		const handler = (event: KeyboardEvent) => {
+			if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+			const modifiers = [
+				...(event.ctrlKey ? ["Ctrl"] : []), ...(event.altKey ? ["Alt"] : []),
+				...(event.shiftKey ? ["Shift"] : []), ...(event.metaKey ? ["Meta"] : []),
+			] as Hotkey["modifiers"];
+			const key = normalizeObsidianHotkey({ modifiers, key: event.key });
+			if (!context.suspendTerminalHotkeys?.has(key)) return;
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			if (!event.repeat) context.onSuspendBlocked?.();
+		};
+		context.container.addEventListener("keydown", handler, true);
+		this.disposers.push(() => context.container.removeEventListener("keydown", handler, true));
 	}
 
 	setShiftEnterNewline(terminal: Terminal, enabled: boolean, onShiftEnterNewline?: () => void): void {

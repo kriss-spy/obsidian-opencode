@@ -5,7 +5,7 @@ import { browser, expect } from "@wdio/globals";
 import { resolveOpencodeExecutable } from "../../src/utils/opencodeExecutable";
 
 describe("Installed OpenCode V2 in an isolated vault", function () {
-	it("[real V2] focuses a revealed terminal and accepts input without submitting it", async function () {
+	it("[real V2] focuses a revealed terminal and remains responsive after Ctrl+Z", async function () {
 		if (process.platform !== "linux" || process.env.OPENCODE_REAL_E2E !== "1") this.skip();
 		const executable = resolveOpencodeExecutable("opencode");
 		const previous = await browser.execute(() => {
@@ -64,12 +64,34 @@ describe("Installed OpenCode V2 in an isolated vault", function () {
 			await browser.waitUntil(async () => (await buffer()).includes("isolated-v2-focus-check"), {
 				timeoutMsg: "Focused installed OpenCode V2 did not receive keyboard input",
 			});
+			await browser.execute(() => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				(window as any).__suspendInput = [];
+				(window as any).__suspendSubscription = view.terminal.onData((data: string) => (window as any).__suspendInput.push(data));
+			});
+			await browser.keys(["Control", "z"]);
+			await browser.keys("NULL");
+			await browser.keys("-ok");
+			try {
+				await browser.waitUntil(async () => (await buffer()).includes("isolated-v2-focus-check-ok"), {
+					timeout: 5000,
+					timeoutMsg: "Installed OpenCode V2 stopped accepting input after Ctrl+Z",
+				});
+			} catch (error) {
+				const trace = await browser.execute(() => ({ input: (window as any).__suspendInput }));
+				throw new Error(`${String(error)}\n${JSON.stringify(trace)}\n${await buffer()}`);
+			}
+			const input = await browser.execute(() => (window as any).__suspendInput.join(""));
+			expect(input).toBe("-ok");
 			await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
 			mkdirSync(path.resolve("test-results/obsidian"), { recursive: true });
 			await browser.saveScreenshot(path.resolve("test-results/obsidian/real-v2-workflow.png"));
 		} finally {
 			await browser.execute(async (settings: typeof previous) => {
 				const plugin = (window as any).app.plugins.plugins.opencode;
+				(window as any).__suspendSubscription?.dispose();
+				delete (window as any).__suspendSubscription;
+				delete (window as any).__suspendInput;
 				await plugin.viewCoordinator.closeTerminal();
 				plugin.settings = settings;
 				await plugin.saveSettings();

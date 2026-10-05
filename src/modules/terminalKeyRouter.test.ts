@@ -10,8 +10,10 @@ function registerRouter(
 	clipboard?: { readText(): Promise<string>; writeText(text: string): Promise<void> },
 	onClipboardImagePaste?: (png: Buffer) => void | Promise<void>,
 	copySelectionOnCtrlC = false,
+	suspendTerminalHotkeys?: ReadonlySet<string>,
 ) {
-	const containerHandlers = new Map<string, (event: Event) => void>();
+	const containerHandlers = new Map<string, Array<(event: Event) => void>>();
+	const suspendBlocked = vi.fn();
 	let customKeyEventHandler: ((event: KeyboardEvent) => boolean) | undefined;
 
 	const terminalPaste = vi.fn();
@@ -59,6 +61,8 @@ function registerRouter(
 			},
 		},
 		reservedTerminalHotkeys,
+		suspendTerminalHotkeys,
+		onSuspendBlocked: suspendBlocked,
 		clipboard,
 		copySelectionOnCtrlC,
 		onClipboardError: clipboardError,
@@ -67,7 +71,7 @@ function registerRouter(
 			contains: () => true,
 			ownerDocument: { activeElement: null },
 			addEventListener: (type: string, handler: (event: Event) => void) => {
-				containerHandlers.set(type, handler);
+				containerHandlers.set(type, [...(containerHandlers.get(type) ?? []), handler]);
 			},
 			removeEventListener: vi.fn(),
 		},
@@ -78,6 +82,7 @@ function registerRouter(
 
 	return {
 		terminalPaste,
+		suspendBlocked,
 		terminalClearSelection,
 		clipboardError,
 		setSelection: (value: string) => { selection = value; },
@@ -85,28 +90,35 @@ function registerRouter(
 		pushScope,
 		popScope,
 		dispatchContainerEvent: (type: string, event: Partial<FocusEvent> = {}) => {
-			containerHandlers.get(type)?.(event as FocusEvent);
+			containerHandlers.get(type)?.forEach(handler => handler(event as FocusEvent));
 		},
 		dispatchPaste: (text: string) => {
 			const preventDefault = vi.fn();
 			const stopImmediatePropagation = vi.fn();
-			containerHandlers.get("paste")?.({
+			containerHandlers.get("paste")?.forEach(handler => handler({
 				target: {},
 				clipboardData: { getData: () => text },
 				preventDefault,
 				stopImmediatePropagation,
-			} as unknown as ClipboardEvent);
+			} as unknown as ClipboardEvent));
 			return { preventDefault, stopImmediatePropagation };
 		},
 		dispatchKeydown: (event: Partial<KeyboardEvent>) => {
 			const preventDefault = vi.fn();
 			const stopImmediatePropagation = vi.fn();
-			containerHandlers.get("keydown")?.({
+			let stopped = false;
+			let prevented = false;
+			const dispatched = {
 				target: {},
-				preventDefault,
-				stopImmediatePropagation,
+				get defaultPrevented() { return prevented; },
+				preventDefault: () => { preventDefault(); prevented = true; },
+				stopImmediatePropagation: () => { stopImmediatePropagation(); stopped = true; },
 				...event,
-			} as unknown as KeyboardEvent);
+			} as unknown as KeyboardEvent;
+			for (const handler of containerHandlers.get("keydown") ?? []) {
+				handler(dispatched);
+				if (stopped) break;
+			}
 			return { preventDefault, stopImmediatePropagation };
 		},
 		dispatchOsc52: (data: string) => osc52Handler?.(data),
@@ -133,6 +145,26 @@ function registerRouter(
 }
 
 describe("TerminalKeyRouter", () => {
+	it("blocks suspend shortcuts before xterm while preserving composition and other modifiers", () => {
+		const context = registerRouter({}, new Set(), undefined, undefined, undefined, false, new Set(["ctrl+z"]));
+		const blocked = context.dispatchKeydown({ key: "z", ctrlKey: true });
+		expect(blocked.preventDefault).toHaveBeenCalledOnce();
+		expect(blocked.stopImmediatePropagation).toHaveBeenCalledOnce();
+		expect(context.suspendBlocked).toHaveBeenCalledOnce();
+		for (const extra of [{ isComposing: true }, { keyCode: 229 }, { shiftKey: true }, { altKey: true }, { metaKey: true }]) {
+			expect(context.dispatchKeydown({ key: "z", ctrlKey: true, ...extra }).preventDefault).not.toHaveBeenCalled();
+		}
+		context.dispatchKeydown({ key: "z", ctrlKey: true, repeat: true });
+		expect(context.suspendBlocked).toHaveBeenCalledOnce();
+		context.router.dispose();
+	});
+
+	it("leaves Ctrl+Z available when it is not a suspend binding", () => {
+		const context = registerRouter({}, new Set(), undefined, undefined, undefined, false, new Set());
+		expect(context.dispatchKeydown({ key: "z", ctrlKey: true }).preventDefault).not.toHaveBeenCalled();
+		context.router.dispose();
+	});
+
 	it("activates an isolated scope for effective Obsidian shortcuts", () => {
 		const { dispatchContainerEvent, executeCommandById, pushScope, router } = registerRouter();
 

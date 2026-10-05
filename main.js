@@ -21131,6 +21131,10 @@ function resolveOpenCodeHotkeys(overrides = {}, platform = process.platform) {
   }
   return result;
 }
+function resolveOpenCodeSuspendHotkeys(overrides = {}, platform = process.platform) {
+  const value = Object.prototype.hasOwnProperty.call(overrides, "terminal_suspend") ? overrides.terminal_suspend : platform === "win32" ? false : DEFAULT_BINDINGS.terminal_suspend;
+  return new Set(bindingKeys(value, ""));
+}
 function parseJsonc(text) {
   var _a;
   let result = "";
@@ -21247,10 +21251,16 @@ function configFiles(cwd, env) {
   }
   return files;
 }
-function loadOpenCodeHotkeys(cwd, env = process.env) {
+function loadOverrides(cwd, env) {
   const overrides = {};
   for (const file of configFiles(cwd, env)) Object.assign(overrides, readOverrides(file, env));
-  return resolveOpenCodeHotkeys(overrides);
+  return overrides;
+}
+function loadOpenCodeHotkeys(cwd, env = process.env) {
+  return resolveOpenCodeHotkeys(loadOverrides(cwd, env));
+}
+function loadOpenCodeSuspendHotkeys(cwd, env = process.env) {
+  return resolveOpenCodeSuspendHotkeys(loadOverrides(cwd, env));
 }
 function loadOpenCodeManualCopy(cwd, env = process.env, generation = "stable") {
   var _a, _b;
@@ -21539,6 +21549,7 @@ var TerminalKeyRouter = class {
   }
   register(context) {
     var _a;
+    this.registerSuspendGuard(context);
     this.registerShortcutScope(context);
     this.setShiftEnterNewline(context.terminal, (_a = context.shiftEnterNewline) != null ? _a : false, context.onShiftEnterNewline);
     if (context.clipboard) {
@@ -21546,6 +21557,25 @@ var TerminalKeyRouter = class {
     } else {
       this.registerPasteHandler(context);
     }
+  }
+  registerSuspendGuard(context) {
+    const handler = (event) => {
+      var _a, _b;
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+      const modifiers = [
+        ...event.ctrlKey ? ["Ctrl"] : [],
+        ...event.altKey ? ["Alt"] : [],
+        ...event.shiftKey ? ["Shift"] : [],
+        ...event.metaKey ? ["Meta"] : []
+      ];
+      const key = normalizeObsidianHotkey({ modifiers, key: event.key });
+      if (!((_a = context.suspendTerminalHotkeys) == null ? void 0 : _a.has(key))) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!event.repeat) (_b = context.onSuspendBlocked) == null ? void 0 : _b.call(context);
+    };
+    context.container.addEventListener("keydown", handler, true);
+    this.disposers.push(() => context.container.removeEventListener("keydown", handler, true));
   }
   setShiftEnterNewline(terminal, enabled, onShiftEnterNewline) {
     var _a;
@@ -22913,6 +22943,8 @@ var OpencodeTerminalView = class _OpencodeTerminalView extends import_obsidian4.
       shiftEnterNewline: this.plugin.settings.shiftEnterNewline,
       onShiftEnterNewline: () => this.sendShiftEnterNewline(terminal),
       reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
+      suspendTerminalHotkeys: loadOpenCodeSuspendHotkeys(terminalCwd, terminalEnvironment),
+      onSuspendBlocked: () => new import_obsidian4.Notice("OpenCode cannot be suspended inside Obsidian. Close or restart the terminal instead."),
       clipboard: windowsClipboard != null ? windowsClipboard : void 0,
       copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,
       onClipboardError: (message) => new import_obsidian4.Notice(message),

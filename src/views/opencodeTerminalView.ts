@@ -27,7 +27,7 @@ import {
 	scrollbarPageInput,
 } from "../modules/windowsTerminalMouse";
 import { LifecycleQueue } from "../modules/lifecycleQueue";
-import { loadOpenCodeHotkeys, loadOpenCodeManualCopy } from "../modules/openCodeKeymap";
+import { loadOpenCodeHotkeys, loadOpenCodeManualCopy, loadOpenCodeSuspendHotkeys } from "../modules/openCodeKeymap";
 import { mergeEnvironmentVariables } from "../utils/environment";
 import { OpencodeClient, OpencodeError } from "../utils/opencode";
 import { createWslWindowsClipboard } from "../modules/wslWindowsClipboard";
@@ -585,6 +585,8 @@ export class OpencodeTerminalView extends ItemView {
 			shiftEnterNewline: this.plugin.settings.shiftEnterNewline,
 			onShiftEnterNewline: () => this.sendShiftEnterNewline(terminal),
 			reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
+			suspendTerminalHotkeys: loadOpenCodeSuspendHotkeys(terminalCwd, terminalEnvironment),
+			onSuspendBlocked: () => new Notice("OpenCode cannot be suspended inside Obsidian. Close or restart the terminal instead."),
 			clipboard: windowsClipboard ?? undefined,
 			copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,
 			onClipboardError: (message) => new Notice(message),
