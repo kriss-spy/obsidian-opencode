@@ -21132,8 +21132,10 @@ function resolveOpenCodeHotkeys(overrides = {}, platform = process.platform) {
   return result;
 }
 function resolveOpenCodeSuspendHotkeys(overrides = {}, platform = process.platform) {
+  var _a;
   const value = Object.prototype.hasOwnProperty.call(overrides, "terminal_suspend") ? overrides.terminal_suspend : platform === "win32" ? false : DEFAULT_BINDINGS.terminal_suspend;
-  return new Set(bindingKeys(value, ""));
+  const leaders = new Set(bindingKeys((_a = overrides.leader) != null ? _a : DEFAULT_BINDINGS.leader, ""));
+  return new Set(bindingKeys(value, "").filter((key) => !leaders.has(key)));
 }
 function parseJsonc(text) {
   var _a;

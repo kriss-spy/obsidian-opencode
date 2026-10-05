@@ -127,6 +127,17 @@ All real-app runs used fresh vaults/profiles and the shared `flock /tmp/obsidian
 
 The tested `main.js` SHA-256 is `d49fd061b97c6251f2a602699819de54d0b32f36e18ad51db574c5a4fa810d9b`. This records an unreleased integration; it does not imply a version bump or published release.
 
+### Ctrl+Z follow-up (2026-10-05)
+
+The installed OpenCode 2.0.22 CLI reproduced a frozen embedded renderer after Ctrl+Z. The fix guards effective direct suspend bindings before xterm encodes them, preserving disabled suspend bindings, configured undo bindings, shared leaders, and composition.
+
+- Production build and `npm test`: passing, with 272 tests passed and 5 platform-only tests skipped.
+- The final isolated app run passed the installed-CLI Ctrl+Z regression and the restart/new/continue/restore workflow. It verified that the existing draft survived, subsequent typing reached OpenCode, and xterm emitted no suspend byte.
+- Broader reruns were not green: the full focus sequence failed and the terminal-links suite hit renderer/script timeouts. The restart/restore case passed when run separately; the broader test interaction remains unresolved before release.
+- Final tested `main.js` SHA-256: `fe76506468da76cb5cb7e8e75d6d681bcf0eaf93d938a1cc358028ab5e1dd96a`.
+
+All app runs remained serialized under the shared lock and used isolated vaults/profiles. Native Windows, WSL2/X410, and macOS were not checked for this follow-up.
+
 ## WSL2/X410 evidence
 
 On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:

@@ -23,6 +23,8 @@ describe("OpenCode keymap", () => {
 		expect([...resolveOpenCodeSuspendHotkeys({ terminal_suspend: "none", input_undo: "ctrl+z" })]).toEqual([]);
 		expect([...resolveOpenCodeSuspendHotkeys({ terminal_suspend: "ctrl+j,ctrl+alt+z" })]).toEqual(["ctrl+j", "ctrl+alt+z"]);
 		expect([...resolveOpenCodeSuspendHotkeys({ terminal_suspend: "<leader>z" })]).toEqual([]);
+		expect([...resolveOpenCodeSuspendHotkeys({ leader: "ctrl+z" })]).toEqual([]);
+		expect([...resolveOpenCodeSuspendHotkeys({ leader: "ctrl+j", terminal_suspend: "ctrl+j,ctrl+z" })]).toEqual(["ctrl+z"]);
 	});
 
 	it("reserves OpenCode defaults and its leader", () => {
