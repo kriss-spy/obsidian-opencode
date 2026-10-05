@@ -1,7 +1,7 @@
-import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
+import { ItemView, Keymap, MarkdownView, Notice, WorkspaceLeaf } from "obsidian";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { WebLinksAddon } from "@xterm/addon-web-links";
+import { TerminalLinks } from "../modules/terminalLinks";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { ImageAddon } from "@xterm/addon-image";
@@ -53,6 +53,7 @@ export class OpencodeTerminalView extends ItemView {
 	private editorPort: number | undefined;
 	private ptySession: PtySession;
 	private keyRouter: TerminalKeyRouter;
+	private terminalLinks: TerminalLinks | null = null;
 	private readonly lifecycle = new LifecycleQueue();
 	private closing = false;
 	private clipboardTempDirectory: string | null = null;
@@ -175,7 +176,7 @@ export class OpencodeTerminalView extends ItemView {
 
 		const fitAddon = new FitAddon();
 		terminal.loadAddon(fitAddon);
-		terminal.loadAddon(new WebLinksAddon());
+
 		const imageAddon = new ImageAddon({
 			enableSizeReports: false,
 			iipSupport: false,
@@ -184,6 +185,36 @@ export class OpencodeTerminalView extends ItemView {
 		this.imageAddon = imageAddon;
 
 		terminal.open(termContainer);
+		const terminalLinks = new TerminalLinks(terminal, {
+			vaultRoot: this.plugin.vaultRoot,
+			wslDistro: terminalEnvironment.WSL_DISTRO_NAME,
+			hasNote: path => Boolean(this.app.vault.getFileByPath(path)?.extension.toLowerCase() === "md"),
+			isModEvent: event => Boolean(Keymap.isModEvent(event)),
+			openExternal: url => {
+				const electron = require("electron") as { shell: { openExternal(url: string): Promise<void> } };
+				return electron.shell.openExternal(url);
+			},
+			openNote: async (target, event) => {
+				const file = this.app.vault.getFileByPath(target.path);
+				if (!file) return;
+				const leaf = this.app.workspace.getLeaf(Keymap.isModEvent(event));
+				await leaf.openFile(file, { active: true, state: target.line ? { mode: "source" } : undefined });
+				if (target.line && leaf.view instanceof MarkdownView) {
+					const editor = leaf.view.editor;
+					const line = Math.min(target.line - 1, editor.lineCount() - 1);
+					const ch = Math.min((target.column ?? 1) - 1, editor.getLine(line).length);
+					editor.setCursor({ line, ch });
+					editor.scrollIntoView({ from: { line, ch }, to: { line, ch } }, true);
+				}
+			},
+			onError: error => {
+				console.warn("Could not open terminal link", error);
+				new Notice("Could not open terminal link");
+			},
+		});
+		terminalLinks.attach(termContainer);
+		this.terminalLinks = terminalLinks;
+		this.register(() => terminalLinks.dispose());
 		// OpenCode changes xterm's OSC colors while previewing. Its `system` theme
 		// must still query Obsidian's host palette, not the preceding preview.
 		for (const [osc, property] of [[10, "--text-normal"], [11, "--background-primary"]] as const) {
@@ -685,6 +716,8 @@ export class OpencodeTerminalView extends ItemView {
 
 	async onClose() {
 		this.closing = true;
+		this.terminalLinks?.dispose();
+		this.terminalLinks = null;
 		await this.lifecycle.enqueue(async () => {
 			if (this.editorServer) {
 				await this.editorServer.stop();
