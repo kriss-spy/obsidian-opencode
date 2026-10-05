@@ -89,6 +89,33 @@ describe("terminal link parsing and containment", () => {
 });
 
 describe("public xterm provider and activation", () => {
+	it("underlines all wrapped fragments together and removes them on leave/dispose", () => {
+		const created: Array<{ style: Record<string, string>; remove: ReturnType<typeof vi.fn> }> = [];
+		const screen = { ownerDocument: { createElement: () => {
+			const element = { style: {}, remove: vi.fn() };
+			created.push(element);
+			return element;
+		} }, appendChild: vi.fn() };
+		const term = terminal([{ chars: Array.from("    https://resources.anthropic.") }, { chars: Array.from("    com/hubfs/") }]);
+		Object.assign(term, { cols: 35, element: { querySelector: () => screen } });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options());
+		const first = links(provider, 1)[0], second = links(provider, 2)[0];
+		expect(first.decorations).toEqual({ pointerCursor: true, underline: false });
+		first.hover!(event(), first.text);
+		expect(created).toHaveLength(2);
+		expect(created.map(element => element.style.width)).toEqual([`${28 / 35 * 100}%`, `${10 / 35 * 100}%`]);
+		second.hover!(event(), second.text);
+		expect(created).toHaveLength(4);
+		expect(created[0].remove).toHaveBeenCalledOnce();
+		first.leave!(event(), first.text);
+		expect(created[2].remove).not.toHaveBeenCalled();
+		second.leave!(event(), second.text);
+		expect(created[2].remove).toHaveBeenCalledOnce();
+		first.hover!(event(), first.text);
+		provider.dispose();
+		expect(created[4].remove).toHaveBeenCalledOnce();
+	});
 	it.each(["    ", " ┃  ", "  - "])("reconstructs a TUI-wrapped HTTP URL with prefix %s from every row without partial targets", async (prefix) => {
 		const fragments = ["https://resources.anthropic.", "com/hubfs/", "Claude%20Code%20Advanced%20P", "atterns_%20Subagents%2C%20MC", "P%2C%20and%20Scaling%20to%20", "Real%20Codebases.pdf"];
 		const rows = fragments.map((fragment, row) => ({ chars: Array.from(`${row === 0 || prefix.includes("┃") ? prefix : "    "}${fragment}`.padEnd(35)) }));

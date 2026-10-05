@@ -272,8 +272,33 @@ export class TerminalLinks implements ILinkProvider {
 	private validations = new WeakMap<ILink, () => boolean>();
 	private pressed: { link: ILink; x: number; y: number; modified: boolean; dragged: boolean; handled: boolean } | null = null;
 	private cleanups: Array<() => void> = [];
+	private underlines: HTMLElement[] = [];
 
 	constructor(private terminal: Terminal, private options: TerminalLinkOptions) {}
+
+	private clearUnderlines(): void {
+		for (const element of this.underlines) element.remove();
+		this.underlines = [];
+	}
+
+	private showUnderlines(ranges: ILink["range"][]): void {
+		this.clearUnderlines();
+		const screen = this.terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+		if (!screen) return;
+		const viewport = this.terminal.buffer.active.viewportY;
+		for (const range of ranges) {
+			const row = range.start.y - viewport;
+			if (row < 1 || row > this.terminal.rows) continue;
+			const underline = screen.ownerDocument.createElement("span");
+			underline.className = "opencode-terminal-link-underline";
+			underline.style.left = `${(range.start.x - 1) / this.terminal.cols * 100}%`;
+			underline.style.width = `${(range.end.x - range.start.x + 1) / this.terminal.cols * 100}%`;
+			underline.style.top = `calc(${row / this.terminal.rows * 100}% - 2px)`;
+			underline.style.color = this.terminal.options.theme?.foreground ?? "";
+			screen.appendChild(underline);
+			this.underlines.push(underline);
+		}
+	}
 
 	provideLinks(y: number, callback: (links: ILink[] | undefined) => void): void {
 		if (this.disposed) { callback(undefined); return; }
@@ -287,19 +312,20 @@ export class TerminalLinks implements ILinkProvider {
 			if (!continuation && suffixes.some(suffix => before(wholeRange.start, suffix.end) && before(suffix.start, wholeRange.end))) return [];
 			if (wholeRange.start.y > y || wholeRange.end.y < y) return [];
 			let range = wholeRange;
+			const fragments: ILink["range"][] = [];
 			if (continuation) {
 				// xterm underlines full-width intermediate rows for multi-row
 				// ranges. TUI layout has indentation/padding between fragments:
 				// expose this row's actual cells, retaining the complete target.
-				let start: IBufferCellPosition | undefined;
-				let end: IBufferCellPosition | undefined;
 				for (let index = match.start; index < match.end; index++) {
-					if (line.starts[index].y !== y) continue;
-					start ??= line.starts[index];
-					end = line.ends[index];
+					const start = line.starts[index], end = line.ends[index];
+					const previous = fragments[fragments.length - 1];
+					if (previous?.start.y === start.y) previous.end = end;
+					else fragments.push({ start, end });
 				}
-				if (!start || !end) return [];
-				range = { start, end };
+				const row = fragments.find(fragment => fragment.start.y === y);
+				if (!row) return [];
+				range = row;
 			}
 			const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;
 			if (seen.has(key)) return [];
@@ -314,12 +340,13 @@ export class TerminalLinks implements ILinkProvider {
 			const link: ILink = {
 				text: match.text,
 				range,
+				decorations: continuation ? { pointerCursor: true, underline: false } : undefined,
 				activate: event => {
 					if (valid() && !this.pressed?.handled) void this.activate(match.text, event);
 				},
-				hover: () => { if (valid()) this.hovered = link; },
-				leave: () => { if (this.hovered === link) this.hovered = null; },
-				dispose: () => { released = true; if (this.hovered === link) this.hovered = null; },
+				hover: () => { if (valid()) { this.hovered = link; this.showUnderlines(fragments); } },
+				leave: () => { if (this.hovered === link) { this.hovered = null; this.clearUnderlines(); } },
+				dispose: () => { released = true; if (this.hovered === link) { this.hovered = null; this.clearUnderlines(); } },
 			};
 			this.validations.set(link, valid);
 			return [link];
@@ -381,13 +408,14 @@ export class TerminalLinks implements ILinkProvider {
 				const cell = cellAt(event);
 				if (cell && currentOsc8Link(this.terminal, cell).uri === text && !this.pressed?.handled) void this.activate(text, event);
 			},
-			hover: (event, text, range) => {
+				hover: (event, text, range) => {
 				const cell = cellAt(event);
 				if (cell && currentOsc8Link(this.terminal, cell).uri === text) {
+					this.clearUnderlines();
 					this.hovered = { text, range, activate: event => { void this.activate(text, event); } };
 				}
 			},
-			leave: () => { this.hovered = null; },
+			leave: () => { this.hovered = null; this.clearUnderlines(); },
 		};
 		this.cleanups.push(() => { this.terminal.options.linkHandler = previous; });
 		const cellAt = (event: MouseEvent) => this.cellAt(event);
@@ -444,7 +472,7 @@ export class TerminalLinks implements ILinkProvider {
 			}
 			if (pressed.modified) this.pressed = null;
 		};
-		const clear = () => { this.revision++; this.hovered = null; this.pressed = null; };
+		const clear = () => { this.revision++; this.hovered = null; this.pressed = null; this.clearUnderlines(); };
 		container.addEventListener("mousedown", down, true);
 		container.addEventListener("mousemove", move, true);
 		const ownerDocument = container.ownerDocument;
@@ -460,6 +488,7 @@ export class TerminalLinks implements ILinkProvider {
 			if (this.hovered && this.validations.get(this.hovered)?.() === false) {
 				this.hovered = null;
 				this.pressed = null;
+				this.clearUnderlines();
 			}
 		});
 		this.cleanups.push(() => {
@@ -477,6 +506,7 @@ export class TerminalLinks implements ILinkProvider {
 		this.capturedPrimaryPress = false;
 		this.hovered = null;
 		this.pressed = null;
+		this.clearUnderlines();
 		for (const cleanup of this.cleanups.splice(0)) cleanup();
 	}
 }

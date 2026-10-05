@@ -277,6 +277,14 @@
 	display: none;
 }
 
+.opencode-terminal .opencode-terminal-link-underline {
+	position: absolute;
+	height: 0;
+	border-bottom: 1px solid currentColor;
+	pointer-events: none;
+	z-index: 6;
+}
+
 .opencode-terminal-scrollbar {
 	position: absolute;
 	top: 0;

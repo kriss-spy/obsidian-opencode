@@ -286,7 +286,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		const url = fragments.join("");
 		await browser.execute(() => {
 			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
-			view.terminal.element.style.width = "300px";
+			view.terminal.element.parentElement.style.width = "300px";
 			view.fitAddon.fit();
 		});
 		await render(fragments.map(fragment => `    ${fragment}`).join("\r\n"), true);
@@ -304,29 +304,33 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		}, url);
 		await browser.action("pointer").move({ x: middle.x, y: middle.y, origin: "viewport" }).perform();
 		await browser.waitUntil(() => browser.execute(() => Boolean(document.querySelector(".opencode-terminal .xterm-cursor-pointer"))));
-		const ink = await browser.execute(() => {
-			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
-			const canvas = view.terminal.element.querySelector("canvas.xterm-link-layer") as HTMLCanvasElement;
-			if (!canvas) throw new Error("No actual xterm underline canvas");
-			const pixels = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
-			let minX = canvas.width, maxX = -1, minY = canvas.height, maxY = -1;
-			for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
-				if (!pixels[(y * canvas.width + x) * 4 + 3]) continue;
-				minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-			}
-			return { minX, maxX, minY, maxY, cellWidth: canvas.width / view.terminal.cols, cellHeight: canvas.height / view.terminal.rows, viewport: view.terminal.buffer.active.viewportY };
+		const underlines = await browser.execute(() => {
+			const terminal = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+			const screen = terminal.element.querySelector(".xterm-screen");
+			const rect = screen.getBoundingClientRect();
+			return { cellWidth: rect.width / terminal.cols, cellHeight: rect.height / terminal.rows,
+				lines: Array.from(screen.querySelectorAll(".opencode-terminal-link-underline"), (element: HTMLElement) => {
+					const line = element.getBoundingClientRect();
+					return { left: line.left - rect.left, width: line.width, top: line.top - rect.top, height: line.height, pointer: getComputedStyle(element).pointerEvents };
+				}) };
 		});
-		expect(ink.maxX).toBeGreaterThanOrEqual(ink.minX);
-		expect(ink.minX).toBeGreaterThanOrEqual((middle.range.start.x - 1) * ink.cellWidth);
-		expect(ink.maxX).toBeLessThan(middle.range.end.x * ink.cellWidth);
-		expect(ink.minY).toBeGreaterThanOrEqual((middle.range.start.y - ink.viewport - 1) * ink.cellHeight);
-		expect(ink.maxY).toBeLessThan((middle.range.end.y - ink.viewport) * ink.cellHeight);
+		expect(underlines.lines).toHaveLength(fragments.length);
+		for (let row = 0; row < fragments.length; row++) {
+			const line = underlines.lines[row];
+			expect(line.left).toBeCloseTo(4 * underlines.cellWidth, 1);
+			expect(line.width).toBeCloseTo(fragments[row].length * underlines.cellWidth, 1);
+			expect(line.top).toBeCloseTo((row + 1) * underlines.cellHeight - 2, 1);
+			expect(line.height).toBe(1);
+			expect(line.pointer).toBe("none");
+		}
 		await browser.action("key").down(process.platform === "darwin" ? Key.Command : Key.Control).perform(true);
 		try { await browser.action("pointer").move({ x: middle.x, y: middle.y, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform(); }
 		finally { await browser.releaseActions(); }
 		await waitActivation(async () => (await externalCalls()).length === 3);
 		expect(await externalCalls()).toEqual([url, url, url]);
 		expect(await browser.execute(() => (window as any).__terminalLinkInput)).toEqual([]);
+		await browser.action("pointer").move({ x: 10, y: 10, origin: "viewport" }).perform();
+		await browser.waitUntil(() => browser.execute(() => document.querySelectorAll(".opencode-terminal-link-underline").length === 0));
 	});
 
 });

@@ -20559,6 +20559,30 @@ var TerminalLinks = class {
     this.validations = /* @__PURE__ */ new WeakMap();
     this.pressed = null;
     this.cleanups = [];
+    this.underlines = [];
+  }
+  clearUnderlines() {
+    for (const element of this.underlines) element.remove();
+    this.underlines = [];
+  }
+  showUnderlines(ranges) {
+    var _a, _b, _c;
+    this.clearUnderlines();
+    const screen2 = (_a = this.terminal.element) == null ? void 0 : _a.querySelector(".xterm-screen");
+    if (!screen2) return;
+    const viewport = this.terminal.buffer.active.viewportY;
+    for (const range of ranges) {
+      const row = range.start.y - viewport;
+      if (row < 1 || row > this.terminal.rows) continue;
+      const underline = screen2.ownerDocument.createElement("span");
+      underline.className = "opencode-terminal-link-underline";
+      underline.style.left = `${(range.start.x - 1) / this.terminal.cols * 100}%`;
+      underline.style.width = `${(range.end.x - range.start.x + 1) / this.terminal.cols * 100}%`;
+      underline.style.top = `calc(${row / this.terminal.rows * 100}% - 2px)`;
+      underline.style.color = (_c = (_b = this.terminal.options.theme) == null ? void 0 : _b.foreground) != null ? _c : "";
+      screen2.appendChild(underline);
+      this.underlines.push(underline);
+    }
   }
   provideLinks(y, callback) {
     if (this.disposed) {
@@ -20575,16 +20599,17 @@ var TerminalLinks = class {
       if (!continuation && suffixes.some((suffix) => before(wholeRange.start, suffix.end) && before(suffix.start, wholeRange.end))) return [];
       if (wholeRange.start.y > y || wholeRange.end.y < y) return [];
       let range = wholeRange;
+      const fragments = [];
       if (continuation) {
-        let start;
-        let end;
         for (let index = match.start; index < match.end; index++) {
-          if (line.starts[index].y !== y) continue;
-          start != null ? start : start = line.starts[index];
-          end = line.ends[index];
+          const start = line.starts[index], end = line.ends[index];
+          const previous = fragments[fragments.length - 1];
+          if ((previous == null ? void 0 : previous.start.y) === start.y) previous.end = end;
+          else fragments.push({ start, end });
         }
-        if (!start || !end) return [];
-        range = { start, end };
+        const row = fragments.find((fragment) => fragment.start.y === y);
+        if (!row) return [];
+        range = row;
       }
       const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;
       if (seen.has(key)) return [];
@@ -20597,19 +20622,29 @@ var TerminalLinks = class {
       const link = {
         text: match.text,
         range,
+        decorations: continuation ? { pointerCursor: true, underline: false } : void 0,
         activate: (event) => {
           var _a;
           if (valid() && !((_a = this.pressed) == null ? void 0 : _a.handled)) void this.activate(match.text, event);
         },
         hover: () => {
-          if (valid()) this.hovered = link;
+          if (valid()) {
+            this.hovered = link;
+            this.showUnderlines(fragments);
+          }
         },
         leave: () => {
-          if (this.hovered === link) this.hovered = null;
+          if (this.hovered === link) {
+            this.hovered = null;
+            this.clearUnderlines();
+          }
         },
         dispose: () => {
           released = true;
-          if (this.hovered === link) this.hovered = null;
+          if (this.hovered === link) {
+            this.hovered = null;
+            this.clearUnderlines();
+          }
         }
       };
       this.validations.set(link, valid);
@@ -20674,6 +20709,7 @@ var TerminalLinks = class {
       hover: (event, text, range) => {
         const cell = cellAt(event);
         if (cell && currentOsc8Link(this.terminal, cell).uri === text) {
+          this.clearUnderlines();
           this.hovered = { text, range, activate: (event2) => {
             void this.activate(text, event2);
           } };
@@ -20681,6 +20717,7 @@ var TerminalLinks = class {
       },
       leave: () => {
         this.hovered = null;
+        this.clearUnderlines();
       }
     };
     this.cleanups.push(() => {
@@ -20741,6 +20778,7 @@ var TerminalLinks = class {
       this.revision++;
       this.hovered = null;
       this.pressed = null;
+      this.clearUnderlines();
     };
     container.addEventListener("mousedown", down, true);
     container.addEventListener("mousemove", move, true);
@@ -20755,6 +20793,7 @@ var TerminalLinks = class {
       if (this.hovered && ((_a = this.validations.get(this.hovered)) == null ? void 0 : _a()) === false) {
         this.hovered = null;
         this.pressed = null;
+        this.clearUnderlines();
       }
     });
     this.cleanups.push(() => {
@@ -20773,6 +20812,7 @@ var TerminalLinks = class {
     this.capturedPrimaryPress = false;
     this.hovered = null;
     this.pressed = null;
+    this.clearUnderlines();
     for (const cleanup of this.cleanups.splice(0)) cleanup();
   }
 };
