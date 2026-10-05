@@ -33,6 +33,20 @@ async function bufferText(): Promise<string> {
 	});
 }
 
+async function waitForTerminalText(text: string): Promise<void> {
+	try {
+		await browser.waitUntil(async () => (await bufferText()).includes(text), {
+			timeoutMsg: `Terminal did not render ${JSON.stringify(text)}`,
+		});
+	} catch (error) {
+		const focus = await browser.execute(() => ({
+			activeElement: document.activeElement?.className ?? null,
+			activeLeafType: (window as any).app.workspace.activeLeaf?.view?.getViewType() ?? null,
+		}));
+		throw new Error(`${String(error)}\nPID: ${await terminalPid()}\nFocus: ${JSON.stringify(focus)}\nTerminal buffer:\n${await bufferText()}`);
+	}
+}
+
 describe('[issue #57] terminal focus on explicit opening', function () {
 	before(async () => {
 		await browser.execute(async (executable: string) => {
@@ -93,13 +107,21 @@ describe('[issue #57] terminal focus on explicit opening', function () {
 			}, { timeoutMsg: `${command} did not replace the terminal process` });
 		}
 		await focusNote();
+		const previousPid = await terminalPid();
 		await browser.execute(async () => {
 			const plugin = (window as any).app.plugins.plugins.opencode;
 			await plugin.openTerminalWithSession('fixture-session', plugin.vaultRoot);
 		});
+		await browser.waitUntil(async () => {
+			const pid = await terminalPid();
+			return pid !== null && pid !== previousPid;
+		}, { timeoutMsg: 'Restore did not replace the terminal process' });
+		await waitForTerminalText('ARGS:["-s","fixture-session"]');
 		await waitForInputFocus();
-		await browser.keys(['r', 'e', 's', 't', 'o', 'r', 'e', 'd', 'Enter']);
-		await browser.waitUntil(async () => (await bufferText()).includes('restored'));
+		// The restored-session fixture deliberately leaves DEC graphics G0
+		// enabled to exercise restart reset. Uppercase survives that charset.
+		await browser.keys(['R', 'E', 'S', 'T', 'O', 'R', 'E', 'D', 'Enter']);
+		await waitForTerminalText('INPUT:"RESTORED');
 	});
 
 	it('does not steal note focus after opening, collapsing, or closing', async () => {
