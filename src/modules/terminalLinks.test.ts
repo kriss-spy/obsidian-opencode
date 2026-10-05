@@ -96,6 +96,14 @@ describe("public xterm provider and activation", () => {
 		expect(first[0].range).toEqual({ start: { x: 5, y: 1 }, end: { x: 12, y: 2 } });
 		expect(second[0].range).toEqual(first[0].range);
 	});
+	it("ignores null padding from an alternate-buffer viewport growth while retaining printed wrap spaces", () => {
+		const term = terminal([
+			{ chars: [...Array.from("See Notes/My "), ...Array(11).fill("")] },
+			{ chars: [...Array.from("note.md:42:8"), ...Array(12).fill("")], wrapped: true },
+		]);
+		const provider = new TerminalLinks(term, options());
+		expect(links(provider, 2)[0]).toMatchObject({ text: "Notes/My note.md:42:8", range: { start: { x: 5, y: 1 }, end: { x: 12, y: 2 } } });
+	});
 	it("maps CJK, surrogate pairs, combining chars and early wide wraps to cells", () => {
 		const term = terminal([
 			{ chars: ["中", "", "文", "", "/", ""] , widths: [2, 0, 2, 0, 1, 1] },

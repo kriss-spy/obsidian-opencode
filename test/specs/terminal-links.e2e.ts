@@ -5,16 +5,17 @@ import { Key } from "webdriverio";
 const notePath = "Terminal links/中文 My note.md";
 const stub = path.resolve(`test/fixtures/opencode-stub${process.platform === "win32" ? ".cmd" : ""}`);
 
-async function render(text: string, mouse = false): Promise<void> {
-	await browser.executeAsync((text: string, mouse: boolean, done: () => void) => {
+async function render(text: string, mouse = false, wrap = false): Promise<void> {
+	await browser.executeAsync((text: string, mouse: boolean, wrap: boolean, done: () => void) => {
 		const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
 		view.terminal.clearSelection();
-		view.terminal.resize(24, 12);
+		view.fitAddon.fit();
+			if (wrap) text = " ".repeat(Math.max(0, view.terminal.cols - 12)) + text;
 		view.terminal.write(`\x1bc\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l${mouse ? "\x1b[?1000h\x1b[?1006h" : ""}${text}`, () => {
 			// xterm buffers the render after parsing; use its actual painted geometry.
 			requestAnimationFrame(() => requestAnimationFrame(() => done()));
 		});
-	}, text, mouse);
+	}, text, mouse, wrap);
 }
 
 async function linkPoint(text: string, end = false): Promise<{ x: number; y: number; range: any }> {
@@ -112,7 +113,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 
 	it("opens wrapped space/Unicode note paths and cursor locations while preserving terminal leaf/PTY", async function () {
 		const text = `${notePath}:3:5`;
-		await render(`Agent: \`${text}\``);
+		await render(`Agent: \`${text}\``, false, true);
 		const point = await linkPoint(text, true);
 		expect(point.range.end.y).toBeGreaterThan(point.range.start.y);
 		await clickLink(text, false, true);

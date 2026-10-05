@@ -140,9 +140,10 @@ function logicalLine(terminal: Terminal, y: number): LogicalLine | null {
 		if (row - first > 128) return null;
 		const next = buffer.getLine(row + 1);
 		let length = line.length;
-		if (!next?.isWrapped) {
-			while (length > 0 && !line.getCell(length - 1)?.getChars()) length--;
-		}
+		// In the alternate buffer xterm preserves old wraps when the viewport
+		// grows, padding the formerly full row with empty cells. Printed spaces
+		// have chars=" "; only null padding must be omitted from the logical text.
+		while (length > 0 && !line.getCell(length - 1)?.getChars()) length--;
 		for (let col = 0; col < length; col++) {
 			const cell = line.getCell(col);
 			if (!cell || cell.getWidth() === 0) continue;
