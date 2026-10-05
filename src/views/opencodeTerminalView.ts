@@ -107,6 +107,15 @@ export class OpencodeTerminalView extends ItemView {
 		});
 	}
 
+	focusTerminal(): void {
+		// revealLeaf has finished loading the view. Focus immediately so later
+		// note navigation, sidebar collapse, and PTY startup cannot steal focus.
+		if (this.closing || this.app.workspace.getActiveViewOfType(OpencodeTerminalView) !== this) return;
+		const container = this.container;
+		if (!container?.isConnected || container.clientWidth === 0 || container.clientHeight === 0) return;
+		this.terminal?.focus();
+	}
+
 	async onOpen() {
 		const terminalCwd = this.plugin.sessionCwd
 			|| this.plugin.settings.defaultWorkingDirectory
@@ -636,11 +645,6 @@ export class OpencodeTerminalView extends ItemView {
 			container.removeEventListener('drop', dropHandler, true);
 		});
 
-		window.setTimeout(() => {
-			if (this.terminal) {
-				this.terminal.focus();
-			}
-		}, 600);
 	}
 
 	async restartPty(): Promise<void> {

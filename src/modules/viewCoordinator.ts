@@ -5,6 +5,10 @@ export interface ViewCoordinatorConfig {
 	conversationViewType: string;
 }
 
+interface TerminalFocusView {
+	focusTerminal(): void;
+}
+
 export class ViewCoordinator {
 	constructor(
 		private workspace: Workspace,
@@ -20,7 +24,7 @@ export class ViewCoordinator {
 				await leaf.setViewState({ type: this.config.terminalViewType, active: true });
 			}
 		}
-		if (leaf) await this.workspace.revealLeaf(leaf);
+		if (leaf) await this.revealTerminal(leaf);
 		return leaf;
 	}
 
@@ -55,7 +59,7 @@ export class ViewCoordinator {
 					await leaf.setViewState({ type: this.config.terminalViewType, active: true });
 				}
 			}
-			if (leaf) await this.workspace.revealLeaf(leaf);
+			if (leaf) await this.revealTerminal(leaf);
 			return leaf;
 		}
 	}
@@ -68,18 +72,26 @@ export class ViewCoordinator {
 	async openOrRestartTerminal(restartFn: () => void | Promise<void>): Promise<WorkspaceLeaf | null> {
 		let leaf = this.workspace.getLeavesOfType(this.config.terminalViewType)[0];
 		if (leaf) {
+			// Reveal and focus before the asynchronous restart. Finishing a slow
+			// process replacement must not pull the user back from another note.
+			await this.revealTerminal(leaf);
 			await restartFn();
-			await this.workspace.revealLeaf(leaf);
 			return leaf;
 		} else {
 			const rightLeaf = this.workspace.getRightLeaf(false);
 			if (rightLeaf) {
 				await rightLeaf.setViewState({ type: this.config.terminalViewType, active: true });
-				await this.workspace.revealLeaf(rightLeaf);
+				await this.revealTerminal(rightLeaf);
 				return rightLeaf;
 			}
 		}
 		return null;
+	}
+
+	private async revealTerminal(leaf: WorkspaceLeaf): Promise<void> {
+		await this.workspace.revealLeaf(leaf);
+		const view = leaf.view as unknown as Partial<TerminalFocusView>;
+		view.focusTerminal?.();
 	}
 
 }
