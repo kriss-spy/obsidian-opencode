@@ -163,7 +163,7 @@ function logicalLine(terminal: Terminal, y: number): LogicalLine | null {
 	return result;
 }
 
-interface LinkLine { line: LogicalLine; current(): boolean; continuation?: "note" | "web"; suffix?: ILink["range"] }
+interface LinkLine { line: LogicalLine; current(): boolean; continuation?: "note" | "web"; suffix?: ILink["range"]; blocked?: boolean }
 
 /** Join URL tokens only within a bounded, consistently indented TUI wrap. */
 function wrappedWebLines(terminal: Terminal, y: number): LinkLine[] {
@@ -202,9 +202,9 @@ function wrappedWebLines(terminal: Terminal, y: number): LinkLine[] {
 			sources.push({ y: row, text: next.text });
 			row = next.ends[next.ends.length - 1].y + 1;
 		}
-		if (!bounded || sources.length < 2 || line.ends[line.ends.length - 1].y < y || !safeWebUrl(line.text)) continue;
+		if (bounded && (sources.length < 2 || line.ends[line.ends.length - 1].y < y || !safeWebUrl(line.text))) continue;
 		const following = logicalLine(terminal, row)?.text;
-		result.push({ line, continuation: "web", suffix: { start: line.starts[0], end: line.ends[line.ends.length - 1] },
+		result.push({ line, continuation: "web", blocked: !bounded, suffix: { start: line.starts[0], end: line.ends[line.ends.length - 1] },
 			current: () => sources.every(source => logicalLine(terminal, source.y)?.text === source.text) && logicalLine(terminal, row)?.text === following });
 	}
 	return result;
@@ -281,7 +281,7 @@ export class TerminalLinks implements ILinkProvider {
 		const lines = [...wrappedWebLines(this.terminal, y), ...linkLines(this.terminal, y)];
 		const suffixes = lines.flatMap(line => line.suffix ? [line.suffix] : []);
 		const before = (a: IBufferCellPosition, b: IBufferCellPosition) => a.y < b.y || (a.y === b.y && a.x <= b.x);
-		const links = lines.flatMap(({ line, current, continuation }) => findTerminalLinks(line.text, this.options).flatMap(match => {
+		const links = lines.flatMap(({ line, current, continuation, blocked }) => blocked ? [] : findTerminalLinks(line.text, this.options).flatMap(match => {
 			const range = { start: line.starts[match.start], end: line.ends[match.end - 1] };
 			if (continuation && (range.start.y === range.end.y || (continuation === "note" ? !match.note : match.note))) return [];
 			if (!continuation && suffixes.some(suffix => before(range.start, suffix.end) && before(suffix.start, range.end))) return [];

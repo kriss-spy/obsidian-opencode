@@ -149,6 +149,17 @@ A read-only diagnostic in the running cloudnotes vault (Obsidian 1.14.4, install
 
 Real pointer tests used a fresh vault/profile under the shared app-test lock. The broader app suite was not repeated for this follow-up; the earlier full-focus-sequence failures remain unresolved.
 
+### HTTP wrap follow-up (2026-10-05)
+
+The saved cloudnotes session `ses_ef36ef203ffeRIUA8l2cTne6eF` reproduced a 142-character HTTP(S) address split across six OpenCode-managed hard rows. Before the fix, a real Ctrl+click attempted to open only `https://resources.anthropic/`. The complete address returned HTTP 200.
+
+- Production build/typechecking and the full unit suite passed: 283 passed, 5 platform-only skipped.
+- Final isolated Obsidian 1.12.7 pointer checks passed (3 tests): existing wrapped-note navigation, first/middle/last HTTP-row clicks with no PTY input leakage, and the saved session rendered by installed OpenCode 2.0.22. Each saved-session click delivered the exact complete address to the browser opener; only that external side effect was intercepted.
+- Unit regressions cover code-block, bullet and bordered-message indentation; hostname, percent-escape, query and fragment splits; native/hard-wrap combinations; stale continuations; independent short URLs; and suppression of partial targets beyond the row/length bounds. Standards and Spec reviews cleared.
+- Tested and installed `main.js` SHA-256: `2a5ee807de4a1c696ad4ac8a8825346488981cb85ad2ad5f4c6505da9a32f3bf`.
+
+All app runs used fresh vaults/profiles under the shared lock. The saved-session diagnostic was temporary and removed after verification; its pointer evidence is in `/tmp/opencode-wrapped-url-fixed/evidence.json`. The broader app suite and other platforms were not repeated. The documented ambiguity of a filled URL row followed by a single-word row remains.
+
 ## WSL2/X410 evidence
 
 On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:

@@ -128,6 +128,17 @@ describe("public xterm provider and activation", () => {
 		expect(links(provider, 1).map(link => link.text)).toEqual(["https://example.com/a%"]);
 		expect(links(provider, 2)).toEqual([]);
 	});
+	it("blocks partial first-row URLs when a recognized continuation exceeds either bound", () => {
+		for (const fragments of [
+			["https://example.com/", ...Array(32).fill("continued/")],
+			["https://example.com/", "x".repeat(4100)],
+		]) {
+			const term = terminal(fragments.map(fragment => ({ chars: Array.from(`    ${fragment}`.padEnd(25)) })));
+			Object.assign(term, { cols: 25 });
+			Object.assign(term.modes, { mouseTrackingMode: "any" });
+			expect(links(new TerminalLinks(term, options()), 1)).toEqual([]);
+		}
+	});
 	it("reconnects OpenCode's indented hard-row path layout using exact indexed notes", () => {
 		const note = "study/AI/explore AI/agent/subjects/harness engineering/harness engineering.md";
 		const rows = [

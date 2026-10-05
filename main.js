@@ -20477,11 +20477,12 @@ function wrappedWebLines(terminal, y) {
       sources.push({ y: row, text: next.text });
       row = next.ends[next.ends.length - 1].y + 1;
     }
-    if (!bounded || sources.length < 2 || line.ends[line.ends.length - 1].y < y || !safeWebUrl(line.text)) continue;
+    if (bounded && (sources.length < 2 || line.ends[line.ends.length - 1].y < y || !safeWebUrl(line.text))) continue;
     const following = (_e = logicalLine(terminal, row)) == null ? void 0 : _e.text;
     result.push({
       line,
       continuation: "web",
+      blocked: !bounded,
       suffix: { start: line.starts[0], end: line.ends[line.ends.length - 1] },
       current: () => {
         var _a2;
@@ -20568,7 +20569,7 @@ var TerminalLinks = class {
     const lines = [...wrappedWebLines(this.terminal, y), ...linkLines(this.terminal, y)];
     const suffixes = lines.flatMap((line) => line.suffix ? [line.suffix] : []);
     const before = (a, b) => a.y < b.y || a.y === b.y && a.x <= b.x;
-    const links = lines.flatMap(({ line, current, continuation }) => findTerminalLinks(line.text, this.options).flatMap((match) => {
+    const links = lines.flatMap(({ line, current, continuation, blocked }) => blocked ? [] : findTerminalLinks(line.text, this.options).flatMap((match) => {
       const range = { start: line.starts[match.start], end: line.ends[match.end - 1] };
       if (continuation && (range.start.y === range.end.y || (continuation === "note" ? !match.note : match.note))) return [];
       if (!continuation && suffixes.some((suffix) => before(range.start, suffix.end) && before(suffix.start, range.end))) return [];
