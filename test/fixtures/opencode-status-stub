@@ -1,0 +1,45 @@
+#!/usr/bin/env node
+
+// V2-shaped, process-boundary status fixture. State lives outside the isolated vault.
+const { readFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+if (args[0] === "--help") {
+	console.log("DESCRIPTION\n  OpenCode command line interface");
+	process.exit(0);
+}
+const phase = JSON.parse(readFileSync(process.env.OBSIDIAN_OPENCODE_STATUS_STATE, "utf8")).phase;
+const running = phase === "running" || phase === "new-turn";
+const session = {
+	id: "fixture-status-session", projectID: "fixture-project",
+	location: { directory: process.cwd() }, time: { created: 1, updated: Date.now() },
+};
+const user = { id: "msg_user", type: "user", time: { created: 1 }, text: "Edit Smoke.md" };
+const edit = {
+	id: "msg_edit", type: "assistant", time: { created: 2, completed: 3 },
+	content: [{ type: "tool", id: "tool_edit", name: "edit", executed: true, state: {
+		status: "completed", input: {}, content: [], metadata: { files: [{
+			file: "Smoke.md", patch: "@@", status: "modified", additions: 1, deletions: 0,
+		}] },
+	} }],
+};
+const messages = phase === "running" ? [user] : [
+	{ id: "msg_idle", type: "idle", outcome: "succeeded" }, edit, user,
+];
+if (phase === "new-turn" || phase === "new-turn-idle") {
+	messages.unshift({ ...user, id: "msg_new_user", text: "Answer without editing" });
+}
+if (phase === "new-turn-idle") {
+	messages.unshift({ id: "msg_new_idle", type: "idle", outcome: "succeeded" });
+}
+const query = args[2];
+let response;
+if (query === "/api/session/active") response = { data: running ? { [session.id]: { type: "running" } } : {} };
+else if (query?.startsWith("/api/session?")) response = { data: [session], cursor: {} };
+else if (query === `/api/session/${session.id}`) response = { data: session };
+else if (query === `/api/session/${session.id}/diff?context=0`) response = { data: [] };
+else if (query?.startsWith(`/api/session/${session.id}/message?`)) response = { data: messages, cursor: {} };
+else {
+	console.error(`Unexpected status fixture command: ${JSON.stringify(args)}`);
+	process.exit(1);
+}
+console.log(JSON.stringify(response));

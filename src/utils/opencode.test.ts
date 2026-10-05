@@ -4,6 +4,7 @@ import { ChildProcess, execFile, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { OpencodeActivitySource, OpencodeStatusTracker } from '../modules/opencodeStatus';
 
 vi.mock('obsidian', () => ({
 	Notice: class {
@@ -345,6 +346,139 @@ describe('OpencodeClient listSessions', () => {
 			expect.any(Object),
 			expect.any(Function),
 		);
+	});
+
+	const editMessage = (files: unknown[], status = 'completed') => ({
+		id: 'msg_edit', type: 'assistant', time: { created: 2 },
+		content: [{ type: 'tool', name: 'edit', state: { status, metadata: { files } } }],
+	});
+	const userMessage = { id: 'msg_user', type: 'user', time: { created: 1 }, text: 'Edit the note' };
+	function mockApi(responses: Record<string, unknown>): void {
+		mockExecFile.mockImplementation((_cmd, args, _opts, callback) => {
+			const query = Array.isArray(args) ? args[2] : undefined;
+			if (typeof query !== 'string' || !(query in responses)) throw new Error(`Unexpected API query: ${query}`);
+			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(null, JSON.stringify(responses[query]), '');
+			return {} as unknown as ChildProcess;
+		});
+	}
+
+	it('retains a completed tool edit warning when the real V2 message shape has an empty diff (#21)', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+		let active = [{ id: 'ses_1', directory: '/vault' }];
+		mockApi({
+			'/api/session/ses_1/diff?context=0': { data: [] },
+			'/api/session/ses_1/message?limit=20&order=desc': { data: [
+				{ id: 'msg_idle', type: 'idle', outcome: 'succeeded' },
+				editMessage([{ file: '/vault/Notes/plan.md', patch: '@@', status: 'modified', additions: 1, deletions: 0 }]),
+				userMessage,
+			], cursor: {} },
+		});
+		const client = new OpencodeClient('opencode', '/vault');
+		const source = new OpencodeActivitySource({
+			listActiveSessions: async () => active,
+			listSessionChangedFiles: (id) => client.listSessionChangedFiles(id),
+		});
+		const tracker = new OpencodeStatusTracker();
+		tracker.updateActiveFile('/vault/Notes/plan.md');
+		tracker.updateSessions(await source.read());
+		expect(tracker.status.kind).toBe('touched');
+		active = [];
+		tracker.updateSessions(await source.read());
+		expect(tracker.status).toEqual({ kind: 'touched', tooltip: 'OpenCode changed this note' });
+		tracker.updateSessions(await source.read());
+		expect(tracker.status.kind).toBe('touched');
+	});
+
+	it('ignores previous-turn edits and unsuccessful or invalid metadata', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+		mockApi({
+			'/api/session/ses_1/diff?context=0': { data: [] },
+			'/api/session/ses_1/message?limit=20&order=desc': { data: [
+				editMessage([{ file: 'failed.md' }], 'error'),
+				editMessage([{ file: 'running.md' }], 'running'),
+				editMessage([{ file: '' }, { file: 123 }, null, { file: 'current.md' }, { file: 'current.md' }]),
+				userMessage,
+				editMessage([{ file: 'old.md' }]),
+			], cursor: { next: 'older' } },
+		});
+		await expect(new OpencodeClient('opencode', '/vault').listSessionChangedFiles('ses_1'))
+			.resolves.toEqual(['current.md']);
+		expect(mockExecFile).toHaveBeenCalledTimes(2);
+	});
+
+	it('starts fresh when the same session begins a new turn with no edits', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+		let active = [{ id: 'ses_1', directory: '/vault' }];
+		const page = { data: [editMessage([{ file: 'old.md' }]), userMessage], cursor: {} };
+		mockApi({
+			'/api/session/ses_1/diff?context=0': { data: [] },
+			'/api/session/ses_1/message?limit=20&order=desc': page,
+		});
+		const client = new OpencodeClient('opencode', '/vault');
+		const source = new OpencodeActivitySource({
+			listActiveSessions: async () => active,
+			listSessionChangedFiles: (id) => client.listSessionChangedFiles(id),
+		});
+		await source.read();
+		active = [];
+		expect((await source.read())[0]?.files).toEqual(['old.md']);
+		page.data.unshift({ ...userMessage, id: 'msg_new' });
+		active = [{ id: 'ses_1', directory: '/vault' }];
+		expect(await source.read()).toEqual([{ id: 'ses_1', directory: '/vault', files: [], running: true }]);
+		active = [];
+		expect(await source.read()).toEqual([]);
+	});
+
+	it('finds edits across message pages without combining a cursor with order', async () => {
+		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
+		mockApi({
+			'/api/session/ses_1/diff?context=0': { data: [] },
+			'/api/session/ses_1/message?limit=20&order=desc': { data: [editMessage([{ file: 'first.md' }])], cursor: { next: 'next/page' } },
+			'/api/session/ses_1/message?limit=20&cursor=next%2Fpage': { data: [editMessage([{ file: 'second.md' }]), userMessage], cursor: {} },
+		});
+		await expect(new OpencodeClient('opencode', '/vault').listSessionChangedFiles('ses_1'))
+			.resolves.toEqual(['first.md', 'second.md']);
+	});
+
+	it('preserves edits before an in-turn synthetic continuation and excludes read tools and older idle turns', async () => {
+		const read = editMessage([{ file: 'read-only.md' }]);
+		read.content[0]!.name = 'read';
+		mockApi({
+			'/api/session/ses_1/diff?context=0': { data: [] },
+			'/api/session/ses_1/message?limit=20&order=desc': { data: [
+				{ type: 'idle', outcome: 'succeeded' }, read,
+				{ type: 'synthetic', text: 'Continue after compaction' },
+				editMessage([{ file: 'current.md' }]),
+				{ type: 'idle', outcome: 'succeeded' },
+				editMessage([{ file: 'old.md' }]),
+			], cursor: {} },
+		});
+		await expect(new OpencodeClient('opencode', '/vault').listSessionChangedFiles('ses_1'))
+			.resolves.toEqual(['current.md']);
+	});
+
+	it.each([
+		{ data: [{}] },
+		{ data: [{ type: 'assistant' }] },
+		{ data: [], cursor: { next: 123 } },
+		{ data: [], cursor: 'invalid' },
+	])('rejects malformed message fallback data (%j)', async (page) => {
+		mockApi({
+			'/api/session/ses_1/diff?context=0': { data: [] },
+			'/api/session/ses_1/message?limit=20&order=desc': page,
+		});
+		await expect(new OpencodeClient('opencode', '/vault').listSessionChangedFiles('ses_1'))
+			.rejects.toBeInstanceOf(MalformedCliOutputError);
+	});
+
+	it('rejects repeated message cursors', async () => {
+		mockApi({
+			'/api/session/ses_1/diff?context=0': { data: [] },
+			'/api/session/ses_1/message?limit=20&order=desc': { data: [], cursor: { next: 'repeat' } },
+			'/api/session/ses_1/message?limit=20&cursor=repeat': { data: [], cursor: { next: 'repeat' } },
+		});
+		await expect(new OpencodeClient('opencode', '/vault').listSessionChangedFiles('ses_1'))
+			.rejects.toBeInstanceOf(MalformedCliOutputError);
 	});
 
 	it('finds sessions updated since status tracking began', async () => {
