@@ -166,8 +166,9 @@ export class TerminalLinks implements ILinkProvider {
 	private disposed = false;
 	private revision = 0;
 	private hovered: ILink | null = null;
+	private capturedPrimaryPress = false;
 	private validations = new WeakMap<ILink, () => boolean>();
-	private pressed: { link: ILink; x: number; y: number; modified: boolean; dragged: boolean } | null = null;
+	private pressed: { link: ILink; x: number; y: number; modified: boolean; dragged: boolean; handled: boolean } | null = null;
 	private cleanups: Array<() => void> = [];
 
 	constructor(private terminal: Terminal, private options: TerminalLinkOptions) {}
@@ -188,7 +189,7 @@ export class TerminalLinks implements ILinkProvider {
 				text: match.text,
 				range: { start: line.starts[match.start], end: line.ends[match.end - 1] },
 				activate: event => {
-					if (valid()) void this.activate(match.text, event);
+					if (valid() && !this.pressed?.handled) void this.activate(match.text, event);
 				},
 				hover: () => { if (valid()) this.hovered = link; },
 				leave: () => { if (this.hovered === link) this.hovered = null; },
@@ -231,49 +232,76 @@ export class TerminalLinks implements ILinkProvider {
 		// xterm's OSC 8 provider has priority. Give it the same guarded opener.
 		const previous = this.terminal.options.linkHandler;
 		this.terminal.options.linkHandler = {
-			activate: (event, text) => { void this.activate(text, event); },
+			activate: (event, text) => { if (!this.pressed?.handled) void this.activate(text, event); },
 			hover: (_event, text, range) => {
 				this.hovered = { text, range, activate: event => { void this.activate(text, event); } };
 			},
 			leave: () => { this.hovered = null; },
 		};
 		this.cleanups.push(() => { this.terminal.options.linkHandler = previous; });
-		const atLink = (event: MouseEvent, link: ILink): boolean => {
+		const cellAt = (event: MouseEvent): IBufferCellPosition | null => {
 			const screen = this.terminal.element?.querySelector(".xterm-screen");
-			if (!screen || !screen.contains(event.target as Node)) return false;
+			if (!screen || !screen.contains(event.target as Node)) return null;
 			const rect = screen.getBoundingClientRect();
-			if (!rect.width || !rect.height) return false;
+			if (!rect.width || !rect.height) return null;
 			const x = Math.floor((event.clientX - rect.left) / (rect.width / this.terminal.cols)) + 1;
 			const row = Math.floor((event.clientY - rect.top) / (rect.height / this.terminal.rows));
-			if (x < 1 || x > this.terminal.cols || row < 0 || row >= this.terminal.rows) return false;
-			const y = row + this.terminal.buffer.active.viewportY + 1;
-			return y >= link.range.start.y && y <= link.range.end.y &&
-				(y !== link.range.start.y || x >= link.range.start.x) &&
-				(y !== link.range.end.y || x <= link.range.end.x);
+			if (x < 1 || x > this.terminal.cols || row < 0 || row >= this.terminal.rows) return null;
+			return { x, y: row + this.terminal.buffer.active.viewportY + 1 };
+		};
+		const contains = (link: ILink, cell: IBufferCellPosition): boolean => cell.y >= link.range.start.y && cell.y <= link.range.end.y &&
+			(cell.y !== link.range.start.y || cell.x >= link.range.start.x) &&
+			(cell.y !== link.range.end.y || cell.x <= link.range.end.x);
+		const linkAt = (event: MouseEvent): ILink | null => {
+			const cell = cellAt(event);
+			if (!cell) return null;
+			// OSC 8 remains owned by xterm's built-in provider. Textual links are
+			// looked up fresh: xterm can retain old active-line replies after
+			// mouseleave followed by a redraw while the pointer is outside.
+			if (this.hovered && !this.validations.has(this.hovered) && contains(this.hovered, cell)) return this.hovered;
+			let result: ILink | null = null;
+			this.provideLinks(cell.y, links => { result = links?.find(link => contains(link, cell)) ?? null; });
+			return result;
 		};
 		const down = (event: MouseEvent) => {
 			this.pressed = null;
-			const link = this.hovered;
-			if (event.button !== 0 || !link || !atLink(event, link) || this.terminal.hasSelection()) return;
+			this.capturedPrimaryPress = false;
+			const link = linkAt(event);
+			if (event.button !== 0 || !link || this.terminal.hasSelection()) return;
 			const modified = this.options.isModEvent(event);
-			this.pressed = { link, x: event.clientX, y: event.clientY, modified, dragged: false };
-			if (modified) { event.preventDefault(); event.stopImmediatePropagation(); }
+			this.pressed = { link, x: event.clientX, y: event.clientY, modified, dragged: false, handled: false };
+			if (modified) { this.capturedPrimaryPress = true; event.preventDefault(); event.stopImmediatePropagation(); }
 		};
 		const move = (event: MouseEvent) => {
 			if (this.pressed && (Math.abs(event.clientX - this.pressed.x) > 3 || Math.abs(event.clientY - this.pressed.y) > 3)) this.pressed.dragged = true;
 		};
 		const up = (event: MouseEvent) => {
+			if (event.button !== 0) return;
+			const owned = this.capturedPrimaryPress;
+			if (owned) {
+				this.capturedPrimaryPress = false;
+				event.preventDefault();
+				event.stopImmediatePropagation();
+			}
 			const pressed = this.pressed;
-			if (!pressed?.modified || event.button !== 0) return;
-			event.preventDefault();
-			event.stopImmediatePropagation();
-			if (!pressed.dragged && this.hovered === pressed.link && atLink(event, pressed.link)) pressed.link.activate(event, pressed.link.text);
-			this.pressed = null;
+			if (!pressed) return;
+			if (!owned && this.terminal.modes.mouseTrackingMode !== "none") return;
+			const current = linkAt(event);
+			if (!pressed.dragged && current && current.text === pressed.link.text &&
+				current.range.start.x === pressed.link.range.start.x && current.range.start.y === pressed.link.range.start.y &&
+				current.range.end.x === pressed.link.range.end.x && current.range.end.y === pressed.link.range.end.y) {
+				// Ordinary releases still reach xterm's selection service. Suppress
+				// only its duplicate activation callback, not the mouse event.
+				pressed.handled = true;
+				void this.activate(current.text, event);
+			}
+			if (pressed.modified) this.pressed = null;
 		};
 		const clear = () => { this.revision++; this.hovered = null; this.pressed = null; };
 		container.addEventListener("mousedown", down, true);
 		container.addEventListener("mousemove", move, true);
-		container.addEventListener("mouseup", up, true);
+		const ownerDocument = container.ownerDocument;
+		ownerDocument.addEventListener("mouseup", up, true);
 		container.addEventListener("mouseleave", clear);
 		const resize = this.terminal.onResize(clear);
 		const scroll = this.terminal.onScroll(clear);
@@ -290,7 +318,7 @@ export class TerminalLinks implements ILinkProvider {
 		this.cleanups.push(() => {
 			container.removeEventListener("mousedown", down, true);
 			container.removeEventListener("mousemove", move, true);
-			container.removeEventListener("mouseup", up, true);
+			ownerDocument.removeEventListener("mouseup", up, true);
 			container.removeEventListener("mouseleave", clear);
 			resize.dispose(); scroll.dispose(); write.dispose();
 		});
@@ -299,6 +327,7 @@ export class TerminalLinks implements ILinkProvider {
 	dispose(): void {
 		if (this.disposed) return;
 		this.disposed = true;
+		this.capturedPrimaryPress = false;
 		this.hovered = null;
 		this.pressed = null;
 		for (const cleanup of this.cleanups.splice(0)) cleanup();

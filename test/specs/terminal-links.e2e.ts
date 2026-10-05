@@ -6,6 +6,7 @@ const notePath = "Terminal links/中文 My note.md";
 const stub = path.resolve(`test/fixtures/opencode-stub${process.platform === "win32" ? ".cmd" : ""}`);
 
 async function render(text: string, mouse = false, wrap = false): Promise<void> {
+	await browser.action("pointer").move({ x: 10, y: 10, origin: "viewport" }).perform();
 	await browser.executeAsync((text: string, mouse: boolean, wrap: boolean, done: () => void) => {
 		const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
 		view.terminal.clearSelection();
@@ -61,6 +62,22 @@ async function clickLink(text: string, modified = false, end = false): Promise<v
 	} finally {
 		await browser.releaseActions();
 	}
+}
+
+async function activationState(): Promise<string> {
+	return JSON.stringify(await browser.execute(() => {
+		const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0]?.view;
+		const links = view?.terminalLinks;
+		return { hovered: links?.hovered?.text, pressed: links?.pressed && { text: links.pressed.link.text, dragged: links.pressed.dragged, modified: links.pressed.modified, handled: links.pressed.handled },
+			selected: view?.terminal.hasSelection(), mouse: view?.terminal.modes.mouseTrackingMode, cols: view?.terminal.cols, rows: view?.terminal.rows,
+			external: (window as any).__terminalLinkExternal, input: (window as any).__terminalLinkInput,
+			activeFile: (window as any).app.workspace.getActiveFile()?.path, tabs: (window as any).app.workspace.getLeavesOfType("markdown").length };
+	}));
+}
+
+async function waitActivation(predicate: () => Promise<boolean>): Promise<void> {
+	try { await browser.waitUntil(predicate); }
+	catch (error) { throw new Error(`${String(error)} ${await activationState()}`); }
 }
 
 async function externalCalls(): Promise<string[]> {
@@ -134,7 +151,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		const tabCount = Number(await browser.execute(() => (window as any).app.workspace.getLeavesOfType("markdown").length));
 		await render(`Side terminal: ${absolute}`);
 		await clickLink(absolute, true, true);
-		await browser.waitUntil(() => browser.execute((tabCount: number) => (window as any).app.workspace.getLeavesOfType("markdown").length > tabCount, tabCount));
+		await waitActivation(() => browser.execute((tabCount: number) => (window as any).app.workspace.getLeavesOfType("markdown").length > tabCount, tabCount));
 		const cursor = await browser.execute(() => (window as any).app.workspace.activeLeaf.view.editor.getCursor());
 		expect(cursor.line).toBe(4);
 		expect(cursor.ch).toBe(0);
@@ -143,7 +160,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 	it("uses the safe external opener for web links", async function () {
 		await render("Agent response: https://github.com");
 		await clickLink("https://github.com");
-		await browser.waitUntil(async () => (await externalCalls()).includes("https://github.com/"));
+		await waitActivation(async () => (await externalCalls()).includes("https://github.com/"));
 	});
 
 	it("keeps ordinary TUI mouse input and takes only modifier-click link activation", async function () {
@@ -152,12 +169,12 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		await render("Side terminal: https://github.com", true);
 		await clickLink("https://github.com");
 		expect((await externalCalls()).length).toBe(before);
-		await browser.waitUntil(() => browser.execute(() => (window as any).__terminalLinkInput.some((data: string) => data.startsWith("\x1b[<"))));
+		await waitActivation(() => browser.execute(() => (window as any).__terminalLinkInput.some((data: string) => data.startsWith("\x1b[<"))));
 		// Stub echoes PTY input; redraw a stable side-terminal frame before activation.
 		await render("Side terminal: https://github.com", true);
 		await browser.execute(() => { (window as any).__terminalLinkInput = []; });
 		await clickLink("https://github.com", true);
-		await browser.waitUntil(async () => (await externalCalls()).length === before + 1);
+		await waitActivation(async () => (await externalCalls()).length === before + 1);
 		expect(await browser.execute(() => (window as any).__terminalLinkInput)).toEqual([]);
 	});
 
@@ -182,7 +199,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 			return { x: Math.round(rect.left + rect.width / terminal.cols / 2), y: Math.round(rect.top + rect.height / terminal.rows / 2) };
 		});
 		await browser.action("pointer").move({ ...point, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
-		await browser.waitUntil(async () => (await externalCalls()).length === before + 1);
+		await waitActivation(async () => (await externalCalls()).length === before + 1);
 		await render("\x1b]8;;javascript:alert(1)\x07unsafe label\x1b]8;;\x07");
 		await browser.action("pointer").move({ x: point.x + 2, y: point.y, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
 		expect((await externalCalls()).length).toBe(before + 1);

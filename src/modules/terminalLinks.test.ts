@@ -199,6 +199,10 @@ function interactionFixture(config = options()) {
 		onWriteParsed: (fn: () => void) => { subscriptions.set("write", fn); return { dispose: vi.fn() }; },
 	});
 	const container = {
+		ownerDocument: {
+			addEventListener: (name: string, callback: (event: MouseEvent) => void) => listeners.set(name, callback),
+			removeEventListener: (name: string) => listeners.delete(name),
+		},
 		addEventListener: (name: string, callback: (event: MouseEvent) => void) => listeners.set(name, callback),
 		removeEventListener: (name: string) => listeners.delete(name),
 	} as unknown as HTMLElement;
@@ -260,6 +264,30 @@ describe("mouse capture ownership and link lifecycle", () => {
 		context.mouse("mousedown", { ctrlKey: true });
 		context.mouse("mouseup", { ctrlKey: true });
 		expect(context.config.openExternal).toHaveBeenCalledExactlyOnceWith("https://github.com/");
+	});
+	it("hit-tests fresh terminal content without requiring a cached hover and activates once", () => {
+		const context = interactionFixture();
+		const down = context.mouse("mousedown");
+		const up = context.mouse("mouseup");
+		context.link.activate(event(), context.link.text); // xterm's later callback
+		expect(down.stopImmediatePropagation).not.toHaveBeenCalled();
+		expect(up.stopImmediatePropagation).not.toHaveBeenCalled();
+		expect(context.config.openExternal).toHaveBeenCalledExactlyOnceWith("https://github.com/");
+	});
+	it("consumes a captured modifier release after write/resize/scroll/mouseleave cancellation", () => {
+		for (const cause of ["write", "resize", "scroll", "mouseleave"]) {
+			const context = interactionFixture();
+			context.modes.mouseTrackingMode = "any";
+			context.mouse("mousedown", { ctrlKey: true });
+			if (cause === "write") Object.assign(context.term.buffer.active, { getLine: () => undefined });
+			if (cause === "mouseleave") context.mouse("mouseleave");
+			else context.subscriptions.get(cause)!();
+			const up = context.mouse("mouseup", { ctrlKey: true });
+			expect(up.stopImmediatePropagation).toHaveBeenCalledOnce();
+			expect(context.config.openExternal).not.toHaveBeenCalled();
+			// A subsequent unmatched release is not swallowed.
+			expect(context.mouse("mouseup").stopImmediatePropagation).not.toHaveBeenCalled();
+		}
 	});
 	it("cancels async note validation after resize/write/scroll and removes every handler on close", async () => {
 		for (const cause of ["resize", "write", "scroll"]) {
