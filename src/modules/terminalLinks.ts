@@ -163,7 +163,52 @@ function logicalLine(terminal: Terminal, y: number): LogicalLine | null {
 	return result;
 }
 
-interface LinkLine { line: LogicalLine; current(): boolean; continuation?: boolean; suffix?: ILink["range"] }
+interface LinkLine { line: LogicalLine; current(): boolean; continuation?: "note" | "web"; suffix?: ILink["range"] }
+
+/** Join URL tokens only within a bounded, consistently indented TUI wrap. */
+function wrappedWebLines(terminal: Terminal, y: number): LinkLine[] {
+	if (terminal.modes.mouseTrackingMode === "none") return [];
+	const result: LinkLine[] = [];
+	const content = (text: string) => text.replace(/ +[█▄▀▐▌┃│] *$/, "").trimEnd();
+	for (let first = Math.max(1, y - 31); first <= y; first++) {
+		const initial = logicalLine(terminal, first);
+		if (!initial || initial.starts[0]?.y !== first) continue;
+		const indent = /^(?: +[┃│] {2,}| {2,}(?:[-*•] )?)/.exec(initial.text)?.[0];
+		if (!indent) continue;
+		const start = /https?:\/\/[^\s<>"'`]+$/i.exec(content(initial.text));
+		if (!start || start.index < indent.length) continue;
+		let line: LogicalLine = { text: start[0], starts: initial.starts.slice(start.index, start.index + start[0].length), ends: initial.ends.slice(start.index, start.index + start[0].length) };
+		const sources = [{ y: first, text: initial.text }];
+		let row = initial.ends[initial.ends.length - 1].y + 1;
+		let bounded = true;
+		while (row <= terminal.buffer.active.length) {
+			const end = line.ends[line.ends.length - 1];
+			// OpenCode leaves a small right margin or wraps at URL separators.
+			// A short completed URL must not consume a following paragraph.
+			if (terminal.cols - end.x > 6 && !/[/.%?=&_-]$/.test(line.text)) break;
+			const next = logicalLine(terminal, row);
+			if (!next || next.starts[0]?.y !== row) break;
+			const prefix = indent.includes("┃") || indent.includes("│") ? indent : " ".repeat(indent.length);
+			const text = content(next.text);
+			if (!text.startsWith(prefix)) break;
+			const token = /^[^\s<>"'`]+/.exec(text.slice(prefix.length))?.[0];
+			if (!token || /^(?:[-*•]|[a-z][a-z\d+.-]*:\/\/)/i.test(token) ||
+				text.slice(prefix.length + token.length).replace(/^["'`\])},;.!?]+/, "").trim()) break;
+			if (terminal.cols - end.x > 6 && token.length <= terminal.cols - end.x - 4) break;
+			if (row >= first + 32 || line.text.length + token.length > 4096) { bounded = false; break; }
+			line = { text: line.text + token,
+				starts: [...line.starts, ...next.starts.slice(prefix.length, prefix.length + token.length)],
+				ends: [...line.ends, ...next.ends.slice(prefix.length, prefix.length + token.length)] };
+			sources.push({ y: row, text: next.text });
+			row = next.ends[next.ends.length - 1].y + 1;
+		}
+		if (!bounded || sources.length < 2 || line.ends[line.ends.length - 1].y < y || !safeWebUrl(line.text)) continue;
+		const following = logicalLine(terminal, row)?.text;
+		result.push({ line, continuation: "web", suffix: { start: line.starts[0], end: line.ends[line.ends.length - 1] },
+			current: () => sources.every(source => logicalLine(terminal, source.y)?.text === source.text) && logicalLine(terminal, row)?.text === following });
+	}
+	return result;
+}
 
 /** OpenCode lays out indented paragraphs itself, without xterm's wrap flag. */
 function linkLines(terminal: Terminal, y: number): LinkLine[] {
@@ -212,8 +257,8 @@ function linkLines(terminal: Terminal, y: number): LinkLine[] {
 			// Do not offer the root basename from a continuation of a longer
 			// path, even when that full path is missing or outside the vault.
 			const suffix = noteEnd && continuationStart ? { start: continuationStart, end: spaced.ends[noteEnd.index + noteEnd[0].length - 1] } : undefined;
-			result.push({ line: spaced, current, continuation: true, suffix });
-			if (joined.text !== spaced.text) result.push({ line: joined, current, continuation: true, suffix });
+			result.push({ line: spaced, current, continuation: "note", suffix });
+			if (joined.text !== spaced.text) result.push({ line: joined, current, continuation: "note", suffix });
 		}
 	}
 	return [...result, ordinary];
@@ -233,12 +278,12 @@ export class TerminalLinks implements ILinkProvider {
 	provideLinks(y: number, callback: (links: ILink[] | undefined) => void): void {
 		if (this.disposed) { callback(undefined); return; }
 		const seen = new Set<string>();
-		const lines = linkLines(this.terminal, y);
+		const lines = [...wrappedWebLines(this.terminal, y), ...linkLines(this.terminal, y)];
 		const suffixes = lines.flatMap(line => line.suffix ? [line.suffix] : []);
 		const before = (a: IBufferCellPosition, b: IBufferCellPosition) => a.y < b.y || (a.y === b.y && a.x <= b.x);
 		const links = lines.flatMap(({ line, current, continuation }) => findTerminalLinks(line.text, this.options).flatMap(match => {
 			const range = { start: line.starts[match.start], end: line.ends[match.end - 1] };
-			if (continuation && (!match.note || range.start.y === range.end.y)) return [];
+			if (continuation && (range.start.y === range.end.y || (continuation === "note" ? !match.note : match.note))) return [];
 			if (!continuation && suffixes.some(suffix => before(range.start, suffix.end) && before(suffix.start, range.end))) return [];
 			if (range.start.y > y || range.end.y < y) return [];
 			const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;

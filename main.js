@@ -20438,6 +20438,62 @@ function logicalLine(terminal, y) {
   }
   return result;
 }
+function wrappedWebLines(terminal, y) {
+  var _a, _b, _c, _d, _e;
+  if (terminal.modes.mouseTrackingMode === "none") return [];
+  const result = [];
+  const content = (text) => text.replace(/ +[█▄▀▐▌┃│] *$/, "").trimEnd();
+  for (let first = Math.max(1, y - 31); first <= y; first++) {
+    const initial = logicalLine(terminal, first);
+    if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first) continue;
+    const indent = (_b = /^(?: +[┃│] {2,}| {2,}(?:[-*•] )?)/.exec(initial.text)) == null ? void 0 : _b[0];
+    if (!indent) continue;
+    const start = /https?:\/\/[^\s<>"'`]+$/i.exec(content(initial.text));
+    if (!start || start.index < indent.length) continue;
+    let line = { text: start[0], starts: initial.starts.slice(start.index, start.index + start[0].length), ends: initial.ends.slice(start.index, start.index + start[0].length) };
+    const sources = [{ y: first, text: initial.text }];
+    let row = initial.ends[initial.ends.length - 1].y + 1;
+    let bounded = true;
+    while (row <= terminal.buffer.active.length) {
+      const end = line.ends[line.ends.length - 1];
+      if (terminal.cols - end.x > 6 && !/[/.%?=&_-]$/.test(line.text)) break;
+      const next = logicalLine(terminal, row);
+      if (!next || ((_c = next.starts[0]) == null ? void 0 : _c.y) !== row) break;
+      const prefix = indent.includes("\u2503") || indent.includes("\u2502") ? indent : " ".repeat(indent.length);
+      const text = content(next.text);
+      if (!text.startsWith(prefix)) break;
+      const token = (_d = /^[^\s<>"'`]+/.exec(text.slice(prefix.length))) == null ? void 0 : _d[0];
+      if (!token || /^(?:[-*•]|[a-z][a-z\d+.-]*:\/\/)/i.test(token) || text.slice(prefix.length + token.length).replace(/^["'`\])},;.!?]+/, "").trim()) break;
+      if (terminal.cols - end.x > 6 && token.length <= terminal.cols - end.x - 4) break;
+      if (row >= first + 32 || line.text.length + token.length > 4096) {
+        bounded = false;
+        break;
+      }
+      line = {
+        text: line.text + token,
+        starts: [...line.starts, ...next.starts.slice(prefix.length, prefix.length + token.length)],
+        ends: [...line.ends, ...next.ends.slice(prefix.length, prefix.length + token.length)]
+      };
+      sources.push({ y: row, text: next.text });
+      row = next.ends[next.ends.length - 1].y + 1;
+    }
+    if (!bounded || sources.length < 2 || line.ends[line.ends.length - 1].y < y || !safeWebUrl(line.text)) continue;
+    const following = (_e = logicalLine(terminal, row)) == null ? void 0 : _e.text;
+    result.push({
+      line,
+      continuation: "web",
+      suffix: { start: line.starts[0], end: line.ends[line.ends.length - 1] },
+      current: () => {
+        var _a2;
+        return sources.every((source) => {
+          var _a3;
+          return ((_a3 = logicalLine(terminal, source.y)) == null ? void 0 : _a3.text) === source.text;
+        }) && ((_a2 = logicalLine(terminal, row)) == null ? void 0 : _a2.text) === following;
+      }
+    });
+  }
+  return result;
+}
 function linkLines(terminal, y) {
   var _a, _b, _c, _d;
   const normal = logicalLine(terminal, y);
@@ -20485,8 +20541,8 @@ function linkLines(terminal, y) {
       });
       const noteEnd = pathPrefix ? /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/i.exec(spaced.text) : null;
       const suffix = noteEnd && continuationStart ? { start: continuationStart, end: spaced.ends[noteEnd.index + noteEnd[0].length - 1] } : void 0;
-      result.push({ line: spaced, current, continuation: true, suffix });
-      if (joined.text !== spaced.text) result.push({ line: joined, current, continuation: true, suffix });
+      result.push({ line: spaced, current, continuation: "note", suffix });
+      if (joined.text !== spaced.text) result.push({ line: joined, current, continuation: "note", suffix });
     }
   }
   return [...result, ordinary];
@@ -20509,12 +20565,12 @@ var TerminalLinks = class {
       return;
     }
     const seen = /* @__PURE__ */ new Set();
-    const lines = linkLines(this.terminal, y);
+    const lines = [...wrappedWebLines(this.terminal, y), ...linkLines(this.terminal, y)];
     const suffixes = lines.flatMap((line) => line.suffix ? [line.suffix] : []);
     const before = (a, b) => a.y < b.y || a.y === b.y && a.x <= b.x;
     const links = lines.flatMap(({ line, current, continuation }) => findTerminalLinks(line.text, this.options).flatMap((match) => {
       const range = { start: line.starts[match.start], end: line.ends[match.end - 1] };
-      if (continuation && (!match.note || range.start.y === range.end.y)) return [];
+      if (continuation && (range.start.y === range.end.y || (continuation === "note" ? !match.note : match.note))) return [];
       if (!continuation && suffixes.some((suffix) => before(range.start, suffix.end) && before(suffix.start, range.end))) return [];
       if (range.start.y > y || range.end.y < y) return [];
       const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;

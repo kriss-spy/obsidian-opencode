@@ -89,6 +89,45 @@ describe("terminal link parsing and containment", () => {
 });
 
 describe("public xterm provider and activation", () => {
+	it.each(["    ", " ┃  ", "  - "])("reconstructs a TUI-wrapped HTTP URL with prefix %s from every row without partial targets", async (prefix) => {
+		const fragments = ["https://resources.anthropic.", "com/hubfs/", "Claude%20Code%20Advanced%20P", "atterns_%20Subagents%2C%20MC", "P%2C%20and%20Scaling%20to%20", "Real%20Codebases.pdf"];
+		const rows = fragments.map((fragment, row) => ({ chars: Array.from(`${row === 0 || prefix.includes("┃") ? prefix : "    "}${fragment}`.padEnd(35)) }));
+		const term = terminal(rows);
+		Object.assign(term, { cols: 35 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const config = options();
+		const provider = new TerminalLinks(term, config);
+		for (let y = 1; y <= rows.length; y++) {
+			expect(links(provider, y).map(link => link.text)).toEqual([fragments.join("")]);
+			const link = links(provider, y)[0];
+			await link.activate(event({ ctrlKey: true }), link.text);
+		}
+		expect(config.openExternal).toHaveBeenCalledTimes(rows.length);
+		expect(config.openExternal).toHaveBeenLastCalledWith(fragments.join(""));
+		const stale = links(provider, 3)[0];
+		rows[3].chars = Array.from("    changed output");
+		await stale.activate(event({ ctrlKey: true }), stale.text);
+		expect(config.openExternal).toHaveBeenCalledTimes(rows.length);
+	});
+	it("does not join a short complete URL to prose or another URL", () => {
+		for (const url of ["https://example.com", "https://example.com/"]) for (const second of ["    following prose", "    anotherword", "    https://other.example", "  - Other.md", "     extraindent"]) {
+			const term = terminal([{ chars: Array.from(`    ${url}`.padEnd(68)) }, { chars: Array.from(second.padEnd(68)) }]);
+			Object.assign(term, { cols: 68 });
+			Object.assign(term.modes, { mouseTrackingMode: "any" });
+			expect(links(new TerminalLinks(term, options()))[0].text).toBe(url);
+		}
+	});
+	it("keeps query strings, percent escapes and fragments across bullet/native wraps", () => {
+		const rows = [{ chars: Array.from("  - https://example.com/a%") }, { chars: Array.from("    20b?query=long-") }, { chars: Array.from("value&x=1#part."), wrapped: true }];
+		const term = terminal(rows);
+		Object.assign(term, { cols: 28 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options());
+		for (const row of [1, 2, 3]) expect(links(provider, row).map(link => link.text)).toEqual(["https://example.com/a%20b?query=long-value&x=1#part"]);
+		Object.assign(term.modes, { mouseTrackingMode: "none" });
+		expect(links(provider, 1).map(link => link.text)).toEqual(["https://example.com/a%"]);
+		expect(links(provider, 2)).toEqual([]);
+	});
 	it("reconnects OpenCode's indented hard-row path layout using exact indexed notes", () => {
 		const note = "study/AI/explore AI/agent/subjects/harness engineering/harness engineering.md";
 		const rows = [
