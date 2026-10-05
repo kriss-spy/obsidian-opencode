@@ -20570,10 +20570,22 @@ var TerminalLinks = class {
     const suffixes = lines.flatMap((line) => line.suffix ? [line.suffix] : []);
     const before = (a, b) => a.y < b.y || a.y === b.y && a.x <= b.x;
     const links = lines.flatMap(({ line, current, continuation, blocked }) => blocked ? [] : findTerminalLinks(line.text, this.options).flatMap((match) => {
-      const range = { start: line.starts[match.start], end: line.ends[match.end - 1] };
-      if (continuation && (range.start.y === range.end.y || (continuation === "note" ? !match.note : match.note))) return [];
-      if (!continuation && suffixes.some((suffix) => before(range.start, suffix.end) && before(suffix.start, range.end))) return [];
-      if (range.start.y > y || range.end.y < y) return [];
+      const wholeRange = { start: line.starts[match.start], end: line.ends[match.end - 1] };
+      if (continuation && (wholeRange.start.y === wholeRange.end.y || (continuation === "note" ? !match.note : match.note))) return [];
+      if (!continuation && suffixes.some((suffix) => before(wholeRange.start, suffix.end) && before(suffix.start, wholeRange.end))) return [];
+      if (wholeRange.start.y > y || wholeRange.end.y < y) return [];
+      let range = wholeRange;
+      if (continuation) {
+        let start;
+        let end;
+        for (let index = match.start; index < match.end; index++) {
+          if (line.starts[index].y !== y) continue;
+          start != null ? start : start = line.starts[index];
+          end = line.ends[index];
+        }
+        if (!start || !end) return [];
+        range = { start, end };
+      }
       const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;
       if (seen.has(key)) return [];
       seen.add(key);

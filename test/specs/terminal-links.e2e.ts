@@ -23,12 +23,13 @@ async function linkPoint(text: string, end = false): Promise<{ x: number; y: num
 	return browser.execute((text: string, end: boolean) => {
 		const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
 		const terminal = view.terminal;
-		let link: any;
+		const matches: any[] = [];
 		for (let y = 1; y <= terminal.buffer.active.length; y++) {
 			view.terminalLinks.provideLinks(y, (links: any[]) => {
-				link ??= links?.find((value: any) => value.text === text);
+				for (const value of links ?? []) if (value.text === text) matches.push(value);
 			});
 		}
+		const link = end ? matches[matches.length - 1] : matches[0];
 		if (!link) throw new Error(`Actual terminal provider did not find ${text}; cols=${terminal.cols}; rows=${JSON.stringify(Array.from({ length: terminal.buffer.active.length }, (_, y) => terminal.buffer.active.getLine(y)?.translateToString(true)))}`);
 		const cell = end ? link.range.end : link.range.start;
 		const screen = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
@@ -265,7 +266,8 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		const text = `${notePath}:3:5`;
 		await render("  - Terminal links/\r\n    中文 My note.md:3:5 — session summary", true);
 		const point = await linkPoint(text, true);
-		expect(point.range.start.y).toBeLessThan(point.range.end.y);
+		const first = await linkPoint(text);
+		expect(first.range.start.y).toBeLessThan(point.range.end.y);
 		await browser.execute(() => { (window as any).__terminalLinkInput = []; });
 		await clickLink(text, true, true);
 		await waitActivation(() => browser.execute((notePath: string) => (window as any).app.workspace.getActiveFile()?.path === notePath, notePath));
@@ -293,10 +295,29 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 			view.terminalLinks.provideLinks(3, (found: any[]) => { link = found?.find(value => value.text === url); });
 			if (!link) throw new Error("Missing middle-row URL link");
 			const rect = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
-			return { x: Math.round(rect.left + 6.5 * rect.width / terminal.cols), y: Math.round(rect.top + 2.5 * rect.height / terminal.rows) };
+			return { x: Math.round(rect.left + 6.5 * rect.width / terminal.cols), y: Math.round(rect.top + 2.5 * rect.height / terminal.rows), range: link.range };
 		}, url);
+		await browser.action("pointer").move({ x: middle.x, y: middle.y, origin: "viewport" }).perform();
+		await browser.waitUntil(() => browser.execute(() => Boolean(document.querySelector(".opencode-terminal .xterm-cursor-pointer"))));
+		const ink = await browser.execute(() => {
+			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			const canvas = view.terminal.element.querySelector("canvas.xterm-link-layer") as HTMLCanvasElement;
+			if (!canvas) throw new Error("No actual xterm underline canvas");
+			const pixels = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+			let minX = canvas.width, maxX = -1, minY = canvas.height, maxY = -1;
+			for (let y = 0; y < canvas.height; y++) for (let x = 0; x < canvas.width; x++) {
+				if (!pixels[(y * canvas.width + x) * 4 + 3]) continue;
+				minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+			}
+			return { minX, maxX, minY, maxY, cellWidth: canvas.width / view.terminal.cols, cellHeight: canvas.height / view.terminal.rows, viewport: view.terminal.buffer.active.viewportY };
+		});
+		expect(ink.maxX).toBeGreaterThanOrEqual(ink.minX);
+		expect(ink.minX).toBeGreaterThanOrEqual((middle.range.start.x - 1) * ink.cellWidth);
+		expect(ink.maxX).toBeLessThan(middle.range.end.x * ink.cellWidth);
+		expect(ink.minY).toBeGreaterThanOrEqual((middle.range.start.y - ink.viewport - 1) * ink.cellHeight);
+		expect(ink.maxY).toBeLessThan((middle.range.end.y - ink.viewport) * ink.cellHeight);
 		await browser.action("key").down(process.platform === "darwin" ? Key.Command : Key.Control).perform(true);
-		try { await browser.action("pointer").move({ ...middle, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform(); }
+		try { await browser.action("pointer").move({ x: middle.x, y: middle.y, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform(); }
 		finally { await browser.releaseActions(); }
 		await waitActivation(async () => (await externalCalls()).length === 3);
 		expect(await externalCalls()).toEqual([url, url, url]);

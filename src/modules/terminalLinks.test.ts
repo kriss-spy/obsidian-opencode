@@ -100,6 +100,7 @@ describe("public xterm provider and activation", () => {
 		for (let y = 1; y <= rows.length; y++) {
 			expect(links(provider, y).map(link => link.text)).toEqual([fragments.join("")]);
 			const link = links(provider, y)[0];
+			expect(link.range).toEqual({ start: { x: 5, y }, end: { x: 4 + fragments[y - 1].length, y } });
 			await link.activate(event({ ctrlKey: true }), link.text);
 		}
 		expect(config.openExternal).toHaveBeenCalledTimes(rows.length);
@@ -152,8 +153,8 @@ describe("public xterm provider and activation", () => {
 		const first = links(provider, 1)[0];
 		expect(first.text).toBe(note);
 		expect(first.range.start).toEqual({ x: 8, y: 1 });
-		expect(first.range.end).toEqual({ x: 29, y: 2 });
-		expect(links(provider, 2)[0].range).toEqual(first.range);
+		expect(first.range.end).toEqual({ x: rows[0].chars.join("").trimEnd().length, y: 1 });
+		expect(links(provider, 2)[0].range).toEqual({ start: { x: 8, y: 2 }, end: { x: 29, y: 2 } });
 		rows[1].chars = Array.from("       other engineering.md — replaced output");
 		first.activate(event(), first.text);
 		expect(config.openNote).not.toHaveBeenCalled();
