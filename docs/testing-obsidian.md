@@ -172,6 +172,17 @@ xterm draws multi-row link ranges across the full width of intermediate rows. Op
 
 All GUI runs remained serial in fresh vaults/profiles under the shared lock. The user's plugin artifacts were installed with backups and hash verification, without changing settings or reloading the active terminal.
 
+### Grouped wrapped-link underlines (2026-10-05)
+
+The earlier overflow fix limited native hover decoration to one row. The final behavior retains those per-row hit bounds and underlines every fragment of the complete target together. Non-interactive, owned overlays use the mapped cells; they are removed on leave, disposal, viewport changes, invalidated content, and transitions to embedded OSC 8 links.
+
+- Production build/typechecking passed; full unit suite: 284 passed, 5 platform-only skipped.
+- Focused app checks verified all six rendered underline rectangles against actual fragment lengths, with no indentation/padding spill, no pointer interception, complete URL activation from three rows, and group removal on leave.
+- The final full Linux app suite with installed OpenCode and `OPENCODE_REAL_E2E=1` passed: 38 tests, 9 platform tests skipped, all seven spec files green.
+- Standards and Spec reviews cleared. Tested and installed artifact SHA-256: `main.js` = `b2ae24d867d626e064e133f4d1f6a6a355b552c34f78a8cc0049b2a3cfce1575`; `styles.css` = `336ce4aa00034c42328f8ae216835ad9d0820617dec91ed59e6221ff4dc97a32`.
+
+The GUI runs remained serial in fresh vaults/profiles. Installation preserved user settings and the running session. Other desktop platforms still require fresh CI verification.
+
 ## WSL2/X410 evidence
 
 On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:
