@@ -236,6 +236,12 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		await render("\x1b]8;;javascript:alert(1)\x07safe label\x1b]8;;\x07");
 		await browser.action("pointer").move({ x: point.x + 2, y: point.y, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
 		expect((await externalCalls()).length).toBe(before + 2);
+		// xterm filters the unsafe OSC 8 provider, then offers a lower-priority
+		// textual URL from its label. Activation must still honor the real URI.
+		await render("\x1b]8;;javascript:alert(1)\x07https://github.com\x1b]8;;\x07");
+		const labelPoint = await linkPoint("https://github.com");
+		await browser.action("pointer").move({ x: labelPoint.x, y: labelPoint.y, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
+		expect((await externalCalls()).length).toBe(before + 2);
 		await render(`/outside/${notePath}\r\n../../${notePath}\r\nfile:///outside/${notePath}`);
 		const found = await browser.execute(() => {
 			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
