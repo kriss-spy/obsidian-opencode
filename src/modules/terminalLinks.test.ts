@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { ILink, Terminal } from "@xterm/xterm";
+import { currentOsc8Link } from "./xtermOsc8";
 import { findTerminalLinks, resolveNoteTarget, safeWebUrl, TerminalLinks, TerminalLinkOptions } from "./terminalLinks";
 
 const event = (properties: Partial<MouseEvent> = {}): MouseEvent => ({ button: 0, ctrlKey: false, metaKey: false, ...properties } as MouseEvent);
@@ -304,11 +305,45 @@ describe("mouse capture ownership and link lifecycle", () => {
 			expect(context.term.options.linkHandler).toBeUndefined();
 		}
 	});
-	it("uses the guarded opener for OSC 8 and restores the preceding handler", () => {
+	it("validates OSC 8 activation against the current cell URI instead of a stale hover", () => {
 		const context = interactionFixture();
-		context.term.options.linkHandler!.activate(event(), "javascript:alert(1)", { start: { x: 1, y: 1 }, end: { x: 4, y: 1 } });
+		let id = 1;
+		const original = context.term.buffer.active.getLine.bind(context.term.buffer.active);
+		Object.assign(context.term.buffer.active, { getLine: (row: number) => {
+			const line = original(row);
+			if (!line) return undefined;
+			const getCell = line.getCell.bind(line);
+			return { ...line, getCell: (col: number) => Object.assign(getCell(col)!, { extended: { urlId: id } }) };
+		} });
+		Object.assign(context.term, { _core: { _oscLinkService: { getLinkData: (id: number) => ({ uri: id === 1 ? "https://old.example" : id === 2 ? "https://new.example" : "javascript:alert(1)" }) } } });
+		const range = { start: { x: 1, y: 1 }, end: { x: 17, y: 1 } };
+		context.term.options.linkHandler!.hover!(event({ clientX: 5, clientY: 5, target: {} as Node }), "https://old.example", range);
+		id = 2;
+		context.term.options.linkHandler!.activate(event({ clientX: 5, clientY: 5, target: {} as Node }), "https://old.example", range);
 		expect(context.config.openExternal).not.toHaveBeenCalled();
-		context.term.options.linkHandler!.activate(event(), "https://github.com", { start: { x: 1, y: 1 }, end: { x: 4, y: 1 } });
-		expect(context.config.openExternal).toHaveBeenCalledOnce();
+		context.mouse("mousedown", { ctrlKey: true }); context.mouse("mouseup", { ctrlKey: true });
+		expect(context.config.openExternal).toHaveBeenCalledExactlyOnceWith("https://new.example/");
+		vi.mocked(context.config.openExternal).mockClear();
+		id = 3; // A safe-looking visible URL must not override an unsafe OSC 8 URI.
+		context.mouse("mousedown", { ctrlKey: true }); context.mouse("mouseup", { ctrlKey: true });
+		expect(context.config.openExternal).not.toHaveBeenCalled();
+		id = 0; // Plain text replaces OSC 8: the stale URI must not remain active.
+		context.term.options.linkHandler!.activate(event({ clientX: 5, clientY: 5, target: {} as Node }), "https://old.example", range);
+		expect(context.config.openExternal).not.toHaveBeenCalled();
+		expect(currentOsc8Link(context.term, { x: 1, y: 1 })).toEqual({ present: false });
+	});
+	it("fails closed when OSC 8 URL metadata exists but the registry is unavailable", () => {
+		const term = terminal([{ chars: ["x"] }]);
+		Object.assign(term.buffer.active, { getLine: () => ({ getCell: () => ({ extended: { urlId: 1 } }) }) });
+		expect(currentOsc8Link(term, { x: 1, y: 1 })).toEqual({ present: true, uri: undefined });
+	});
+	it("retains a captured primary release when another mouse button is pressed", () => {
+		const context = interactionFixture();
+		context.modes.mouseTrackingMode = "any";
+		context.mouse("mousedown", { ctrlKey: true });
+		context.mouse("mousedown", { button: 2 });
+		context.subscriptions.get("resize")!();
+		expect(context.mouse("mouseup", { ctrlKey: true }).stopImmediatePropagation).toHaveBeenCalledOnce();
+		expect(context.config.openExternal).not.toHaveBeenCalled();
 	});
 });

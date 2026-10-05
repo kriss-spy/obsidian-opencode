@@ -12,4 +12,6 @@ Paths must resolve lexically inside the active vault and refer to an indexed Mar
 
 Wrapped xterm lines use cell coordinates, including wide characters, surrogate pairs, combining characters and wide-character wrap padding. Hard line breaks are not joined. Detection is bounded to 128 wrapped rows, 16,384 UTF-16 units per logical line and 4,096 units per delimiter-bounded path phrase. Filesystem canonicalization runs only on activation, never on hover; hover checks use indexed vault lookups.
 
+xterm 5.5 does not expose OSC 8 cell URLs in its public API. The isolated `xtermOsc8.ts` adapter reads its cell URL id and link registry to verify the current target instead of trusting cached hover state. It fails closed when URL metadata exists but the registry is unavailable; this seam must be checked when upgrading xterm.
+
 `src/modules/terminalLinks.test.ts` covers parsing, ranges, canonical containment, activation, mouse ownership and lifecycle cleanup. `test/specs/terminal-links.e2e.ts` exercises the actual xterm provider, pointer hit testing and Obsidian editor navigation in the fresh test vault, with only the external browser side effect stubbed. Run app tests serially with other Obsidian tests.

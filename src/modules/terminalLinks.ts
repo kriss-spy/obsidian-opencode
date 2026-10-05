@@ -1,6 +1,7 @@
 import type { IBufferCellPosition, ILink, ILinkProvider, Terminal } from "@xterm/xterm";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
+import { currentOsc8Link } from "./xtermOsc8";
 
 export interface NoteTarget {
 	path: string;
@@ -232,9 +233,15 @@ export class TerminalLinks implements ILinkProvider {
 		// xterm's OSC 8 provider has priority. Give it the same guarded opener.
 		const previous = this.terminal.options.linkHandler;
 		this.terminal.options.linkHandler = {
-			activate: (event, text) => { if (!this.pressed?.handled) void this.activate(text, event); },
-			hover: (_event, text, range) => {
-				this.hovered = { text, range, activate: event => { void this.activate(text, event); } };
+			activate: (event, text) => {
+				const cell = cellAt(event);
+				if (cell && currentOsc8Link(this.terminal, cell).uri === text && !this.pressed?.handled) void this.activate(text, event);
+			},
+			hover: (event, text, range) => {
+				const cell = cellAt(event);
+				if (cell && currentOsc8Link(this.terminal, cell).uri === text) {
+					this.hovered = { text, range, activate: event => { void this.activate(text, event); } };
+				}
 			},
 			leave: () => { this.hovered = null; },
 		};
@@ -255,19 +262,24 @@ export class TerminalLinks implements ILinkProvider {
 		const linkAt = (event: MouseEvent): ILink | null => {
 			const cell = cellAt(event);
 			if (!cell) return null;
-			// OSC 8 remains owned by xterm's built-in provider. Textual links are
-			// looked up fresh: xterm can retain old active-line replies after
-			// mouseleave followed by a redraw while the pointer is outside.
-			if (this.hovered && !this.validations.has(this.hovered) && contains(this.hovered, cell)) return this.hovered;
+			// Refresh OSC 8 metadata too: xterm's cached hover can describe the
+			// previous target after a redraw. Preserve its priority over visible text.
+			const osc = currentOsc8Link(this.terminal, cell);
+			if (osc.present) return osc.uri && safeWebUrl(osc.uri)
+				? { text: osc.uri, range: { start: cell, end: cell }, activate: event => { void this.activate(osc.uri!, event); } }
+				: null;
+			// Textual links are looked up fresh: xterm can retain old active-line
+			// replies after mouseleave followed by a redraw outside the pointer.
 			let result: ILink | null = null;
 			this.provideLinks(cell.y, links => { result = links?.find(link => contains(link, cell)) ?? null; });
 			return result;
 		};
 		const down = (event: MouseEvent) => {
+			if (event.button !== 0) return;
 			this.pressed = null;
 			this.capturedPrimaryPress = false;
 			const link = linkAt(event);
-			if (event.button !== 0 || !link || this.terminal.hasSelection()) return;
+			if (!link || this.terminal.hasSelection()) return;
 			const modified = this.options.isModEvent(event);
 			this.pressed = { link, x: event.clientX, y: event.clientY, modified, dragged: false, handled: false };
 			if (modified) { this.capturedPrimaryPress = true; event.preventDefault(); event.stopImmediatePropagation(); }
