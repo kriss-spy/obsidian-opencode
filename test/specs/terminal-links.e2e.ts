@@ -39,7 +39,7 @@ async function clickLink(text: string, modified = false, end = false): Promise<v
 	const point = await linkPoint(text, end);
 	await browser.action("pointer").move({ x: point.x, y: point.y, origin: "viewport" }).perform();
 	await browser.waitUntil(() => browser.execute(() => Boolean(document.querySelector(".opencode-terminal .xterm-cursor-pointer"))), { timeoutMsg: "xterm did not hover link under pointer" });
-	if (modified) await browser.keys(process.platform === "darwin" ? Key.Command : Key.Control);
+	if (modified) await browser.action("key").down(process.platform === "darwin" ? Key.Command : Key.Control).perform(true);
 	try {
 		await browser.action("pointer").down({ button: 0 }).up({ button: 0 }).perform();
 	} finally {
