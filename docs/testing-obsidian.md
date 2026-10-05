@@ -160,6 +160,18 @@ The saved cloudnotes session `ses_ef36ef203ffeRIUA8l2cTne6eF` reproduced a 142-c
 
 All app runs used fresh vaults/profiles under the shared lock. The saved-session diagnostic was temporary and removed after verification; its pointer evidence is in `/tmp/opencode-wrapped-url-fixed/evidence.json`. The broader app suite and other platforms were not repeated. The documented ambiguity of a filled URL row followed by a single-word row remains.
 
+### Underline overflow and full-suite follow-up (2026-10-05)
+
+xterm draws multi-row link ranges across the full width of intermediate rows. OpenCode-managed wraps include indentation and padding, so the provider now publishes a separate range for each TUI row while retaining the complete URL/note target. Unit checks cover exact text-cell bounds; isolated pointer tests inspect the actual underline canvas to reject pixels outside the hovered row's text.
+
+- Production build/typechecking and the full unit suite passed: 283 passed, 5 platform-only skipped.
+- Focused wrapped-note and HTTP pointer/underline checks passed before the full app suite was started.
+- The first full run passed six spec files, then hit the existing terminal-links animation-frame wait timeout. The test helper now finishes after parsing with a bounded redraw wait; all pointer, canvas, navigation, and input assertions remain enabled.
+- The final complete Linux app run passed all seven spec files with `OPENCODE_REAL_E2E=1`, including the installed CLI suspend regression and all eight terminal-link tests. This supplies a clean final-suite run after the earlier focus/hover/timeout failures; other desktop platforms still need fresh verification.
+- Standards and Spec review cleared. Tested and installed `main.js` SHA-256: `2973e38ef1d0aac63325bbcc9a59ff6c331d66ae8d3f940fadd79235969aaa2e`.
+
+All GUI runs remained serial in fresh vaults/profiles under the shared lock. The user's plugin artifacts were installed with backups and hash verification, without changing settings or reloading the active terminal.
+
 ## WSL2/X410 evidence
 
 On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:

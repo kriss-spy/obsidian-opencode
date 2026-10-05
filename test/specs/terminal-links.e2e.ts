@@ -11,10 +11,15 @@ async function render(text: string, mouse = false, wrap = false): Promise<void> 
 		const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
 		view.terminal.clearSelection();
 		view.fitAddon.fit();
-			if (wrap) text = " ".repeat(Math.max(0, view.terminal.cols - 12)) + text;
+		if (wrap) text = " ".repeat(Math.max(0, view.terminal.cols - 12)) + text;
 		view.terminal.write(`\x1bc\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l${mouse ? "\x1b[?1000h\x1b[?1006h" : ""}${text}`, () => {
-			// xterm buffers the render after parsing; use its actual painted geometry.
-			requestAnimationFrame(() => requestAnimationFrame(() => done()));
+			// Background windows can suspend animation frames indefinitely.
+			// Parsing must finish first; pointer/canvas assertions below still
+			// verify the painted result instead of trusting this deadline.
+			let settled = false;
+			const finish = () => { if (!settled) { settled = true; clearTimeout(deadline); done(); } };
+			const deadline = setTimeout(finish, 250);
+			requestAnimationFrame(() => requestAnimationFrame(finish));
 		});
 	}, text, mouse, wrap);
 }
