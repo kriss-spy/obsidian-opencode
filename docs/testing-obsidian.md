@@ -49,6 +49,23 @@ The suite builds and installs the plugin, configures a deterministic local fake 
 
 Screenshots of the conversations and terminal views are written to `test-results/obsidian/`.
 
+When developing in multiple worktrees, run builds and unit tests independently, but give one coordinator ownership of real-app testing. `maxInstances: 1` serializes workers within one WebdriverIO run; it does not serialize separate runs. On Linux, use the same host-wide lock for every app run:
+
+```bash
+OBSIDIAN_VERSION=1.12.7 OBSIDIAN_INSTALLER_VERSION=1.12.7 \
+  flock /tmp/obsidian-opencode-real-app.lock npm run test:obsidian
+```
+
+An opt-in Linux test also starts the installed formal V2 CLI, reveals its terminal after focusing a note, and checks keyboard input:
+
+```bash
+OPENCODE_REAL_E2E=1 OBSIDIAN_TEST_GREP='real V2' \
+  OBSIDIAN_VERSION=1.12.7 OBSIDIAN_INSTALLER_VERSION=1.12.7 \
+  flock /tmp/obsidian-opencode-real-app.lock npm run test:obsidian
+```
+
+This test uses `--standalone`, separate temporary OpenCode configuration/data directories, and the fresh test vault. It types a draft without submitting it, closes its PTY, and removes its profile. It does not reload the plugin in an existing vault.
+
 Set `OBSIDIAN_VERSION` and `OBSIDIAN_INSTALLER_VERSION` to pin versions instead of testing the latest release:
 
 ```bash

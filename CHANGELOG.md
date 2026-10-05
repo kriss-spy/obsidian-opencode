@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Configurable Shift+Enter newlines** — Optionally insert a newline in the terminal with Shift+Enter, applying settings immediately and preserving IME input ordering.
+- **Active-line references** — Send the current note's line or selected line range to a running embedded OpenCode terminal. ([#46](https://github.com/kriss-spy/obsidian-opencode/issues/46))
+- **Clickable terminal links** — Open HTTP(S) URLs in the system browser and vault note paths in Obsidian, including line and column references. ([#62](https://github.com/kriss-spy/obsidian-opencode/issues/62))
+
+### Fixed
+
+- **Completed-task note warnings** — Use successful edit-tool metadata when OpenCode V2 returns an empty session diff, retaining the touched-note warning after completion without carrying it into a new turn. ([#21](https://github.com/kriss-spy/obsidian-opencode/issues/21))
+- **Terminal focus on open** — Focus terminal input when explicitly opening or revealing it. ([#57](https://github.com/kriss-spy/obsidian-opencode/issues/57))
+
+### Changed
+
+- **OpenCode ribbon icon** — Use the OpenCode logo for the terminal ribbon action. ([#63](https://github.com/kriss-spy/obsidian-opencode/issues/63))
+- **Folder-template documentation** — Document the `frontmatter-templater` integration.
+
 ## [2.2.0] - 2026-09-20
 
 ### Added
