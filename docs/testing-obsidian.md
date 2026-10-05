@@ -104,11 +104,28 @@ It cannot non-interactively create or register an arbitrary fresh vault. `vault:
 | #22 | Unit tests verify the isolated Windows ConPTY helper and resize channel. Windows CI covers stubbed rendering, input, live resizing, restart, and session workflows; `npm run test:obsidian:windows-ui` covers the real CLI and mouse interactions. |
 | #10 | Unit tests cover large-export limits; E2E covers normal preview and export-to-note behavior. |
 | #21 | Unit tests cover activity/diff parsing, successful edit metadata with an empty diff, latest-turn boundaries, pagination, and idle/running/touched precedence. E2E verifies rendered states, tooltips, warning badges, and the terminal action; a V2 API executable fixture exercises completion retention and new-turn reset through the real client and source. |
+| #46 | Unit tests cover inclusive editor ranges, private bridge delivery, and ordered text fallbacks; E2E invokes the editor command and checks exact ranges and unsubmitted terminal input. |
+| #57 | Unit tests cover reveal/activation ordering and guards against late focus; E2E checks command, ribbon, status, toggle, restart, restore, and editor focus stability. The opt-in Linux test also checks the installed V2 CLI. |
+| #62 | Unit tests cover path parsing, wrapped terminal cells, confinement, link activation, mouse ownership, and lifecycle cleanup; E2E uses actual pointer events and editor navigation, stubbing only the external browser opener. |
+| #63 | E2E checks the official ribbon mark's geometry, accessible labels, and light/dark rendering. |
 | #50, #52, #53, #54 | Unit tests cover WSL2 detection, Unicode/Base64 transport, argument safety, failures, routing, OSC 52, and PNG validation. The X410 suite exercises formal V2 startup, exact selection copy, Unicode paste, OSC 52, Windows image paste through a temporary OpenCode attachment path, and rendered SIXEL copy to Windows. |
 
 Not yet automatable in this Linux job:
 
 - #15-#19 describe panel-mode behavior not present on the current branch.
+
+## Unreleased 2.3.0 verification
+
+On 2026-10-05, the integrated changes for #21, #46, #57, #62, and #63 were verified on Linux `7.2.5-200.fc44.x86_64`, with Obsidian app and installer 1.12.7 and installed OpenCode V2 CLI 2.0.22:
+
+- `npm test`: 269 passing and 5 platform-only tests skipped.
+- Production TypeScript and esbuild build: passing.
+- `OPENCODE_REAL_E2E=1 npm run test:obsidian`: all seven spec files passed, with 36 passing tests and 9 platform tests skipped.
+- An additional real-xterm OSC 8 regression passed: an unsafe target cannot open a browser even when its visible label looks like an HTTPS URL.
+
+All real-app runs used fresh vaults/profiles and the shared `flock /tmp/obsidian-opencode-real-app.lock` lock. The installed CLI test checked terminal activation and keyboard input; the #21 fallback was also checked against actual V2 message metadata for a successful edit with an empty diff. Native Windows, WSL2/X410, and macOS checks were not repeated for this set of changes.
+
+The tested `main.js` SHA-256 is `d49fd061b97c6251f2a602699819de54d0b32f36e18ad51db574c5a4fa810d9b`. This records an unreleased integration; it does not imply a version bump or published release.
 
 ## WSL2/X410 evidence
 
