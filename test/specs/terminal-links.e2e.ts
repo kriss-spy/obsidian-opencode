@@ -58,7 +58,7 @@ async function clickLink(text: string, modified = false, end = false): Promise<v
 	}
 	if (modified) await browser.action("key").down(process.platform === "darwin" ? Key.Command : Key.Control).perform(true);
 	try {
-		await browser.action("pointer").down({ button: 0 }).up({ button: 0 }).perform();
+		await browser.action("pointer").move({ x: point.x, y: point.y, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
 	} finally {
 		await browser.releaseActions();
 	}
@@ -71,7 +71,7 @@ async function activationState(): Promise<string> {
 		return { hovered: links?.hovered?.text, pressed: links?.pressed && { text: links.pressed.link.text, dragged: links.pressed.dragged, modified: links.pressed.modified, handled: links.pressed.handled },
 			selected: view?.terminal.hasSelection(), mouse: view?.terminal.modes.mouseTrackingMode, cols: view?.terminal.cols, rows: view?.terminal.rows,
 			external: (window as any).__terminalLinkExternal, input: (window as any).__terminalLinkInput,
-			activeFile: (window as any).app.workspace.getActiveFile()?.path, tabs: (window as any).app.workspace.getLeavesOfType("markdown").length };
+			trace: (window as any).__terminalLinkTrace, activeFile: (window as any).app.workspace.getActiveFile()?.path, tabs: (window as any).app.workspace.getLeavesOfType("markdown").length };
 	}));
 }
 
@@ -108,6 +108,31 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
 			(window as any).__terminalLinkExternal = [];
 			(window as any).__terminalLinkInput = [];
+			(window as any).__terminalLinkTrace = [];
+			const trace = (kind: string, extra: any = {}) => (window as any).__terminalLinkTrace.push({ kind, revision: view.terminalLinks.revision,
+				pressed: view.terminalLinks.pressed && { text: view.terminalLinks.pressed.link.text, dragged: view.terminalLinks.pressed.dragged, modified: view.terminalLinks.pressed.modified },
+				hovered: view.terminalLinks.hovered?.text, selected: view.terminal.hasSelection(), ...extra });
+			const originalActivate = view.terminalLinks.activate.bind(view.terminalLinks);
+			view.terminalLinks.activate = async (text: string, event: MouseEvent) => {
+				trace("activate", { text, x: event.clientX, y: event.clientY, modifier: event.ctrlKey || event.metaKey });
+				await originalActivate(text, event);
+				trace("activate-finished", { text });
+			};
+			const originalNote = view.terminalLinks.options.openNote;
+			view.terminalLinks.options.openNote = async (target: any, event: MouseEvent) => {
+				trace("open-note", { target });
+				await originalNote(target, event);
+				trace("note-opened", { file: (window as any).app.workspace.getActiveFile()?.path });
+			};
+			const mouseTrace = (event: MouseEvent) => {
+				trace(event.type, { x: event.clientX, y: event.clientY, button: event.button, target: (event.target as HTMLElement)?.tagName });
+			};
+			window.addEventListener("mousedown", mouseTrace, true);
+			window.addEventListener("mouseup", mouseTrace, true);
+			(window as any).__terminalLinkTraceCleanup = () => {
+				window.removeEventListener("mousedown", mouseTrace, true);
+				window.removeEventListener("mouseup", mouseTrace, true);
+			};
 			(window as any).__terminalLinkLeaf = view.leaf.id;
 			(window as any).__terminalLinkPid = view.ptySession.ptyProcess?.pid;
 			// Only replace the external side effect. Provider, xterm mouse events,
@@ -118,7 +143,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 	});
 
 	after(async function () {
-		await browser.execute(() => { (window as any).__terminalLinkInputListener?.dispose(); });
+		await browser.execute(() => { (window as any).__terminalLinkInputListener?.dispose(); (window as any).__terminalLinkTraceCleanup?.(); });
 		await browser.executeObsidianCommand("opencode:close-terminal");
 		await browser.execute(async () => {
 			const app = (window as any).app;
@@ -134,7 +159,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		const point = await linkPoint(text, true);
 		expect(point.range.end.y).toBeGreaterThan(point.range.start.y);
 		await clickLink(text, false, true);
-		await browser.waitUntil(() => browser.execute((notePath: string) => (window as any).app.workspace.getActiveFile()?.path === notePath, notePath));
+		await waitActivation(() => browser.execute((notePath: string) => (window as any).app.workspace.getActiveFile()?.path === notePath, notePath));
 		const state = await browser.execute(() => {
 			const app = (window as any).app;
 			const editor = app.workspace.activeLeaf.view.editor;
@@ -200,9 +225,12 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		});
 		await browser.action("pointer").move({ ...point, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
 		await waitActivation(async () => (await externalCalls()).length === before + 1);
-		await render("\x1b]8;;javascript:alert(1)\x07unsafe label\x1b]8;;\x07");
+		await render("\x1b]8;;https://new.example\x07safe label\x1b]8;;\x07");
+		await browser.action("pointer").move({ ...point, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
+		await waitActivation(async () => (await externalCalls()).includes("https://new.example/"));
+		await render("\x1b]8;;javascript:alert(1)\x07safe label\x1b]8;;\x07");
 		await browser.action("pointer").move({ x: point.x + 2, y: point.y, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
-		expect((await externalCalls()).length).toBe(before + 1);
+		expect((await externalCalls()).length).toBe(before + 2);
 		await render(`/outside/${notePath}\r\n../../${notePath}\r\nfile:///outside/${notePath}`);
 		const found = await browser.execute(() => {
 			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
