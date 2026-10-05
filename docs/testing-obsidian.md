@@ -142,10 +142,10 @@ All app runs remained serialized under the shared lock and used isolated vaults/
 
 A read-only diagnostic in the running cloudnotes vault (Obsidian 1.14.4, installer 1.13.7) confirmed that OpenCode rendered an existing note path across two indented rows, both with `isWrapped=false`. The installed detector found neither fragment. The corrected detector, queried without attaching handlers or changing the session, returned the complete path and its cell range from both rows.
 
-- Production build and `npm test`: passing, with 276 tests passed and 5 platform-only tests skipped.
-- The isolated Obsidian 1.12.7 terminal-links suite: all 7 tests passed, covering TUI-managed and native wraps, Unicode/spaces, line/column jumps, selection, mouse ownership, external URLs, and OSC 8 guards.
-- Regression tests retain ordinary hard-line separation and reject missing notes, outside-vault paths, inconsistent indentation, and separate bullets. A changed continuation invalidates cached activation.
-- Tested `main.js` SHA-256: `077f0a8027fff83ffd04ba27ef2b15a219b2227ce1f0268587057cee01bb430b`.
+- Production build and `npm test`: passing, with 277 tests passed and 5 platform-only tests skipped.
+- The isolated Obsidian 1.12.7 terminal-links suite passed all 7 tests before the basename-collision follow-up, covering TUI-managed and native wraps, Unicode/spaces, line/column jumps, selection, mouse ownership, external URLs, and OSC 8 guards. The final build passed the focused hard-row pointer test (1 test), including editor line/column navigation and no terminal input leakage. A repeat of the full terminal-links suite encountered hover instability and renderer timeouts; it did not complete cleanly.
+- Regression tests retain ordinary hard-line separation and reject missing notes, outside-vault paths, inconsistent indentation, and separate bullets. Both rows prefer the full path over an existing root basename; missing/outside paths never offer that misleading basename. A changed continuation invalidates cached activation. Drop-handler tests now drain pending timers before restoring their window stub.
+- Tested `main.js` SHA-256: `4e82870976d2e77eecd29c61fc50d4298e9d7e909636586b77c90df92bdca914`.
 
 Real pointer tests used a fresh vault/profile under the shared app-test lock. The broader app suite was not repeated for this follow-up; the earlier full-focus-sequence failures remain unresolved.
 

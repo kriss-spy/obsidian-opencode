@@ -163,14 +163,15 @@ function logicalLine(terminal: Terminal, y: number): LogicalLine | null {
 	return result;
 }
 
-interface LinkLine { line: LogicalLine; current(): boolean; continuation?: boolean }
+interface LinkLine { line: LogicalLine; current(): boolean; continuation?: boolean; suffix?: ILink["range"] }
 
 /** OpenCode lays out indented paragraphs itself, without xterm's wrap flag. */
 function linkLines(terminal: Terminal, y: number): LinkLine[] {
 	const normal = logicalLine(terminal, y);
 	if (!normal) return [];
-	const result: LinkLine[] = [{ line: normal, current: () => logicalLine(terminal, y)?.text === normal.text }];
-	if (terminal.modes.mouseTrackingMode === "none") return result;
+	const ordinary: LinkLine = { line: normal, current: () => logicalLine(terminal, y)?.text === normal.text };
+	const result: LinkLine[] = [];
+	if (terminal.modes.mouseTrackingMode === "none") return [ordinary];
 	// Only consider a short, consistently indented TUI paragraph. Real newlines
 	// in ordinary terminal output remain separate; lookup still requires an
 	// exact existing Markdown path and never salvages an outside-vault suffix.
@@ -181,14 +182,18 @@ function linkLines(terminal: Terminal, y: number): LinkLine[] {
 		if (!indent) continue;
 		const sources = [{ y: first, text: initial.text }];
 		const initialEnd = initial.text.trimEnd().length;
+		if (initialEnd <= indent) continue;
 		let spaced: LogicalLine = { text: initial.text.slice(indent, initialEnd), starts: initial.starts.slice(indent, initialEnd), ends: initial.ends.slice(indent, initialEnd) };
 		let joined = spaced;
+		const pathPrefix = /[\\/]/.test(spaced.text) && !/\.md(?:[:\s`"')]|$)/i.test(spaced.text);
+		let continuationStart: IBufferCellPosition | undefined;
 		for (let row = initial.ends[initial.ends.length - 1].y + 1; row < first + 8;) {
 			const next = logicalLine(terminal, row);
 			if (!next || next.starts[0]?.y !== row ||
 				!next.text.startsWith(" ".repeat(indent)) || /\s/.test(next.text[indent] ?? " ")) break;
 			const end = next.text.trimEnd().length;
 			const fragment: LogicalLine = { text: next.text.slice(indent, end), starts: next.starts.slice(indent, end), ends: next.ends.slice(indent, end) };
+			continuationStart ??= fragment.starts[0];
 			const append = (previous: LogicalLine, separator: string): LogicalLine => ({
 				text: previous.text + separator + fragment.text,
 				starts: [...previous.starts, ...(separator ? [previous.ends[previous.ends.length - 1]] : []), ...fragment.starts],
@@ -203,11 +208,15 @@ function linkLines(terminal: Terminal, y: number): LinkLine[] {
 			if (last < y) continue;
 			const snapshot = sources.slice();
 			const current = () => snapshot.every(source => logicalLine(terminal, source.y)?.text === source.text);
-			result.push({ line: spaced, current, continuation: true });
-			if (joined.text !== spaced.text) result.push({ line: joined, current, continuation: true });
+			const noteEnd = pathPrefix ? /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/i.exec(spaced.text) : null;
+			// Do not offer the root basename from a continuation of a longer
+			// path, even when that full path is missing or outside the vault.
+			const suffix = noteEnd && continuationStart ? { start: continuationStart, end: spaced.ends[noteEnd.index + noteEnd[0].length - 1] } : undefined;
+			result.push({ line: spaced, current, continuation: true, suffix });
+			if (joined.text !== spaced.text) result.push({ line: joined, current, continuation: true, suffix });
 		}
 	}
-	return result;
+	return [...result, ordinary];
 }
 
 export class TerminalLinks implements ILinkProvider {
@@ -224,9 +233,13 @@ export class TerminalLinks implements ILinkProvider {
 	provideLinks(y: number, callback: (links: ILink[] | undefined) => void): void {
 		if (this.disposed) { callback(undefined); return; }
 		const seen = new Set<string>();
-		const links = linkLines(this.terminal, y).flatMap(({ line, current, continuation }) => findTerminalLinks(line.text, this.options).flatMap(match => {
+		const lines = linkLines(this.terminal, y);
+		const suffixes = lines.flatMap(line => line.suffix ? [line.suffix] : []);
+		const before = (a: IBufferCellPosition, b: IBufferCellPosition) => a.y < b.y || (a.y === b.y && a.x <= b.x);
+		const links = lines.flatMap(({ line, current, continuation }) => findTerminalLinks(line.text, this.options).flatMap(match => {
 			const range = { start: line.starts[match.start], end: line.ends[match.end - 1] };
 			if (continuation && (!match.note || range.start.y === range.end.y)) return [];
+			if (!continuation && suffixes.some(suffix => before(range.start, suffix.end) && before(suffix.start, range.end))) return [];
 			if (range.start.y > y || range.end.y < y) return [];
 			const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;
 			if (seen.has(key)) return [];

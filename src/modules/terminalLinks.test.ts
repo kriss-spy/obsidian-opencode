@@ -130,6 +130,16 @@ describe("public xterm provider and activation", () => {
 		for (const row of [1, 2, 3]) expect(links(provider, row)[0].text).toBe("Notes/My note.md:3:2");
 	});
 
+	it("prefers the whole wrapped path over a root basename and preserves following references", () => {
+		const term = terminal([
+			{ chars: Array.from("  - Notes/") },
+			{ chars: Array.from("    My note.md:3, then Other.md") },
+		]);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options({ hasNote: value => ["Notes/My note.md", "My note.md", "Other.md"].includes(value) }));
+		expect(links(provider, 2).map(link => link.text)).toEqual(["Notes/My note.md:3", "Other.md"]);
+	});
+
 	it("does not reconnect missing, outside, differently indented or separate bullet paths", () => {
 		for (const [first, second] of [
 			["  - /outside/Notes/", "    My note.md"],
@@ -141,7 +151,10 @@ describe("public xterm provider and activation", () => {
 		]) {
 			const term = terminal([{ chars: Array.from(first) }, { chars: Array.from(second) }]);
 			Object.assign(term.modes, { mouseTrackingMode: "any" });
-			expect(links(new TerminalLinks(term, options()))).toEqual([]);
+			const provider = new TerminalLinks(term, options({ hasNote: value => ["Notes/My note.md", "My note.md"].includes(value) }));
+			expect(links(provider, 1)).toEqual([]);
+			const separate = second.startsWith("     ") || second.startsWith("  - ");
+			expect(links(provider, 2).map(link => link.text)).toEqual(separate ? ["My note.md"] : []);
 		}
 	});
 

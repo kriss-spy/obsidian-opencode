@@ -20442,11 +20442,12 @@ function linkLines(terminal, y) {
   var _a, _b, _c, _d;
   const normal = logicalLine(terminal, y);
   if (!normal) return [];
-  const result = [{ line: normal, current: () => {
+  const ordinary = { line: normal, current: () => {
     var _a2;
     return ((_a2 = logicalLine(terminal, y)) == null ? void 0 : _a2.text) === normal.text;
-  } }];
-  if (terminal.modes.mouseTrackingMode === "none") return result;
+  } };
+  const result = [];
+  if (terminal.modes.mouseTrackingMode === "none") return [ordinary];
   for (let first = Math.max(1, y - 7); first <= y; first++) {
     const initial = logicalLine(terminal, first);
     if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first) continue;
@@ -20454,13 +20455,17 @@ function linkLines(terminal, y) {
     if (!indent) continue;
     const sources = [{ y: first, text: initial.text }];
     const initialEnd = initial.text.trimEnd().length;
+    if (initialEnd <= indent) continue;
     let spaced = { text: initial.text.slice(indent, initialEnd), starts: initial.starts.slice(indent, initialEnd), ends: initial.ends.slice(indent, initialEnd) };
     let joined = spaced;
+    const pathPrefix = /[\\/]/.test(spaced.text) && !/\.md(?:[:\s`"')]|$)/i.test(spaced.text);
+    let continuationStart;
     for (let row = initial.ends[initial.ends.length - 1].y + 1; row < first + 8; ) {
       const next = logicalLine(terminal, row);
       if (!next || ((_c = next.starts[0]) == null ? void 0 : _c.y) !== row || !next.text.startsWith(" ".repeat(indent)) || /\s/.test((_d = next.text[indent]) != null ? _d : " ")) break;
       const end = next.text.trimEnd().length;
       const fragment = { text: next.text.slice(indent, end), starts: next.starts.slice(indent, end), ends: next.ends.slice(indent, end) };
+      continuationStart != null ? continuationStart : continuationStart = fragment.starts[0];
       const append = (previous, separator) => ({
         text: previous.text + separator + fragment.text,
         starts: [...previous.starts, ...separator ? [previous.ends[previous.ends.length - 1]] : [], ...fragment.starts],
@@ -20478,11 +20483,13 @@ function linkLines(terminal, y) {
         var _a2;
         return ((_a2 = logicalLine(terminal, source.y)) == null ? void 0 : _a2.text) === source.text;
       });
-      result.push({ line: spaced, current, continuation: true });
-      if (joined.text !== spaced.text) result.push({ line: joined, current, continuation: true });
+      const noteEnd = pathPrefix ? /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/i.exec(spaced.text) : null;
+      const suffix = noteEnd && continuationStart ? { start: continuationStart, end: spaced.ends[noteEnd.index + noteEnd[0].length - 1] } : void 0;
+      result.push({ line: spaced, current, continuation: true, suffix });
+      if (joined.text !== spaced.text) result.push({ line: joined, current, continuation: true, suffix });
     }
   }
-  return result;
+  return [...result, ordinary];
 }
 var TerminalLinks = class {
   constructor(terminal, options) {
@@ -20502,9 +20509,13 @@ var TerminalLinks = class {
       return;
     }
     const seen = /* @__PURE__ */ new Set();
-    const links = linkLines(this.terminal, y).flatMap(({ line, current, continuation }) => findTerminalLinks(line.text, this.options).flatMap((match) => {
+    const lines = linkLines(this.terminal, y);
+    const suffixes = lines.flatMap((line) => line.suffix ? [line.suffix] : []);
+    const before = (a, b) => a.y < b.y || a.y === b.y && a.x <= b.x;
+    const links = lines.flatMap(({ line, current, continuation }) => findTerminalLinks(line.text, this.options).flatMap((match) => {
       const range = { start: line.starts[match.start], end: line.ends[match.end - 1] };
       if (continuation && (!match.note || range.start.y === range.end.y)) return [];
+      if (!continuation && suffixes.some((suffix) => before(range.start, suffix.end) && before(suffix.start, range.end))) return [];
       if (range.start.y > y || range.end.y < y) return [];
       const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;
       if (seen.has(key)) return [];

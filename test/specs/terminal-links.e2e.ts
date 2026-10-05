@@ -167,20 +167,6 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		});
 	});
 
-	it("opens note paths wrapped by OpenCode into indented hard rows", async function () {
-		const text = `${notePath}:3:5`;
-		await render("  - Terminal links/\r\n    中文 My note.md:3:5 — session summary", true);
-		const point = await linkPoint(text, true);
-		expect(point.range.start.y).toBeLessThan(point.range.end.y);
-		await browser.execute(() => { (window as any).__terminalLinkInput = []; });
-		await clickLink(text, true, true);
-		await waitActivation(() => browser.execute((notePath: string) => (window as any).app.workspace.getActiveFile()?.path === notePath, notePath));
-		const cursor = await browser.execute(() => (window as any).app.workspace.activeLeaf.view.editor.getCursor());
-		expect(cursor.line).toBe(2);
-		expect(cursor.ch).toBe(4);
-		expect(await browser.execute(() => (window as any).__terminalLinkInput)).toEqual([]);
-	});
-
 	it("opens wrapped space/Unicode note paths and cursor locations while preserving terminal leaf/PTY", async function () {
 		const text = `${notePath}:3:5`;
 		await render(`Agent: \`${text}\``, false, true);
@@ -275,4 +261,18 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		});
 		expect(found).toEqual([]);
 	});
+	it("opens note paths wrapped by OpenCode into indented hard rows", async function () {
+		const text = `${notePath}:3:5`;
+		await render("  - Terminal links/\r\n    中文 My note.md:3:5 — session summary", true);
+		const point = await linkPoint(text, true);
+		expect(point.range.start.y).toBeLessThan(point.range.end.y);
+		await browser.execute(() => { (window as any).__terminalLinkInput = []; });
+		await clickLink(text, true, true);
+		await waitActivation(() => browser.execute((notePath: string) => (window as any).app.workspace.getActiveFile()?.path === notePath, notePath));
+		const cursor = await browser.execute(() => (window as any).app.workspace.activeLeaf.view.editor.getCursor());
+		expect(cursor.line).toBe(2);
+		expect(cursor.ch).toBe(4);
+		expect(await browser.execute(() => (window as any).__terminalLinkInput)).toEqual([]);
+	});
+
 });
