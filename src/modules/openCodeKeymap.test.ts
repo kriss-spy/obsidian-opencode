@@ -8,6 +8,7 @@ import {
 	loadOpenCodeManualCopy,
 	normalizeObsidianHotkey,
 	resolveOpenCodeHotkeys,
+	resolveOpenCodeSuspendHotkeys,
 } from "./openCodeKeymap";
 
 const temporaryDirectories: string[] = [];
@@ -16,6 +17,16 @@ afterEach(() => {
 });
 
 describe("OpenCode keymap", () => {
+	it("guards only effective direct suspend shortcuts, respecting disabled and remapped bindings", () => {
+		expect([...resolveOpenCodeSuspendHotkeys({}, "linux")]).toEqual(["ctrl+z"]);
+		expect([...resolveOpenCodeSuspendHotkeys({}, "win32")]).toEqual([]);
+		expect([...resolveOpenCodeSuspendHotkeys({ terminal_suspend: "none", input_undo: "ctrl+z" })]).toEqual([]);
+		expect([...resolveOpenCodeSuspendHotkeys({ terminal_suspend: "ctrl+j,ctrl+alt+z" })]).toEqual(["ctrl+j", "ctrl+alt+z"]);
+		expect([...resolveOpenCodeSuspendHotkeys({ terminal_suspend: "<leader>z" })]).toEqual([]);
+		expect([...resolveOpenCodeSuspendHotkeys({ leader: "ctrl+z" })]).toEqual([]);
+		expect([...resolveOpenCodeSuspendHotkeys({ leader: "ctrl+j", terminal_suspend: "ctrl+j,ctrl+z" })]).toEqual(["ctrl+z"]);
+	});
+
 	it("reserves OpenCode defaults and its leader", () => {
 		const keys = resolveOpenCodeHotkeys();
 		expect(keys).toContain("ctrl+b");

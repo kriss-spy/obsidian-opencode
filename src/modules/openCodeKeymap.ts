@@ -154,6 +154,19 @@ export function resolveOpenCodeHotkeys(
 	return result;
 }
 
+// Embedded terminals have no job-control shell to resume a suspended TUI.
+// Only guard direct suspend bindings; never consume the shared leader itself.
+export function resolveOpenCodeSuspendHotkeys(
+	overrides: Record<string, BindingValue> = {},
+	platform: NodeJS.Platform = process.platform,
+): ReadonlySet<string> {
+	const value = Object.prototype.hasOwnProperty.call(overrides, "terminal_suspend")
+		? overrides.terminal_suspend
+		: platform === "win32" ? false : DEFAULT_BINDINGS.terminal_suspend;
+	const leaders = new Set(bindingKeys(overrides.leader ?? DEFAULT_BINDINGS.leader, ""));
+	return new Set(bindingKeys(value, "").filter(key => !leaders.has(key)));
+}
+
 function parseJsonc(text: string): unknown {
 	let result = "";
 	let inString = false;
@@ -269,10 +282,18 @@ function configFiles(cwd: string, env: NodeJS.ProcessEnv): string[] {
 	return files;
 }
 
-export function loadOpenCodeHotkeys(cwd: string, env: NodeJS.ProcessEnv = process.env): ReadonlySet<string> {
+function loadOverrides(cwd: string, env: NodeJS.ProcessEnv): Record<string, BindingValue> {
 	const overrides: Record<string, BindingValue> = {};
 	for (const file of configFiles(cwd, env)) Object.assign(overrides, readOverrides(file, env));
-	return resolveOpenCodeHotkeys(overrides);
+	return overrides;
+}
+
+export function loadOpenCodeHotkeys(cwd: string, env: NodeJS.ProcessEnv = process.env): ReadonlySet<string> {
+	return resolveOpenCodeHotkeys(loadOverrides(cwd, env));
+}
+
+export function loadOpenCodeSuspendHotkeys(cwd: string, env: NodeJS.ProcessEnv = process.env): ReadonlySet<string> {
+	return resolveOpenCodeSuspendHotkeys(loadOverrides(cwd, env));
 }
 
 export function loadOpenCodeManualCopy(

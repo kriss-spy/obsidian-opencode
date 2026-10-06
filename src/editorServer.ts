@@ -127,6 +127,7 @@ export class EditorServer {
 			method: "at_mentioned",
 			params: {
 				filePath,
+				// OpenCode requires numeric line fields even for directory paths.
 				lineStart: lineStart ?? 1,
 				lineEnd: lineEnd ?? 1,
 			},

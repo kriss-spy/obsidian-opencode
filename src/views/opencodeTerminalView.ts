@@ -1,13 +1,14 @@
-import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
+import { ItemView, Keymap, MarkdownView, Notice, WorkspaceLeaf } from "obsidian";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { WebLinksAddon } from "@xterm/addon-web-links";
+import { TerminalLinks } from "../modules/terminalLinks";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { ImageAddon } from "@xterm/addon-image";
 import { release, tmpdir } from "node:os";
 import { mkdtempSync, readdirSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { absoluteLineReference, deliverLineReference, FileLineReference, ReferenceDelivery } from "../modules/activeLineReference";
 import type OpencodePlugin from "../main";
 import { handleTerminalDrop } from "../terminalDrop";
 import { EditorServer } from "../editorServer";
@@ -26,7 +27,7 @@ import {
 	scrollbarPageInput,
 } from "../modules/windowsTerminalMouse";
 import { LifecycleQueue } from "../modules/lifecycleQueue";
-import { loadOpenCodeHotkeys, loadOpenCodeManualCopy } from "../modules/openCodeKeymap";
+import { loadOpenCodeHotkeys, loadOpenCodeManualCopy, loadOpenCodeSuspendHotkeys } from "../modules/openCodeKeymap";
 import { mergeEnvironmentVariables } from "../utils/environment";
 import { OpencodeClient, OpencodeError } from "../utils/opencode";
 import { createWslWindowsClipboard } from "../modules/wslWindowsClipboard";
@@ -52,6 +53,7 @@ export class OpencodeTerminalView extends ItemView {
 	private editorPort: number | undefined;
 	private ptySession: PtySession;
 	private keyRouter: TerminalKeyRouter;
+	private terminalLinks: TerminalLinks | null = null;
 	private readonly lifecycle = new LifecycleQueue();
 	private closing = false;
 	private clipboardTempDirectory: string | null = null;
@@ -89,6 +91,29 @@ export class OpencodeTerminalView extends ItemView {
 
 	private sendShiftEnterNewline(terminal: Terminal): void {
 		terminal.input(SHIFT_ENTER_NEWLINE_SEQUENCE, true);
+	}
+
+	addFileReference(reference: FileLineReference): ReferenceDelivery {
+		const terminal = this.terminal;
+		const stdin = this.ptySession.getStdin();
+		// Use an absolute path: the terminal can run outside the vault or resume a
+		// session with a different working directory.
+		const absolute = absoluteLineReference(reference, this.plugin.vaultRoot);
+		return deliverLineReference(absolute, {
+			ready: !this.closing && !!terminal && !!stdin && stdin.writable && !stdin.destroyed,
+			notify: (ref) => this.editorServer?.notifyAtMentioned(ref.filePath, ref.lineStart, ref.lineEnd) ?? false,
+			// xterm remains the sole ordered input producer; never write to the PTY.
+			paste: (text) => terminal!.paste(text),
+		});
+	}
+
+	focusTerminal(): void {
+		// revealLeaf has finished loading the view. Focus immediately so later
+		// note navigation, sidebar collapse, and PTY startup cannot steal focus.
+		if (this.closing || this.app.workspace.getActiveViewOfType(OpencodeTerminalView) !== this) return;
+		const container = this.container;
+		if (!container?.isConnected || container.clientWidth === 0 || container.clientHeight === 0) return;
+		this.terminal?.focus();
 	}
 
 	async onOpen() {
@@ -160,7 +185,7 @@ export class OpencodeTerminalView extends ItemView {
 
 		const fitAddon = new FitAddon();
 		terminal.loadAddon(fitAddon);
-		terminal.loadAddon(new WebLinksAddon());
+
 		const imageAddon = new ImageAddon({
 			enableSizeReports: false,
 			iipSupport: false,
@@ -169,6 +194,36 @@ export class OpencodeTerminalView extends ItemView {
 		this.imageAddon = imageAddon;
 
 		terminal.open(termContainer);
+		const terminalLinks = new TerminalLinks(terminal, {
+			vaultRoot: this.plugin.vaultRoot,
+			wslDistro: terminalEnvironment.WSL_DISTRO_NAME,
+			hasNote: path => Boolean(this.app.vault.getFileByPath(path)?.extension.toLowerCase() === "md"),
+			isModEvent: event => Boolean(Keymap.isModEvent(event)),
+			openExternal: url => {
+				const electron = require("electron") as { shell: { openExternal(url: string): Promise<void> } };
+				return electron.shell.openExternal(url);
+			},
+			openNote: async (target, event) => {
+				const file = this.app.vault.getFileByPath(target.path);
+				if (!file) return;
+				const leaf = this.app.workspace.getLeaf(Keymap.isModEvent(event));
+				await leaf.openFile(file, { active: true, state: target.line ? { mode: "source" } : undefined });
+				if (target.line && leaf.view instanceof MarkdownView) {
+					const editor = leaf.view.editor;
+					const line = Math.min(target.line - 1, editor.lineCount() - 1);
+					const ch = Math.min((target.column ?? 1) - 1, editor.getLine(line).length);
+					editor.setCursor({ line, ch });
+					editor.scrollIntoView({ from: { line, ch }, to: { line, ch } }, true);
+				}
+			},
+			onError: error => {
+				console.warn("Could not open terminal link", error);
+				new Notice("Could not open terminal link");
+			},
+		});
+		terminalLinks.attach(termContainer);
+		this.terminalLinks = terminalLinks;
+		this.register(() => terminalLinks.dispose());
 		// OpenCode changes xterm's OSC colors while previewing. Its `system` theme
 		// must still query Obsidian's host palette, not the preceding preview.
 		for (const [osc, property] of [[10, "--text-normal"], [11, "--background-primary"]] as const) {
@@ -530,6 +585,8 @@ export class OpencodeTerminalView extends ItemView {
 			shiftEnterNewline: this.plugin.settings.shiftEnterNewline,
 			onShiftEnterNewline: () => this.sendShiftEnterNewline(terminal),
 			reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
+			suspendTerminalHotkeys: loadOpenCodeSuspendHotkeys(terminalCwd, terminalEnvironment),
+			onSuspendBlocked: () => new Notice("OpenCode cannot be suspended inside Obsidian. Close or restart the terminal instead."),
 			clipboard: windowsClipboard ?? undefined,
 			copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,
 			onClipboardError: (message) => new Notice(message),
@@ -557,7 +614,7 @@ export class OpencodeTerminalView extends ItemView {
 		});
 		this.register(() => this.keyRouter.dispose());
 
-		// Handle drag and drop for files
+		// Handle drag and drop for files and folders
 		const dragOverHandler = (e: DragEvent) => {
 			const target = e.target as Node;
 			if (!container.contains(target)) return;
@@ -576,6 +633,7 @@ export class OpencodeTerminalView extends ItemView {
 				dragManager: dragMgr,
 				dataTransfer: e.dataTransfer,
 				terminalInput: this.ptySession.getStdin() ? (data: string) => terminal.input(data, true) : undefined,
+				terminalPaste: this.ptySession.getStdin() ? (text: string) => terminal.paste(text) : undefined,
 				onFileDrop: this.editorServer ? (filePath: string) => {
 					const normalized = normalizeVaultPath(filePath, this.plugin.vaultRoot);
 					return this.editorServer!.notifyAtMentioned(normalized);
@@ -590,11 +648,6 @@ export class OpencodeTerminalView extends ItemView {
 			container.removeEventListener('drop', dropHandler, true);
 		});
 
-		window.setTimeout(() => {
-			if (this.terminal) {
-				this.terminal.focus();
-			}
-		}, 600);
 	}
 
 	async restartPty(): Promise<void> {
@@ -670,6 +723,8 @@ export class OpencodeTerminalView extends ItemView {
 
 	async onClose() {
 		this.closing = true;
+		this.terminalLinks?.dispose();
+		this.terminalLinks = null;
 		await this.lifecycle.enqueue(async () => {
 			if (this.editorServer) {
 				await this.editorServer.stop();

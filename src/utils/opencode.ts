@@ -499,7 +499,8 @@ export class OpencodeClient {
 	async listSessionChangedFiles(sessionId: string): Promise<string[]> {
 		if (!SAFE_ID_RE.test(sessionId)) throw new Error(`Invalid session ID: ${sessionId}`);
 		try {
-			const payload: unknown = JSON.parse(await this.commandRunner()([
+			const run = this.commandRunner();
+			const payload: unknown = JSON.parse(await run([
 				"api",
 				"get",
 				`/api/session/${sessionId}/diff?context=0`,
@@ -507,16 +508,66 @@ export class OpencodeClient {
 			if (!isRecord(payload) || !Array.isArray(payload.data)) {
 				throw new Error("Expected an OpenCode v2 session-diff response");
 			}
-			return payload.data.map((entry) => {
+			const files = payload.data.map((entry) => {
 				if (!isRecord(entry) || typeof entry.file !== "string") {
 					throw new Error("Expected every OpenCode v2 diff entry to have a file path");
 				}
 				return entry.file;
 			});
+			// V2 can return an empty diff even after a successful vault edit (#21).
+			return files.length > 0 ? files : await this.listCurrentTurnToolFiles(sessionId, run);
 		} catch (error) {
 			if (error instanceof OpencodeError) throw error;
 			throw new MalformedCliOutputError(error);
 		}
+	}
+
+	private async listCurrentTurnToolFiles(sessionId: string, run: SessionCommandRunner): Promise<string[]> {
+		const files = new Set<string>();
+		const seenCursors = new Set<string>();
+		let cursor: string | undefined;
+		let firstMessage = true;
+		do {
+			// The V2 message API returns flat messages, newest first (not export's info/parts).
+			const query = `/api/session/${sessionId}/message?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : "&order=desc"}`;
+			const payload: unknown = JSON.parse(await run(["api", "get", query]));
+			if (!isRecord(payload) || !Array.isArray(payload.data)) {
+				throw new Error("Expected an OpenCode v2 message response");
+			}
+			for (const message of payload.data) {
+				if (!isRecord(message) || typeof message.type !== "string") {
+					throw new Error("Expected every OpenCode v2 message to have a type");
+				}
+				// The newest idle message closes this turn; an older idle closes the previous one.
+				// Synthetic continuations/compaction may appear inside a turn and are not a reset.
+				if (message.type === "user" || message.type === "shell" || (message.type === "idle" && !firstMessage)) {
+					return Array.from(files);
+				}
+				firstMessage = false;
+				if (message.type !== "assistant") continue;
+				if (!Array.isArray(message.content)) throw new Error("Expected assistant message content");
+				for (const part of message.content) {
+					if (!isRecord(part) || part.type !== "tool" || !["edit", "write", "apply_patch", "patch"].includes(String(part.name)) || !isRecord(part.state)
+						|| part.state.status !== "completed" || !isRecord(part.state.metadata)) continue;
+					const changedFiles = part.state.metadata.files;
+					if (!Array.isArray(changedFiles)) continue;
+					for (const file of changedFiles) {
+						if (isRecord(file) && typeof file.file === "string" && file.file.trim()) files.add(file.file);
+					}
+				}
+			}
+			if (payload.cursor !== undefined && !isRecord(payload.cursor)) {
+				throw new Error("Expected OpenCode v2 message cursor metadata");
+			}
+			const next = isRecord(payload.cursor) ? payload.cursor.next : undefined;
+			if (next !== undefined && next !== null && typeof next !== "string") {
+				throw new Error("Expected OpenCode v2 message cursor to be a string");
+			}
+			cursor = typeof next === "string" && next ? next : undefined;
+			if (cursor && seenCursors.has(cursor)) throw new Error("OpenCode v2 returned a repeated message cursor");
+			if (cursor) seenCursors.add(cursor);
+		} while (cursor);
+		return Array.from(files);
 	}
 
 	async listRecentlyUpdatedSessions(): Promise<OpencodeActiveSession[]> {

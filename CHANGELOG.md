@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-06
+
+### Added
+
+- **Folder drag and drop** — Paste folders from Obsidian's file explorer as plain vault-relative paths with a trailing slash, including mixed file/folder selections and names with spaces or Unicode. File drops retain their line mentions.
+- **Configurable Shift+Enter newlines** — Optionally insert a newline in the terminal with Shift+Enter, applying settings immediately and preserving IME input ordering.
+- **Active-line references** — Send the current note's line or selected line range to a running embedded OpenCode terminal. ([#46](https://github.com/kriss-spy/obsidian-opencode/issues/46))
+- **Clickable terminal links** — Open HTTP(S) URLs in the system browser and vault note paths in Obsidian, including line and column references. ([#62](https://github.com/kriss-spy/obsidian-opencode/issues/62))
+
+### Fixed
+
+- **Complete note paths with punctuation** — Prefer the existing full path over a shorter basename when names contain commas, semicolons or brackets, while preserving independent references in prose.
+- **Selection-clearing link clicks** — Clear an existing terminal selection without opening the link under the pointer, including OSC 8 hyperlinks.
+- **Wrapped table note paths** — Open existing vault paths split across a bordered table cell, including filenames with punctuation and repeated `.md` suffixes, and records whose neighboring text columns also wrap.
+- **Wrapped-link underline overflow** — Underline every wrapped fragment together on hover, keeping each underline and click target within its row's actual link text.
+- **Wrapped HTTP links** — Open the full URL from any row when OpenCode splits a long address across an indented paragraph, code block or bordered table cell, including tables beside the session sidebar and query strings broken at commas or plus signs.
+- **Wrapped note paths in session history** — Detect existing vault paths split across indented rows by OpenCode's paragraph renderer, including mixed word and mid-word breaks, split `.md` extensions, spaces and line/column references.
+- **Ctrl+Z terminal freeze** — Block effective direct OpenCode suspend shortcuts in the embedded terminal, preserving configured undo bindings and normal terminal input.
+- **Completed-task note warnings** — Use successful edit-tool metadata when OpenCode V2 returns an empty session diff, retaining the touched-note warning after completion without carrying it into a new turn. ([#21](https://github.com/kriss-spy/obsidian-opencode/issues/21))
+- **Terminal focus on open** — Focus terminal input when explicitly opening or revealing it. ([#57](https://github.com/kriss-spy/obsidian-opencode/issues/57))
+
+### Changed
+
+- **OpenCode ribbon icon** — Use the OpenCode logo for the terminal ribbon action. ([#63](https://github.com/kriss-spy/obsidian-opencode/issues/63))
+- **Folder-template documentation** — Document the `frontmatter-templater` integration.
+
 ## [2.2.0] - 2026-09-20
 
 ### Added

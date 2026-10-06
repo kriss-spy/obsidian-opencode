@@ -161,7 +161,10 @@ describe('EditorServer', () => {
         client.close();
     });
 
-    it('should send at_mentioned to connected client', async () => {
+    it.each([
+        { filePath: 'path/to/note.md', start: 1, end: 5, expected: { filePath: 'path/to/note.md', lineStart: 1, lineEnd: 5 } },
+        { filePath: 'Research 笔记/', start: undefined, end: undefined, expected: { filePath: 'Research 笔记/', lineStart: 1, lineEnd: 1 } },
+    ])('should send an accurate at_mentioned reference for $filePath', async ({ filePath, start, end, expected }) => {
         server = new EditorServer({ lockDir: tempLockDir });
         const port = await server.start('/path/to/vault');
 
@@ -177,16 +180,12 @@ describe('EditorServer', () => {
             });
         });
 
-        expect(server.notifyAtMentioned('path/to/note.md', 1, 5)).toBe(true);
+        expect(server.notifyAtMentioned(filePath, start, end)).toBe(true);
 
         const msg = await received;
         expect(msg.jsonrpc).toBe('2.0');
         expect(msg.method).toBe('at_mentioned');
-        expect(msg.params).toEqual({
-            filePath: 'path/to/note.md',
-            lineStart: 1,
-            lineEnd: 5
-        });
+        expect(msg.params).toEqual(expected);
 
         client.close();
     });

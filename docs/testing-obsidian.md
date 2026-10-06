@@ -49,6 +49,23 @@ The suite builds and installs the plugin, configures a deterministic local fake 
 
 Screenshots of the conversations and terminal views are written to `test-results/obsidian/`.
 
+When developing in multiple worktrees, run builds and unit tests independently, but give one coordinator ownership of real-app testing. `maxInstances: 1` serializes workers within one WebdriverIO run; it does not serialize separate runs. On Linux, use the same host-wide lock for every app run:
+
+```bash
+OBSIDIAN_VERSION=1.12.7 OBSIDIAN_INSTALLER_VERSION=1.12.7 \
+  flock /tmp/obsidian-opencode-real-app.lock npm run test:obsidian
+```
+
+An opt-in Linux test also starts the installed formal V2 CLI, reveals its terminal after focusing a note, and checks keyboard input:
+
+```bash
+OPENCODE_REAL_E2E=1 OBSIDIAN_TEST_GREP='real V2' \
+  OBSIDIAN_VERSION=1.12.7 OBSIDIAN_INSTALLER_VERSION=1.12.7 \
+  flock /tmp/obsidian-opencode-real-app.lock npm run test:obsidian
+```
+
+This test uses `--standalone`, separate temporary OpenCode configuration/data directories, and the fresh test vault. It types a draft without submitting it, closes its PTY, and removes its profile. It does not reload the plugin in an existing vault.
+
 Set `OBSIDIAN_VERSION` and `OBSIDIAN_INSTALLER_VERSION` to pin versions instead of testing the latest release:
 
 ```bash
@@ -86,12 +103,171 @@ It cannot non-interactively create or register an arbitrary fresh vault. `vault:
 | #26 | Pinyin keydowns emitted while `isComposing` do not reach the PTY; only committed Chinese text is sent. Run with `npm run test:obsidian:macos-ime`. |
 | #22 | Unit tests verify the isolated Windows ConPTY helper and resize channel. Windows CI covers stubbed rendering, input, live resizing, restart, and session workflows; `npm run test:obsidian:windows-ui` covers the real CLI and mouse interactions. |
 | #10 | Unit tests cover large-export limits; E2E covers normal preview and export-to-note behavior. |
-| #21 | Unit tests cover activity/diff parsing and idle/running/touched precedence; E2E verifies the rendered status states, tooltip text, warning badge, and terminal action. |
+| #21 | Unit tests cover activity/diff parsing, successful edit metadata with an empty diff, latest-turn boundaries, pagination, and idle/running/touched precedence. E2E verifies rendered states, tooltips, warning badges, and the terminal action; a V2 API executable fixture exercises completion retention and new-turn reset through the real client and source. |
+| #46 | Unit tests cover inclusive editor ranges, private bridge delivery, and ordered text fallbacks; E2E invokes the editor command and checks exact ranges and unsubmitted terminal input. |
+| #57 | Unit tests cover reveal/activation ordering and guards against late focus; E2E checks command, ribbon, status, toggle, restart, restore, and editor focus stability. The opt-in Linux test also checks the installed V2 CLI. |
+| #62 | Unit tests cover path parsing, wrapped terminal cells, confinement, link activation, mouse ownership, and lifecycle cleanup; E2E uses actual pointer events and editor navigation, stubbing only the external browser opener. |
+| #63 | E2E checks the official ribbon mark's geometry, accessible labels, and light/dark rendering. |
 | #50, #52, #53, #54 | Unit tests cover WSL2 detection, Unicode/Base64 transport, argument safety, failures, routing, OSC 52, and PNG validation. The X410 suite exercises formal V2 startup, exact selection copy, Unicode paste, OSC 52, Windows image paste through a temporary OpenCode attachment path, and rendered SIXEL copy to Windows. |
 
 Not yet automatable in this Linux job:
 
 - #15-#19 describe panel-mode behavior not present on the current branch.
+
+## Unreleased 2.3.0 verification
+
+On 2026-10-05, the integrated changes for #21, #46, #57, #62, and #63 were verified on Linux `7.2.5-200.fc44.x86_64`, with Obsidian app and installer 1.12.7 and installed OpenCode V2 CLI 2.0.22:
+
+- `npm test`: 269 passing and 5 platform-only tests skipped.
+- Production TypeScript and esbuild build: passing.
+- `OPENCODE_REAL_E2E=1 npm run test:obsidian`: all seven spec files passed, with 36 passing tests and 9 platform tests skipped.
+- An additional real-xterm OSC 8 regression passed: an unsafe target cannot open a browser even when its visible label looks like an HTTPS URL.
+
+All real-app runs used fresh vaults/profiles and the shared `flock /tmp/obsidian-opencode-real-app.lock` lock. The installed CLI test checked terminal activation and keyboard input; the #21 fallback was also checked against actual V2 message metadata for a successful edit with an empty diff. Native Windows, WSL2/X410, and macOS checks were not repeated for this set of changes.
+
+The tested `main.js` SHA-256 is `d49fd061b97c6251f2a602699819de54d0b32f36e18ad51db574c5a4fa810d9b`. This records an unreleased integration; it does not imply a version bump or published release.
+
+### Ctrl+Z follow-up (2026-10-05)
+
+The installed OpenCode 2.0.22 CLI reproduced a frozen embedded renderer after Ctrl+Z. The fix guards effective direct suspend bindings before xterm encodes them, preserving disabled suspend bindings, configured undo bindings, shared leaders, and composition.
+
+- Production build and `npm test`: passing, with 272 tests passed and 5 platform-only tests skipped.
+- The final isolated app run passed the installed-CLI Ctrl+Z regression and the restart/new/continue/restore workflow. It verified that the existing draft survived, subsequent typing reached OpenCode, and xterm emitted no suspend byte.
+- Broader reruns were not green: the full focus sequence failed and the terminal-links suite hit renderer/script timeouts. The restart/restore case passed when run separately; the broader test interaction remains unresolved before release.
+- Final tested `main.js` SHA-256: `fe76506468da76cb5cb7e8e75d6d681bcf0eaf93d938a1cc358028ab5e1dd96a`.
+
+All app runs remained serialized under the shared lock and used isolated vaults/profiles. Native Windows, WSL2/X410, and macOS were not checked for this follow-up.
+
+### TUI-wrapped session references (2026-10-05)
+
+A read-only diagnostic in the running cloudnotes vault (Obsidian 1.14.4, installer 1.13.7) confirmed that OpenCode rendered an existing note path across two indented rows, both with `isWrapped=false`. The installed detector found neither fragment. The corrected detector, queried without attaching handlers or changing the session, returned the complete path and its cell range from both rows.
+
+- Production build and `npm test`: passing, with 277 tests passed and 5 platform-only tests skipped.
+- The isolated Obsidian 1.12.7 terminal-links suite passed all 7 tests before the basename-collision follow-up, covering TUI-managed and native wraps, Unicode/spaces, line/column jumps, selection, mouse ownership, external URLs, and OSC 8 guards. The final build passed the focused hard-row pointer test (1 test), including editor line/column navigation and no terminal input leakage. A repeat of the full terminal-links suite encountered hover instability and renderer timeouts; it did not complete cleanly.
+- Regression tests retain ordinary hard-line separation and reject missing notes, outside-vault paths, inconsistent indentation, and separate bullets. Both rows prefer the full path over an existing root basename; missing/outside paths never offer that misleading basename. A changed continuation invalidates cached activation. Drop-handler tests now drain pending timers before restoring their window stub.
+- Tested `main.js` SHA-256: `4e82870976d2e77eecd29c61fc50d4298e9d7e909636586b77c90df92bdca914`.
+
+Real pointer tests used a fresh vault/profile under the shared app-test lock. The broader app suite was not repeated for this follow-up; the earlier full-focus-sequence failures remain unresolved.
+
+### HTTP wrap follow-up (2026-10-05)
+
+The saved cloudnotes session `ses_ef36ef203ffeRIUA8l2cTne6eF` reproduced a 142-character HTTP(S) address split across six OpenCode-managed hard rows. Before the fix, a real Ctrl+click attempted to open only `https://resources.anthropic/`. The complete address returned HTTP 200.
+
+- Production build/typechecking and the full unit suite passed: 283 passed, 5 platform-only skipped.
+- Final isolated Obsidian 1.12.7 pointer checks passed (3 tests): existing wrapped-note navigation, first/middle/last HTTP-row clicks with no PTY input leakage, and the saved session rendered by installed OpenCode 2.0.22. Each saved-session click delivered the exact complete address to the browser opener; only that external side effect was intercepted.
+- Unit regressions cover code-block, bullet and bordered-message indentation; hostname, percent-escape, query and fragment splits; native/hard-wrap combinations; stale continuations; independent short URLs; and suppression of partial targets beyond the row/length bounds. Standards and Spec reviews cleared.
+- Tested and installed `main.js` SHA-256: `2a5ee807de4a1c696ad4ac8a8825346488981cb85ad2ad5f4c6505da9a32f3bf`.
+
+All app runs used fresh vaults/profiles under the shared lock. The saved-session diagnostic was temporary and removed after verification; its pointer evidence is in `/tmp/opencode-wrapped-url-fixed/evidence.json`. The broader app suite and other platforms were not repeated. The documented ambiguity of a filled URL row followed by a single-word row remains.
+
+### Underline overflow and full-suite follow-up (2026-10-05)
+
+xterm draws multi-row link ranges across the full width of intermediate rows. OpenCode-managed wraps include indentation and padding, so the provider now publishes a separate range for each TUI row while retaining the complete URL/note target. Unit checks cover exact text-cell bounds; isolated pointer tests inspect the actual underline canvas to reject pixels outside the hovered row's text.
+
+- Production build/typechecking and the full unit suite passed: 283 passed, 5 platform-only skipped.
+- Focused wrapped-note and HTTP pointer/underline checks passed before the full app suite was started.
+- The first full run passed six spec files, then hit the existing terminal-links animation-frame wait timeout. The test helper now finishes after parsing with a bounded redraw wait; all pointer, canvas, navigation, and input assertions remain enabled.
+- The final complete Linux app run passed all seven spec files with `OPENCODE_REAL_E2E=1`, including the installed CLI suspend regression and all eight terminal-link tests. This supplies a clean final-suite run after the earlier focus/hover/timeout failures; other desktop platforms still need fresh verification.
+- Standards and Spec review cleared. Tested and installed `main.js` SHA-256: `2973e38ef1d0aac63325bbcc9a59ff6c331d66ae8d3f940fadd79235969aaa2e`.
+
+All GUI runs remained serial in fresh vaults/profiles under the shared lock. The user's plugin artifacts were installed with backups and hash verification, without changing settings or reloading the active terminal.
+
+### Grouped wrapped-link underlines (2026-10-05)
+
+The earlier overflow fix limited native hover decoration to one row. The final behavior retains those per-row hit bounds and underlines every fragment of the complete target together. Non-interactive, owned overlays use the mapped cells; they are removed on leave, disposal, viewport changes, invalidated content, and transitions to embedded OSC 8 links.
+
+- Production build/typechecking passed; full unit suite: 284 passed, 5 platform-only skipped.
+- Focused app checks verified all six rendered underline rectangles against actual fragment lengths, with no indentation/padding spill, no pointer interception, complete URL activation from three rows, and group removal on leave.
+- The final full Linux app suite with installed OpenCode and `OPENCODE_REAL_E2E=1` passed: 38 tests, 9 platform tests skipped, all seven spec files green.
+- Standards and Spec reviews cleared. Tested and installed artifact SHA-256: `main.js` = `b2ae24d867d626e064e133f4d1f6a6a355b552c34f78a8cc0049b2a3cfce1575`; `styles.css` = `336ce4aa00034c42328f8ae216835ad9d0820617dec91ed59e6221ff4dc97a32`.
+
+The GUI runs remained serial in fresh vaults/profiles. Installation preserved user settings and the running session. Other desktop platforms still require fresh CI verification.
+
+### Mixed row breaks in long note paths (2026-10-06)
+
+The live cloudnotes terminal displayed an indexed note across five hard rows, combining slash boundaries, a word break, and a break between `.` and `md`. The previous matcher tried only a uniformly spaced or uniformly joined path; both failed. The provider now chooses spaces independently at each boundary, retaining the eight-row/4,096-unit bounds and exact indexed-note requirement. Reconstructed matches must begin in their initial source row; a per-call resolution cache avoids repeated suffix lookups.
+
+- The exact live buffer now yields the same complete note target on all five rows, with confined cell ranges. This diagnostic did not attach handlers or alter the session.
+- Production build/typechecking passed; full unit suite: 286 passed, 5 platform-only skipped. A lookup-count regression covers worst-case eight-row ambiguity at 68 columns and verifies that the next provider call refreshes the note index.
+- The initial complete terminal-link app spec passed all nine tests, including real Ctrl/Cmd-clicks on all five note rows, repeated navigation to the correct file, and zero PTY input leakage.
+- The final optimized build passed the focused five-row pointer regression. Each click opened the full note in a new tab with no PTY leakage; the test restores its fixture and closes the new tab between checks to prevent stub resize writes and wrapping tab headers from invalidating subsequent coordinates. Other diagnostic attempts encountered unsupported window-control commands or stale test coordinates; those test-only window changes were removed.
+- A subsequent broader app run passed six spec files, then failed the existing native-wrap hover precondition with a single-character suffix in column one and stalled. Its test processes were stopped without touching the user's app. The previous full-suite result above remains the last clean full Linux run; this follow-up does not claim a new full-suite pass.
+- Standards and Spec reviews cleared the fix and cache. Wide-output lookup cost remains a possible follow-up optimization within the existing fixed limits.
+- Installed `main.js` SHA-256: `ffe0acdc389f8bd7199099259d1547977922c6a54e6833f8690fcb0b7318fc09`. Artifact hashes were verified, settings preserved, and the user's active terminal was not reloaded. Backup: `/tmp/opencode-before-mixed-note-yv5hl616`.
+
+### Wrapped table note paths (2026-10-06)
+
+Session `ses_ef3381f6affeIiA6zYLGb8BC5o` contains eight long note paths in a Markdown table. Its live 68-column terminal displayed the indexed 215-character path across five bordered rows; the previous provider returned no links. A read-only probe of the new provider recognizes the same complete note on all five rows, mapping only the path cells.
+
+- Bordered-cell reconstruction matches physical column positions, strips padding, and stops at separators, changed borders, blank path cells, or a new record's nonempty peer cell. It retains the eight-row/4,096-unit limits and adds a 16-column limit.
+- Exact whole-cell lookup supports commas, parentheses, and the session's `AGENTS.md.md` filename. Reconstructed suppression ranges stay inside their individual cells; adjacent notes, web URLs, and ordinary quoted/prose references remain active. Complete quoted references stop reconstruction before following prose, while unquoted repeated extensions can continue across rows.
+- Production build/typechecking passed. Final full unit suite: 301 passed, 5 platform-only skipped. Regression coverage includes physical Unicode column widths, repeated extensions split between rows (with the shorter note also indexed), quoted/prose cells, record boundaries, stale content, and rejection of missing/outside path suffixes.
+- Final isolated Obsidian 1.12.7 app checks passed: four cases, 17 real Ctrl/Cmd-clicks across paragraph, table, punctuation, and split-extension layouts. Every click opened the full intended note in a new tab; no PTY input leaked. Both review axes cleared.
+- Installed `main.js` SHA-256: `533dca20f39473b4b6060f8450247d2afc570c64e4f55b5bd74aeaa509162173`. Hashes were verified, settings preserved, and the user's active terminal was not reloaded. Final backup: `/tmp/opencode-before-reviewed-table-3kuch3qz`.
+
+All app tests ran serially in isolated vaults/profiles under the shared lock. The broader app suite was not repeated for this fix; its previously documented native-wrap hover failure still needs a clean release-verification run.
+
+### Wrapped table HTTP URLs (2026-10-06)
+
+The same session `ses_ef3381f6affeIiA6zYLGb8BC5o` contains five long HTTP URLs in a table. Their exact addresses are retained in `test/fixtures/table-http-links.ts`, including Maps waypoints, Amazon query punctuation, a GitHub line fragment, YouTube parameters, and Wikipedia tracking parameters.
+
+- URLs reconstruct within one bordered column without inserting spaces. Query punctuation and escapes remain intact. New records, populated peer cells, separators, changed columns and prose stop reconstruction. The paragraph reconstructor skips bordered table rows, avoiding an overlapping target that could append a horizontal separator.
+- Production build/typechecking passed. Full unit suite: 309 passed, 5 platform-only skipped. Table URL regressions cover every row, exact cell ranges, continuation limits, record/layout boundaries, short completed URLs and stale source/boundary rejection.
+- Isolated Obsidian 1.12.7 checks passed all five table URL cases: 37 real Ctrl/Cmd-clicks, one per rendered fragment, each opening the full original URL with zero PTY input leakage. Actual underline rectangles match every fragment and exclude borders, padding and neighboring cells; leaving removes the group.
+- Five additional app regression cases passed: 17 note clicks across paragraph/table/punctuation/split-extension layouts, and three paragraph URL clicks with grouped underline verification. Standards and Spec reviews cleared.
+- Installed `main.js` SHA-256: `05aff6d0c157dfb7b7d65e74139182cea1bc8418ff49f9e26ed0fb18ef285b79`. All three artifact hashes match the build; settings were preserved. Backup: `/tmp/opencode-before-table-http-b7r1a9nn`. The user's active terminal was not reloaded.
+
+All GUI runs were serial under the shared app lock in fresh isolated vaults/profiles. The initial table URL app attempt used an offscreen end-cell pointer coordinate; the test now clicks the visible start cell and separately verifies the complete start/end range and every underline rectangle. The broader suite was not rerun; the native-wrap hover release-verification limitation documented above remains.
+
+### Tables beside the session sidebar (2026-10-06)
+
+The prior table HTTP fix missed the user's actual layout. A read-only snapshot of the running session showed a 101-column frame with session-sidebar labels before some table rows. The previous parser required blank indentation before the opening table border and therefore stopped at those rows. The captured URL layout also includes breaks at query commas and plus signs.
+
+- Table detection now excludes sidebar cells before the opening border, preferring the thin table border over a thick sidebar divider. Physical border alignment, continuation bounds, stale validation and cell-only hit ranges remain in place. Comma/plus URL breaks can continue within the same cell.
+- `test/fixtures/sidebar-table-http.ts` preserves the actual physical rows and column positions with anonymized sidebar labels. Unit regressions check all 22 URL fragments, an additional thick sidebar divider, and a wrapped note with changing sidebar labels. Full unit suite: 312 passed, 5 platform-only skipped; production build/typechecking passed.
+- An unattached, read-only instance of the corrected provider recognized the full original URL from every one of the 22 fragments in the user's live terminal buffer. No running handlers or session state were changed.
+- Isolated Obsidian 1.12.7 pointer checks passed five captured-layout cases: all 22 real Ctrl/Cmd-clicks opened the full address, and hovering every row exposed the whole underline group. Actual rectangles matched text cells and excluded sidebar/border/padding cells; no PTY input leaked. Five existing note/paragraph URL regression cases also passed (17 note clicks and three paragraph URL clicks). Both review axes cleared.
+- Installed `main.js` SHA-256: `994df163c425ff42cdc1a4b5f2be1ac2468d0c9fb09b85721fac55c957b49c8b`. All three artifact hashes match, settings were preserved, and the running user session was not reloaded. Backup: `/tmp/opencode-before-sidebar-table-http-fyzonqwn`.
+
+App checks ran serially in fresh isolated vaults/profiles under the shared lock. This is focused verification; the broader native-wrap hover release check documented above remains outstanding.
+
+### Wrapped paths beside wrapping text columns (2026-10-06)
+
+Session `ses_ef07f9a7affeA2ezHBLKsUB6Yy` has a Section/Destination/Change table. All five destination notes are indexed, but the previous detector stopped when either neighboring column had continuation text. The screenshot and unobscured lower rows establish a 22-cell destination column with independently wrapping labels and descriptions; the Debug popup obscured the earlier live rows, and the user later changed sessions, so this verification does not claim a full live-buffer probe of all five paths.
+
+- An aligned horizontal separator establishes the record, allowing independently wrapping peers while reconstructing only the destination column. Tables without this evidence retain the blank-peer rule. Drawn separators, changed geometry, blank path cells and new numbered rows still stop reconstruction. The same record handling applies to HTTP table links.
+- Cached continuations retain snapshots of the exact separator and scanned preceding rows. Replacing that separator cannot fall back to older separator evidence. Unit regressions cover misaligned separators, aligned data replacing a nearer separator, multi-column URLs, physical Chinese widths, and full targets/ranges for all five notes.
+- Production build/typechecking passed. Final full unit suite: 320 passed, 5 platform-only skipped. Standards and Spec reviews cleared after addressing the stale-separator finding.
+- Final isolated Obsidian 1.12.7 run passed 15 relevant cases: 17 real clicks on the five multi-column note paths, 17 prior paragraph/table/punctuation/split-extension note clicks, 22 captured sidebar-table URL clicks, and three paragraph URL clicks. Each opened its complete intended target with no PTY leakage. Multi-column note hover checks verified all path fragments underlined together and confined to the destination text cells, including rows beside Chinese labels and prose.
+- Installed `main.js` SHA-256: `afead01c43ec040ede89305351b949906eb8779d5406e4fb02d6a3299271601b`. All three artifact hashes match the build, settings were preserved, and the user's running session was not reloaded. Backup: `/tmp/opencode-before-multicolumn-table-rw3fs_f8`.
+
+All GUI tests ran serially under the shared app lock in fresh isolated vaults/profiles. The broader native-wrap hover release-verification check documented above remains outstanding.
+
+### Folder drag and drop (2026-10-06)
+
+Folder drops from Obsidian's explorer now paste a plain vault-relative path with a trailing slash, including in mixed selections. The earlier bridge approach documented below was superseded by the user's plain-text preference. The live Obsidian drag-manager implementation confirmed `type: "folder"` stores the folder in `file`, while mixed `type: "files"` uses an array of TFile/TFolder objects; folder `children` identifies those entries without enumerating their contents.
+
+- Directory paths carry one trailing slash. Editor bridge messages retain numeric `lineStart: 1` and `lineEnd: 1` for directory references, just as for note drops. OpenCode displays a `#1` suffix but reads the directory contents rather than a file line. Simple fallback paths use `@folder/`; whitespace, `@`, and control-bearing folder names use explicit JSON-quoted directory text, matching the existing line-reference fallback's avoidance of partial autocomplete paths. Drops never inject Enter or Tab.
+- Production build/typechecking passed. Full unit suite: 326 passed, 5 platform-only skipped. Coverage includes folders, mixed file/folder selections, connection loss, unusual names, existing file drops, and required numeric line fields for both file and directory protocol messages. Both review axes cleared.
+- The original two isolated Obsidian 1.12.7 checks tested WebSocket delivery and terminal fallback input with a stub CLI. They did not establish actual OpenCode acceptance: removing numeric line fields caused OpenCode to silently reject folder references despite successful WebSocket delivery. Actual vault TFolder objects and Obsidian's own dragFolder/dragFiles methods produced the payloads. A trusted mouse drag from the explorer into the terminal delivered a single Unicode/space-containing directory message to the test WebSocket client. Mixed drops retained order; fallback checks recorded exact, unsubmitted terminal input for simple and nested space/Chinese directory names.
+- The test uses a main-pane terminal so both explorer and target remain visible in the smaller window. Earlier native-drag attempts missed the receiving pane during sidebar layout changes; dropping at the stable pane center and sending a final pointer movement verified real dragover/drop delivery.
+- Installed `main.js` SHA-256: `315fcfcf2db8e4bb55d81ad97fde13e7e7c8ee51a919515e55ee68902de126da`. All artifact hashes match, settings were preserved, and the running user session was not reloaded. Backup: `/tmp/opencode-before-folder-drop-fiuj2st_`.
+
+Follow-up after the user reported no response on reload:
+
+- Restored the numeric line fields required by [OpenCode V2.0.22's editor mention schema](https://github.com/anomalyco/opencode/blob/v2.0.22/packages/tui/src/context/editor.ts). The existing V1-compatible file line-mention delivery remains unchanged. OpenCode displays directory mentions with `#1`; its [attachment reader](https://github.com/anomalyco/opencode/blob/v2.0.22/packages/core/src/session/prompt.ts) recognizes directories with filesystem stat and discards line limits for directory contents.
+- Production build/typechecking and the full unit suite passed: 326 passed, 5 platform-only skipped. Standards and Spec reviews cleared.
+- All three focused app cases passed in isolated Obsidian 1.12.7. The additional case ran the installed real OpenCode 2.0.22 in its own XDG profile, established the existing `Smoke.md#1` mention, performed a trusted explorer drag of `Drop 笔记`, then verified complete mixed nested folder/note mentions in the actual prompt. Wrapped prompt rows were joined for assertion. No model prompt was submitted. Screenshot: `test-results/obsidian/real-folder-drop.png`.
+- Installed corrected `main.js` SHA-256: `bf5cd78ad28f48bc068e71bdc6f89109c0d4518f8324bd495cecd80cd2e770ac`. All three artifacts match, settings were preserved, and the running user app was not reloaded. Backup: `/tmp/opencode-before-folder-line-fix-cp6drvfm`.
+
+Plain-text behavior requested by the user (supersedes the bridge approach above):
+
+- Folders bypass the editor bridge and use `terminal.paste` to insert the vault-relative path with exactly one trailing slash. No added `@`, `#1`, label, quoting, Enter, Tab, or autocomplete confirmation. Spaces around each pasted path separate existing prompt text and neighboring file mentions. Names with spaces and Unicode remain intact; folder children are not expanded. File drops retain their existing bridge line mentions and terminal fallback behavior.
+- Production build/typechecking and all 326 unit tests passed (5 platform-only skipped). Both Standards and Spec reviews cleared. Mixed selection order and disconnection behavior are covered.
+- Three focused isolated Obsidian 1.12.7 app cases passed. Connected and disconnected bridge cases recorded the same exact plain folder input; only files produced WebSocket references. A trusted explorer drag in real OpenCode 2.0.22 displayed `Drop 笔记/` as ordinary text beside `@Smoke.md#1`; a mixed drop displayed `Drop 笔记/nested/` beside its note line mention. The shared gesture helper initially used an incorrect selector during extraction; correcting it restored the native drag test. Screenshot: `test-results/obsidian/real-folder-drop.png`. No model prompt was submitted.
+- Installed `main.js` SHA-256: `458d3c612bbf8dfb24d5ce964be5bb38dc753a75c67b5b624f79c8342d825f6e`. All three installed artifacts match the build; settings were preserved and the user's running app was not reloaded. Backup: `/tmp/opencode-before-plain-folder-drop-kfdxsatr`.
+
+GUI runs remained serial under the shared lock in fresh isolated vaults/profiles. No model prompt was submitted. The broader release-verification limitations above remain outstanding.
 
 ## WSL2/X410 evidence
 
@@ -121,3 +297,17 @@ The #26 test drives Chromium's composition event sequence inside the real macOS 
 - [`wdio-obsidian-service`](https://github.com/jesse-r-s-hines/wdio-obsidian-service)
 - [`wdio-obsidian-service` sample plugin](https://github.com/jesse-r-s-hines/wdio-obsidian-service-sample-plugin)
 - [WebdriverIO Electron testing](https://webdriver.io/docs/desktop-testing/electron/)
+
+## 2.3.0 release candidate verification (2026-10-06)
+
+The versioned candidate passed the production build and 326 unit tests (5 platform-only skipped). The final complete Linux app run passed all eight spec files and 60 tests, including real OpenCode 2.0.22, folder plain-text drops and all 27 terminal-link cases. The initial full run exposed two intermittent hover failures; the link suite passed standalone, and the final full run passed after settling fixture screen geometry before rendering. Click and underline assertions remain enabled. GUI runs stayed serial in isolated profiles under the shared lock.
+
+See [the release checklist](releases/2.3.0-checks.md) for asset hashes, strict static-review findings, platform verification limits and the publishing boundary. This is prepared release material, not a published release.
+
+### PR #64 link review follow-up (2026-10-06)
+
+The reviewed 2.3.0 candidate now prefers complete punctuation-bearing indexed paths over basename decoys and preserves independent comma/semicolon-delimited references. A primary click that begins with a selection suppresses textual and OSC 8 activation through the whole gesture, while the next independent click remains usable. Nine added unit cases cover the two reported defects and the parser review regression.
+
+Production build and 335 unit tests passed (5 platform-only skipped). The full isolated Linux app run passed 62 tests across all eight suites, including all 29 terminal-link cases and installed OpenCode 2.0.22. The two new app cases passed a focused rerun after resetting native click counting in the selection fixture. Standards and Spec cleared the fixes. The optional static-review mirror remains failed: 103 errors (89 mocked-test, 14 production), versus 19 in 2.2.0. GUI runs were serial under the shared lock, in fresh profiles, without submitting model prompts.
+
+Updated artifact hash: `main.js` SHA-256 `1b0d4ef361b55ec904a918dee0c39e7c9cb9ca2ea0490ea5c065dc8ac2b85537`. The installed vault candidate matches the release bundle; settings were preserved and no automatic reload occurred. Backup: `/tmp/opencode-before-2.3.0-link-review-b295rx4g`. Fresh Linux/Windows CI is triggered on the review-fix commit; previous green CI applies to the prior commit. macOS and Windows real-CLI/WSL2 limits still apply.

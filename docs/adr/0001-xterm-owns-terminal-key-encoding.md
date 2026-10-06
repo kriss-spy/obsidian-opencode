@@ -16,6 +16,10 @@ Let xterm handle every other keyboard and composition event. Route paste through
 
 Keep the PTY implementations behind that boundary. Windows ConPTY and Unix `pty.fork()` differ in process and resize transport, not in shortcut or IME ownership.
 
+### Embedded suspend exception (2026-10-05)
+
+Effective direct OpenCode `terminal_suspend` shortcuts are consumed at terminal-container capture before xterm sees them. The embedded PTY launches OpenCode without a job-control shell, so a suspended renderer has no interactive `fg` recovery path. This narrow exception blocks suspension without encoding or writing substitute input. Disabled suspend bindings, configured undo bindings, composition, and all other input retain the existing routing. Shared leader keys are never consumed by this guard.
+
 ## Consequences
 
 - Korean composition and a following key are ordered by xterm's composition helper.
