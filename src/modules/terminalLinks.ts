@@ -232,6 +232,7 @@ function wrappedTableNotes(terminal: Terminal, y: number): LinkLine[] {
 				const nextTable = next && tableRow(next);
 				if (!next || next.starts[0]?.y !== row || !nextTable || nextTable.borders !== table.borders ||
 					nextTable.cells.some((peer, index) => index !== column && peer.text) || !nextTable.cells[column].text) break;
+				if (candidates.every(candidate => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?[`"')\]]+$/i.test(candidate.text))) break;
 				if (candidates.every(candidate => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?$/i.test(candidate.text)) &&
 					!/^\.|^:[1-9]\d*(?::[1-9]\d*)?$/.test(nextTable.cells[column].text)) break;
 				candidates = appendNoteFragments(candidates, nextTable.cells[column]);

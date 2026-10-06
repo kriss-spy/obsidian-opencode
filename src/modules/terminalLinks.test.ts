@@ -129,6 +129,16 @@ describe("public xterm provider and activation", () => {
 		Object.assign(term.modes, { mouseTrackingMode: "any" });
 		expect(links(new TerminalLinks(term, options())).map(link => link.text)).toEqual(["Notes/Project.md"]);
 	});
+	it.each(["`Notes/Project.md`", '"Notes/Project.md"', "(Notes/Project.md)"])("keeps a completed quoted table reference active beside following prose: %s", text => {
+		const term = terminal([
+			{ chars: Array.from(`  │ ${text.padEnd(24)} │`) },
+			{ chars: Array.from(`  │ ${"explanation".padEnd(24)} │`) },
+		]);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options());
+		expect(links(provider, 1).map(link => link.text)).toEqual(["Notes/Project.md"]);
+		expect(links(provider, 2)).toEqual([]);
+	});
 	it("keeps an adjacent complete note active when another column wraps", () => {
 		const row = (cells: string[]) => `  │ ${cells.map(cell => cell.padEnd(12)).join(" │ ")} │`;
 		const term = terminal([

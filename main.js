@@ -20494,7 +20494,8 @@ function wrappedTableNotes(terminal, y) {
         const next = logicalLine(terminal, row);
         const nextTable = next && tableRow(next);
         if (!next || ((_b = next.starts[0]) == null ? void 0 : _b.y) !== row || !nextTable || nextTable.borders !== table.borders || nextTable.cells.some((peer, index) => index !== column && peer.text) || !nextTable.cells[column].text) break;
-        if (candidates.every((candidate) => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?$/i.test(candidate.text)) && !/^:[1-9]\d*(?::[1-9]\d*)?$/.test(nextTable.cells[column].text)) break;
+        if (candidates.every((candidate) => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?[`"')\]]+$/i.test(candidate.text))) break;
+        if (candidates.every((candidate) => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?$/i.test(candidate.text)) && !/^\.|^:[1-9]\d*(?::[1-9]\d*)?$/.test(nextTable.cells[column].text)) break;
         candidates = appendNoteFragments(candidates, nextTable.cells[column]);
         if (!candidates.length) break;
         sources.push({ y: row, text: next.text });
@@ -20669,6 +20670,7 @@ var TerminalLinks = class {
     const lines = [...wrappedWebLines(this.terminal, y), ...wrappedTableNotes(this.terminal, y), ...linkLines(this.terminal, y)];
     const suffixes = lines.flatMap((line) => {
       var _a;
+      if (line.exactNote && !line.continuation && !indexedNote(line.line.text, this.options, noteCache)) return [];
       return ((_a = line.suffixes) != null ? _a : line.suffix ? [line.suffix] : []).map((range) => ({
         range,
         noteOnly: line.exactNote || line.continuation === "note",
