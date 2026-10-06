@@ -115,6 +115,20 @@ describe("public xterm provider and activation", () => {
 			for (let y = 1; y <= fragments.length; y++) expect(links(provider, y).map(link => link.text)).toEqual([note]);
 		}
 	});
+	it("reconnects a repeated extension split between table rows instead of opening the shorter note", () => {
+		const term = terminal([
+			{ chars: Array.from("  │ Notes/AGENTS.md │") },
+			{ chars: Array.from("  │ .md             │") },
+		]);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options({ hasNote: value => ["Notes/AGENTS.md", "Notes/AGENTS.md.md"].includes(value) }));
+		for (const y of [1, 2]) expect(links(provider, y).map(link => link.text)).toEqual(["Notes/AGENTS.md.md"]);
+	});
+	it.each(["`Notes/Project.md`", "See Notes/Project.md", '"Notes/Project.md"'])("preserves ordinary references in a table cell: %s", text => {
+		const term = terminal([{ chars: Array.from(`  │ ${text} │`) }]);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		expect(links(new TerminalLinks(term, options())).map(link => link.text)).toEqual(["Notes/Project.md"]);
+	});
 	it("keeps an adjacent complete note active when another column wraps", () => {
 		const row = (cells: string[]) => `  │ ${cells.map(cell => cell.padEnd(12)).join(" │ ")} │`;
 		const term = terminal([

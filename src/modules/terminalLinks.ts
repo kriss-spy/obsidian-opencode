@@ -233,7 +233,7 @@ function wrappedTableNotes(terminal: Terminal, y: number): LinkLine[] {
 				if (!next || next.starts[0]?.y !== row || !nextTable || nextTable.borders !== table.borders ||
 					nextTable.cells.some((peer, index) => index !== column && peer.text) || !nextTable.cells[column].text) break;
 				if (candidates.every(candidate => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?$/i.test(candidate.text)) &&
-					!/^:[1-9]\d*(?::[1-9]\d*)?$/.test(nextTable.cells[column].text)) break;
+					!/^\.|^:[1-9]\d*(?::[1-9]\d*)?$/.test(nextTable.cells[column].text)) break;
 				candidates = appendNoteFragments(candidates, nextTable.cells[column]);
 				if (!candidates.length) break;
 				sources.push({ y: row, text: next.text });
@@ -391,9 +391,14 @@ export class TerminalLinks implements ILinkProvider {
 		// lookup. The cache lives only for this buffer snapshot.
 		const noteCache = new Map<string, NoteTarget | null>();
 		const lines = [...wrappedWebLines(this.terminal, y), ...wrappedTableNotes(this.terminal, y), ...linkLines(this.terminal, y)];
-		const suffixes = lines.flatMap(line => (line.suffixes ?? (line.suffix ? [line.suffix] : [])).map(range => ({
-			range, noteOnly: line.exactNote || line.continuation === "note", wrapped: Boolean(line.continuation),
-		})));
+		const suffixes = lines.flatMap(line => {
+			// A prose or quoted cell can still use the ordinary parser. Only an
+			// exact complete path or a reconstructed continuation owns its cells.
+			if (line.exactNote && !line.continuation && !indexedNote(line.line.text, this.options, noteCache)) return [];
+			return (line.suffixes ?? (line.suffix ? [line.suffix] : [])).map(range => ({
+				range, noteOnly: line.exactNote || line.continuation === "note", wrapped: Boolean(line.continuation),
+			}));
+		});
 		const before = (a: IBufferCellPosition, b: IBufferCellPosition) => a.y < b.y || (a.y === b.y && a.x <= b.x);
 		const links = lines.flatMap(({ line, current, continuation, blocked, noteStartLimit, exactNote }) => {
 			const note = exactNote ? indexedNote(line.text, this.options, noteCache) : null;

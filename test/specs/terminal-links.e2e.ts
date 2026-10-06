@@ -303,7 +303,8 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		{ kind: "paragraph", note: mixedNotePath, lines: mixedFragments.map(fragment => `     ${fragment}`) },
 		{ kind: "table", note: tableNotePath, lines: tableFragments.map((fragment, row) => `     │ ${row === 0 ? "215" : "   "}   │ ${fragment.padEnd(47)} │    `) },
 		{ kind: "table with punctuation", note: tableArticlePath, lines: articleFragments.map((fragment, row) => `     │ ${row === 0 ? "214" : "   "}   │ ${fragment.padEnd(47)} │    `) },
-	]) it(`opens the full five-row ${layout.kind} note from every row`, async function () {
+		{ kind: "table with split extension", note: "study/AGENTS.md.md", lines: ["study/AGENTS.md", ".md"].map(fragment => `     │ ${fragment.padEnd(47)} │    `) },
+	]) it(`opens the full ${layout.lines.length}-row ${layout.kind} note from every row`, async function () {
 		await browser.execute(async (note: string) => {
 			const app = (window as any).app;
 			const folders = note.split("/").slice(0, -1);
