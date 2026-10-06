@@ -219,6 +219,18 @@ The same session `ses_ef3381f6affeIiA6zYLGb8BC5o` contains five long HTTP URLs i
 
 All GUI runs were serial under the shared app lock in fresh isolated vaults/profiles. The initial table URL app attempt used an offscreen end-cell pointer coordinate; the test now clicks the visible start cell and separately verifies the complete start/end range and every underline rectangle. The broader suite was not rerun; the native-wrap hover release-verification limitation documented above remains.
 
+### Tables beside the session sidebar (2026-10-06)
+
+The prior table HTTP fix missed the user's actual layout. A read-only snapshot of the running session showed a 101-column frame with session-sidebar labels before some table rows. The previous parser required blank indentation before the opening table border and therefore stopped at those rows. The captured URL layout also includes breaks at query commas and plus signs.
+
+- Table detection now excludes sidebar cells before the opening border, preferring the thin table border over a thick sidebar divider. Physical border alignment, continuation bounds, stale validation and cell-only hit ranges remain in place. Comma/plus URL breaks can continue within the same cell.
+- `test/fixtures/sidebar-table-http.ts` preserves the actual physical rows and column positions with anonymized sidebar labels. Unit regressions check all 22 URL fragments, an additional thick sidebar divider, and a wrapped note with changing sidebar labels. Full unit suite: 312 passed, 5 platform-only skipped; production build/typechecking passed.
+- An unattached, read-only instance of the corrected provider recognized the full original URL from every one of the 22 fragments in the user's live terminal buffer. No running handlers or session state were changed.
+- Isolated Obsidian 1.12.7 pointer checks passed five captured-layout cases: all 22 real Ctrl/Cmd-clicks opened the full address, and hovering every row exposed the whole underline group. Actual rectangles matched text cells and excluded sidebar/border/padding cells; no PTY input leaked. Five existing note/paragraph URL regression cases also passed (17 note clicks and three paragraph URL clicks). Both review axes cleared.
+- Installed `main.js` SHA-256: `994df163c425ff42cdc1a4b5f2be1ac2468d0c9fb09b85721fac55c957b49c8b`. All three artifact hashes match, settings were preserved, and the running user session was not reloaded. Backup: `/tmp/opencode-before-sidebar-table-http-fyzonqwn`.
+
+App checks ran serially in fresh isolated vaults/profiles under the shared lock. This is focused verification; the broader native-wrap hover release check documented above remains outstanding.
+
 ## WSL2/X410 evidence
 
 On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:

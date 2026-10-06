@@ -1,0 +1,36 @@
+// Physical table rows captured from OpenCode 2.0.22; sidebar labels anonymized.
+export default {
+  "cols": 101,
+  "lines": [
+    "                     ┌───┬──────────────────────────────────────────────────────────────┬───────┐    ",
+    "   Recent session    │ # │ Link                                                         │ Chars │    ",
+    "   cloudnotes        ├───┼──────────────────────────────────────────────────────────────┼───────┤    ",
+    "                     │ 1 │ https://www.google.com/maps/dir/?                            │ 272   │    ",
+    "   Recent session    │   │ api=1&origin=1600+Amphitheatre+Parkway,+Mountain+View,       │       │    ",
+    "   Recent session    │   │ +CA&destination=1+Microsoft+Way,+Redmond,                    │       │    ",
+    "                     │   │ +WA&waypoints=Apple+Park+Cupertino+CA%7CPier+39+San+Francisc │       │    ",
+    "   Recent session    │   │ o+CA%7CGoogle+Plex+Mountain+View+CA&travelmode=driving&dir_a │       │    ",
+    "   Recent session    │   │ ction=navigate                                               │       │    ",
+    "                     ├───┼──────────────────────────────────────────────────────────────┼───────┤    ",
+    "   Recent session    │ 2 │ https://www.amazon.com/Logitech-MX-Master-Advanced-Wireless- │ 256   │    ",
+    "   Recent session    │   │ Mouse/dp/B09HM94VDS/ref=sr_1_3?                              │       │    ",
+    "                     │   │ crid=2N9K4LQ8TZ7XP&keywords=logitech+mx+master+3s+wireless+p │       │    ",
+    "   Recent session    │   │ erformance+mouse&qid=1698765432&sprefix=logitech+mx+master%2 │       │    ",
+    "   Recent session    │   │ Caps%2C214&sr=8-3&th=1&psc=1                                 │       │    ",
+    "                     ├───┼──────────────────────────────────────────────────────────────┼───────┤    ",
+    "   Recent session    │ 3 │ https://github.com/microsoft/vscode/blob/main/src/vs/        │ 126   │    ",
+    "   Recent session    │   │ workbench/contrib/terminal/browser/terminalInstance.ts?      │       │    ",
+    "                     │   │ plain=1#L1234-L1290                                          │       │    ",
+    "   Finding the       ├───┼──────────────────────────────────────────────────────────────┼───────┤    ",
+    "   Recent session    │ 4 │ https://www.youtube.com/watch?                               │ 122   │    ",
+    "                     │   │ v=dQw4w9WgXcQ&list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf&index= │       │    ",
+    "   Recent session    │   │ 12&t=42s&ab_channel=RickAstley                               │       │    ",
+    "   cloudnotes        ├───┼──────────────────────────────────────────────────────────────┼───────┤    ",
+    "                     │ 5 │ https://en.wikipedia.org/wiki/                               │ 207   │    ",
+    "   Recent session    │   │ List_of_countries_and_dependencies_by_population_density?    │       │    ",
+    "   Recent session    │   │ utm_source=newsletter&utm_medium=email&utm_campaign=weekly_d │       │    ",
+    "                     │   │ igest&fbclid=IwAR2x9pQ7mLk3Vb0nR8sT1uW4yZ6aC5dE7fG9hJ1kL3mN5 │       │    ",
+    "   Recent session    │   │ oP7qR9sT                                                     │       │    ",
+    "   cloudnotes        └───┴──────────────────────────────────────────────────────────────┴───────┘    "
+  ]
+};

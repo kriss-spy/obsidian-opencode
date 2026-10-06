@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Wrapped table note paths** — Open existing vault paths split across a bordered table cell, including filenames with punctuation and repeated `.md` suffixes.
 - **Wrapped-link underline overflow** — Underline every wrapped fragment together on hover, keeping each underline and click target within its row's actual link text.
-- **Wrapped HTTP links** — Open the full URL from any row when OpenCode splits a long address across an indented paragraph, code block or bordered table cell.
+- **Wrapped HTTP links** — Open the full URL from any row when OpenCode splits a long address across an indented paragraph, code block or bordered table cell, including tables beside the session sidebar and query strings broken at commas or plus signs.
 - **Wrapped note paths in session history** — Detect existing vault paths split across indented rows by OpenCode's paragraph renderer, including mixed word and mid-word breaks, split `.md` extensions, spaces and line/column references.
 - **Ctrl+Z terminal freeze** — Block effective direct OpenCode suspend shortcuts in the embedded terminal, preserving configured undo bindings and normal terminal input.
 - **Completed-task note warnings** — Use successful edit-tool metadata when OpenCode V2 returns an empty session diff, retaining the touched-note warning after completion without carrying it into a new turn. ([#21](https://github.com/kriss-spy/obsidian-opencode/issues/21))

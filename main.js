@@ -20454,10 +20454,12 @@ function appendNoteFragments(candidates, fragment) {
   }))).filter((candidate) => candidate.text.length <= 4096);
 }
 function tableRow(line) {
-  var _a, _b;
+  var _a, _b, _c;
   const text = line.text.replace(/ +[█▄▀▐▌] *$/, "");
-  if (!/^ {2,}[│┃]/.test(text) || !/[│┃] *$/.test(text) || ((_a = line.starts[0]) == null ? void 0 : _a.y) !== ((_b = line.ends[line.ends.length - 1]) == null ? void 0 : _b.y)) return null;
-  const borders = Array.from(text.matchAll(/[│┃]/g), (match) => match.index);
+  const opening = (_a = / {2,}│/.exec(text)) != null ? _a : / {2,}┃/.exec(text);
+  if (!opening || !/[│┃] *$/.test(text) || ((_b = line.starts[0]) == null ? void 0 : _b.y) !== ((_c = line.ends[line.ends.length - 1]) == null ? void 0 : _c.y)) return null;
+  const first = opening.index + opening[0].length - 1;
+  const borders = Array.from(text.matchAll(/[│┃]/g), (match) => match.index).filter((index) => index >= first);
   if (borders.length < 2 || borders.length > 17) return null;
   const cells = borders.slice(0, -1).map((border, index) => {
     let start = border + 1, end = borders[index + 1];
@@ -20493,7 +20495,7 @@ function wrappedTableWebLinks(terminal, y) {
         if (!/^[^\s<>"'`]+$/.test(fragment.text) || /^[a-z][a-z\d+.-]*:\/\//i.test(fragment.text)) break;
         const remaining = table.rightEdges[column] - line.ends[line.ends.length - 1].x - 2;
         const width = fragment.ends[fragment.ends.length - 1].x - fragment.starts[0].x + 1;
-        if (remaining > 6 && (!/[/.%?=&_-]$/.test(line.text) || width <= remaining)) break;
+        if (remaining > 6 && (!/[/.%?=&_,+-]$/.test(line.text) || width <= remaining)) break;
         if (row >= first + 32 || line.text.length + fragment.text.length > 4096) {
           bounded = false;
           break;

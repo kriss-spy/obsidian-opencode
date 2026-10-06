@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { ILink, Terminal } from "@xterm/xterm";
+import sidebarTableHttp from "../../test/fixtures/sidebar-table-http";
 import tableHttpLinks from "../../test/fixtures/table-http-links";
 import { currentOsc8Link } from "./xtermOsc8";
 import { findTerminalLinks, resolveNoteTarget, safeWebUrl, TerminalLinks, TerminalLinkOptions } from "./terminalLinks";
@@ -110,6 +111,32 @@ describe("public xterm provider and activation", () => {
 		rows[rows.length - 1].chars = Array.from("     └───┴───────────────────────────────┴─────┘");
 		stale.activate(event({ ctrlKey: true }), url);
 		expect(config.openExternal).toHaveBeenCalledTimes(rows.length);
+	});
+	it.each([false, true])("opens every captured table URL row with sidebar text and divider=%s", divider => {
+		const term = terminal(sidebarTableHttp.lines.map(text => ({ chars: Array.from(divider ? text.slice(0, 18) + "┃" + text.slice(19) : text) })));
+		Object.assign(term, { cols: sidebarTableHttp.cols });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options());
+		let fixture = -1;
+		for (let index = 0; index < sidebarTableHttp.lines.length; index++) {
+			const row = sidebarTableHttp.lines[index];
+			if (!row.includes("│")) continue;
+			const cells = row.split("│");
+			if (cells[1].trim() === "#") continue;
+			if (cells[1].trim()) fixture++;
+			const found = links(provider, index + 1);
+			expect(found.map(link => link.text), `row ${index + 1}: ${row}`).toEqual([tableHttpLinks[fixture].url]);
+			expect(found[0].range).toEqual({ start: { x: 28, y: index + 1 }, end: { x: 27 + cells[2].trim().length, y: index + 1 } });
+		}
+	});
+	it("reconstructs a table note while sidebar labels change outside the columns", () => {
+		const term = terminal([
+			{ chars: Array.from("  Recent session".padEnd(21) + "│ 1 │ Notes/My │") },
+			{ chars: Array.from("  Another title".padEnd(21) + "│   │ note.md  │") },
+		]);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options());
+		for (const y of [1, 2]) expect(links(provider, y).map(link => link.text)).toEqual(["Notes/My note.md"]);
 	});
 	it("stops table URLs at new records, column changes, separators and prose", () => {
 		const url = "https://example.com/abcdefghij";

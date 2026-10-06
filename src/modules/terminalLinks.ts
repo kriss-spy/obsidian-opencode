@@ -199,8 +199,12 @@ interface TableRow { cells: LogicalLine[]; borders: string; rightEdges: number[]
 
 function tableRow(line: LogicalLine): TableRow | null {
 	const text = line.text.replace(/ +[█▄▀▐▌] *$/, "");
-	if (!/^ {2,}[│┃]/.test(text) || !/[│┃] *$/.test(text) || line.starts[0]?.y !== line.ends[line.ends.length - 1]?.y) return null;
-	const borders = Array.from(text.matchAll(/[│┃]/g), match => match.index!);
+	// Session-sidebar text can precede the table. Its cells are not columns.
+	// Prefer the thin table border over a thick sidebar divider.
+	const opening = / {2,}│/.exec(text) ?? / {2,}┃/.exec(text);
+	if (!opening || !/[│┃] *$/.test(text) || line.starts[0]?.y !== line.ends[line.ends.length - 1]?.y) return null;
+	const first = opening.index + opening[0].length - 1;
+	const borders = Array.from(text.matchAll(/[│┃]/g), match => match.index!).filter(index => index >= first);
 	if (borders.length < 2 || borders.length > 17) return null;
 	const cells = borders.slice(0, -1).map((border, index) => {
 		let start = border + 1, end = borders[index + 1];
@@ -237,7 +241,7 @@ function wrappedTableWebLinks(terminal: Terminal, y: number): LinkLine[] {
 				const remaining = table.rightEdges[column] - line.ends[line.ends.length - 1].x - 2;
 				// Short completed URLs must not swallow a following prose token.
 				const width = fragment.ends[fragment.ends.length - 1].x - fragment.starts[0].x + 1;
-				if (remaining > 6 && (!/[/.%?=&_-]$/.test(line.text) || width <= remaining)) break;
+				if (remaining > 6 && (!/[/.%?=&_,+-]$/.test(line.text) || width <= remaining)) break;
 				if (row >= first + 32 || line.text.length + fragment.text.length > 4096) { bounded = false; break; }
 				line = { text: line.text + fragment.text, starts: [...line.starts, ...fragment.starts], ends: [...line.ends, ...fragment.ends] };
 				ranges.push({ start: fragment.starts[0], end: fragment.ends[fragment.ends.length - 1] });
