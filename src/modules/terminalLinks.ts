@@ -110,16 +110,16 @@ export function findTerminalLinks(text: string, options: Pick<TerminalLinkOption
 	let previousEnd = 0;
 	while ((match = ends.exec(text))) {
 		const end = match.index + match[0].length;
-		// Restrict candidates to the current delimiter-bounded phrase.
-		let segmentStart = match.index;
-		while (segmentStart > previousEnd && !/[\n\r\t`"'<>\[\]{}|│┃,;]/.test(text[segmentStart - 1])) segmentStart--;
+		// Try the complete phrase before its suffixes: commas, semicolons and
+		// brackets can belong to an indexed note name, including quoted paths.
+		let phraseStart = match.index;
+		while (phraseStart > previousEnd && !/[\n\r\t`"'<>|│┃]/.test(text[phraseStart - 1])) phraseStart--;
 		previousEnd = end;
-		if (end - segmentStart > 4096) continue;
-		for (let start = segmentStart; start <= Math.min(match.index, noteStartLimit); start++) {
-			if (start > segmentStart && !/[\s()]/.test(text[start - 1])) continue;
+		if (end - phraseStart > 4096) continue;
+		for (let start = phraseStart; start <= Math.min(match.index, noteStartLimit); start++) {
+			if (start > phraseStart && !/[\s(),;{}[\]]/.test(text[start - 1])) continue;
 			if (/\s/.test(text[start])) continue;
 			const value = text.slice(start, end);
-			// Never recover a relative suffix from an explicit rejected absolute/traversal path.
 			const explicit = /^(?:[a-z]:[\\/]|[\\/]|\.\.[\\/]|[a-z][a-z\d+.-]*:\/\/)/i.test(value);
 			if (links.some(link => start < link.end && end > link.start)) break;
 			const note = indexedNote(value, options, noteCache);
@@ -127,7 +127,13 @@ export function findTerminalLinks(text: string, options: Pick<TerminalLinkOption
 				links.push({ start, end, text: value, note });
 				break;
 			}
-			if (explicit) break;
+			if (explicit) {
+				// Never shed an explicit root within an item. Bare prose can have
+				// independent punctuation-delimited items; quoted paths cannot.
+				const delimiter = /[`"']/.test(text[phraseStart - 1] ?? "") ? -1 : value.search(/[,;{}[\]]/);
+				if (delimiter < 0) break;
+				start += delimiter; // The next iteration starts after the delimiter.
+			}
 		}
 	}
 	return links.sort((a, b) => a.start - b.start);
@@ -430,6 +436,7 @@ export class TerminalLinks implements ILinkProvider {
 	private revision = 0;
 	private hovered: ILink | null = null;
 	private capturedPrimaryPress = false;
+	private suppressClickActivation = false;
 	private validations = new WeakMap<ILink, () => boolean>();
 	private pressed: { link: ILink; x: number; y: number; modified: boolean; dragged: boolean; handled: boolean } | null = null;
 	private cleanups: Array<() => void> = [];
@@ -532,7 +539,7 @@ export class TerminalLinks implements ILinkProvider {
 	}
 
 	async activate(text: string, event: MouseEvent): Promise<void> {
-		if (this.disposed || event.button !== 0 || this.terminal.hasSelection()) return;
+		if (this.disposed || event.button !== 0 || this.suppressClickActivation || this.terminal.hasSelection()) return;
 		const cell = this.cellAt(event);
 		if (cell) {
 			const osc = currentOsc8Link(this.terminal, cell);
@@ -618,8 +625,13 @@ export class TerminalLinks implements ILinkProvider {
 			if (event.button !== 0) return;
 			this.pressed = null;
 			this.capturedPrimaryPress = false;
+			// xterm may clear a selection during mousedown. Retain this decision
+			// through mouseup and its later textual/OSC 8 activation callbacks.
+			// Only the next primary press starts a new activation decision.
+			this.suppressClickActivation = this.terminal.hasSelection();
+			if (this.suppressClickActivation) return;
 			const link = linkAt(event);
-			if (!link || this.terminal.hasSelection()) return;
+			if (!link) return;
 			const modified = this.options.isModEvent(event);
 			this.pressed = { link, x: event.clientX, y: event.clientY, modified, dragged: false, handled: false };
 			if (modified) { this.capturedPrimaryPress = true; event.preventDefault(); event.stopImmediatePropagation(); }
@@ -681,6 +693,7 @@ export class TerminalLinks implements ILinkProvider {
 		if (this.disposed) return;
 		this.disposed = true;
 		this.capturedPrimaryPress = false;
+		this.suppressClickActivation = false;
 		this.hovered = null;
 		this.pressed = null;
 		this.clearUnderlines();

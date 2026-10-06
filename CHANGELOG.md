@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Complete note paths with punctuation** — Prefer the existing full path over a shorter basename when names contain commas, semicolons or brackets, while preserving independent references in prose.
+- **Selection-clearing link clicks** — Clear an existing terminal selection without opening the link under the pointer, including OSC 8 hyperlinks.
 - **Wrapped table note paths** — Open existing vault paths split across a bordered table cell, including filenames with punctuation and repeated `.md` suffixes, and records whose neighboring text columns also wrap.
 - **Wrapped-link underline overflow** — Underline every wrapped fragment together on hover, keeping each underline and click target within its row's actual link text.
 - **Wrapped HTTP links** — Open the full URL from any row when OpenCode splits a long address across an indented paragraph, code block or bordered table cell, including tables beside the session sidebar and query strings broken at commas or plus signs.

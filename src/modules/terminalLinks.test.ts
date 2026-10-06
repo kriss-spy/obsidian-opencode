@@ -67,6 +67,25 @@ describe("terminal link parsing and containment", () => {
 		const result = findTerminalLinks('Changed `Notes/My note.md:42:8`, and 中文/😀 é.md. Missing note.md.', options());
 		expect(result.map(value => value.text)).toEqual(["Notes/My note.md:42:8", "中文/😀 é.md"]);
 	});
+	it.each(["Hello, world", "Hello; world", "Hello [draft] world", "Hello {draft} world"])("prefers the complete punctuation path over an existing basename: %s", name => {
+		const full = `Notes/${name}.md`;
+		const config = options({ hasNote: value => [full, "world.md"].includes(value) });
+		for (const text of [`Created ${full}`, `Created \`${full}:3:5\``]) {
+			expect(findTerminalLinks(text, config).map(link => ({ text: link.text, path: link.note?.path })))
+				.toEqual([{ text: text.endsWith("`") ? `${full}:3:5` : full, path: full }]);
+		}
+		expect(findTerminalLinks(`\`/outside/${full}\``, config)).toEqual([]);
+		expect(findTerminalLinks(`\`../../${full}\``, config)).toEqual([]);
+	});
+	it.each([",", ";"])("keeps an independent note after an unrelated explicit item (%s)", delimiter => {
+		expect(findTerminalLinks(`Updated /tmp/cache${delimiter} Notes/Project.md`, options()).map(link => link.text))
+			.toEqual(["Notes/Project.md"]);
+		expect(findTerminalLinks(`Updated /tmp/cache${delimiter} Other.md`, options()).map(link => link.text))
+			.toEqual(["Other.md"]);
+		const full = "Notes/Hello, world.md";
+		const config = options({ hasNote: value => [full, "world.md"].includes(value) });
+		expect(findTerminalLinks(`Updated /tmp/cache${delimiter} ${full}`, config).map(link => link.text)).toEqual([full]);
+	});
 	it("avoids prose false positives and never falls back from an absolute/traversal URL path", () => {
 		expect(findTerminalLinks("This is ordinary prose.md", options())).toEqual([]);
 		expect(findTerminalLinks("/outside/Notes/My note.md ../../Notes/My note.md file:///vault/Notes/Project.md", options())).toEqual([]);
@@ -681,6 +700,45 @@ function interactionFixture(config = options()) {
 }
 
 describe("mouse capture ownership and link lifecycle", () => {
+	it.each([false, true])("does not open a link when the click clears a prior selection (modified=%s)", modified => {
+		const context = interactionFixture();
+		let selected = true;
+		Object.assign(context.term, { hasSelection: () => selected });
+		const down = context.mouse("mousedown", { ctrlKey: modified });
+		selected = false; // xterm clears the selection during its mousedown handler.
+		const up = context.mouse("mouseup", { ctrlKey: modified });
+		context.link.activate(event({ ctrlKey: modified }), context.link.text);
+		expect(context.config.openExternal).not.toHaveBeenCalled();
+		expect(down.stopImmediatePropagation).not.toHaveBeenCalled();
+		expect(up.stopImmediatePropagation).not.toHaveBeenCalled();
+		context.mouse("mousedown", { ctrlKey: modified });
+		context.mouse("mouseup", { ctrlKey: modified });
+		expect(context.config.openExternal).toHaveBeenCalledExactlyOnceWith("https://github.com/");
+	});
+	it("suppresses OSC 8 activation after xterm clears a selection, including a mouseleave", () => {
+		const context = interactionFixture();
+		let selected = true;
+		const original = context.term.buffer.active.getLine.bind(context.term.buffer.active);
+		Object.assign(context.term, { hasSelection: () => selected,
+			_core: { _oscLinkService: { getLinkData: () => ({ uri: "https://github.com" }) } } });
+		Object.assign(context.term.buffer.active, { getLine: (row: number) => {
+			const line = original(row);
+			if (!line) return undefined;
+			const getCell = line.getCell.bind(line);
+			return { ...line, getCell: (col: number) => Object.assign(getCell(col)!, { extended: { urlId: 1 } }) };
+		} });
+		context.mouse("mousedown");
+		selected = false;
+		context.mouse("mouseleave");
+		context.mouse("mouseup");
+		const activate = () => context.term.options.linkHandler!.activate(event({ clientX: 5, clientY: 5, target: {} as Node }), "https://github.com", context.link.range);
+		activate();
+		expect(context.config.openExternal).not.toHaveBeenCalled();
+		context.mouse("mousedown");
+		context.mouse("mouseup");
+		activate();
+		expect(context.config.openExternal).toHaveBeenCalledExactlyOnceWith("https://github.com/");
+	});
 	it("claims modifier link clicks before the TUI and leaves plain/non-link input alone", async () => {
 		const context = interactionFixture();
 		context.modes.mouseTrackingMode = "any";

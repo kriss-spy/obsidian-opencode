@@ -20376,6 +20376,7 @@ function indexedNote(text, options, cache) {
   return note;
 }
 function findTerminalLinks(text, options, noteStartLimit = text.length, noteCache) {
+  var _a;
   const links = [];
   const urls = /https?:\/\/[^\s<>"'`]+/gi;
   let match;
@@ -20393,12 +20394,12 @@ function findTerminalLinks(text, options, noteStartLimit = text.length, noteCach
   let previousEnd = 0;
   while (match = ends.exec(text)) {
     const end = match.index + match[0].length;
-    let segmentStart = match.index;
-    while (segmentStart > previousEnd && !/[\n\r\t`"'<>\[\]{}|│┃,;]/.test(text[segmentStart - 1])) segmentStart--;
+    let phraseStart = match.index;
+    while (phraseStart > previousEnd && !/[\n\r\t`"'<>|│┃]/.test(text[phraseStart - 1])) phraseStart--;
     previousEnd = end;
-    if (end - segmentStart > 4096) continue;
-    for (let start = segmentStart; start <= Math.min(match.index, noteStartLimit); start++) {
-      if (start > segmentStart && !/[\s()]/.test(text[start - 1])) continue;
+    if (end - phraseStart > 4096) continue;
+    for (let start = phraseStart; start <= Math.min(match.index, noteStartLimit); start++) {
+      if (start > phraseStart && !/[\s(),;{}[\]]/.test(text[start - 1])) continue;
       if (/\s/.test(text[start])) continue;
       const value = text.slice(start, end);
       const explicit = /^(?:[a-z]:[\\/]|[\\/]|\.\.[\\/]|[a-z][a-z\d+.-]*:\/\/)/i.test(value);
@@ -20408,7 +20409,11 @@ function findTerminalLinks(text, options, noteStartLimit = text.length, noteCach
         links.push({ start, end, text: value, note });
         break;
       }
-      if (explicit) break;
+      if (explicit) {
+        const delimiter = /[`"']/.test((_a = text[phraseStart - 1]) != null ? _a : "") ? -1 : value.search(/[,;{}[\]]/);
+        if (delimiter < 0) break;
+        start += delimiter;
+      }
     }
   }
   return links.sort((a, b) => a.start - b.start);
@@ -20720,6 +20725,7 @@ var TerminalLinks = class {
     this.revision = 0;
     this.hovered = null;
     this.capturedPrimaryPress = false;
+    this.suppressClickActivation = false;
     this.validations = /* @__PURE__ */ new WeakMap();
     this.pressed = null;
     this.cleanups = [];
@@ -20831,7 +20837,7 @@ var TerminalLinks = class {
   }
   async activate(text, event) {
     var _a, _b, _c, _d, _e;
-    if (this.disposed || event.button !== 0 || this.terminal.hasSelection()) return;
+    if (this.disposed || event.button !== 0 || this.suppressClickActivation || this.terminal.hasSelection()) return;
     const cell = this.cellAt(event);
     if (cell) {
       const osc = currentOsc8Link(this.terminal, cell);
@@ -20920,8 +20926,10 @@ var TerminalLinks = class {
       if (event.button !== 0) return;
       this.pressed = null;
       this.capturedPrimaryPress = false;
+      this.suppressClickActivation = this.terminal.hasSelection();
+      if (this.suppressClickActivation) return;
       const link = linkAt(event);
-      if (!link || this.terminal.hasSelection()) return;
+      if (!link) return;
       const modified = this.options.isModEvent(event);
       this.pressed = { link, x: event.clientX, y: event.clientY, modified, dragged: false, handled: false };
       if (modified) {
@@ -20987,6 +20995,7 @@ var TerminalLinks = class {
     if (this.disposed) return;
     this.disposed = true;
     this.capturedPrimaryPress = false;
+    this.suppressClickActivation = false;
     this.hovered = null;
     this.pressed = null;
     this.clearUnderlines();

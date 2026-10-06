@@ -303,3 +303,11 @@ The #26 test drives Chromium's composition event sequence inside the real macOS 
 The versioned candidate passed the production build and 326 unit tests (5 platform-only skipped). The final complete Linux app run passed all eight spec files and 60 tests, including real OpenCode 2.0.22, folder plain-text drops and all 27 terminal-link cases. The initial full run exposed two intermittent hover failures; the link suite passed standalone, and the final full run passed after settling fixture screen geometry before rendering. Click and underline assertions remain enabled. GUI runs stayed serial in isolated profiles under the shared lock.
 
 See [the release checklist](releases/2.3.0-checks.md) for asset hashes, strict static-review findings, platform verification limits and the publishing boundary. This is prepared release material, not a published release.
+
+### PR #64 link review follow-up (2026-10-06)
+
+The reviewed 2.3.0 candidate now prefers complete punctuation-bearing indexed paths over basename decoys and preserves independent comma/semicolon-delimited references. A primary click that begins with a selection suppresses textual and OSC 8 activation through the whole gesture, while the next independent click remains usable. Nine added unit cases cover the two reported defects and the parser review regression.
+
+Production build and 335 unit tests passed (5 platform-only skipped). The full isolated Linux app run passed 62 tests across all eight suites, including all 29 terminal-link cases and installed OpenCode 2.0.22. The two new app cases passed a focused rerun after resetting native click counting in the selection fixture. Standards and Spec cleared the fixes. The optional static-review mirror remains failed: 103 errors (89 mocked-test, 14 production), versus 19 in 2.2.0. GUI runs were serial under the shared lock, in fresh profiles, without submitting model prompts.
+
+Updated artifact hash: `main.js` SHA-256 `1b0d4ef361b55ec904a918dee0c39e7c9cb9ca2ea0490ea5c065dc8ac2b85537`. The installed vault candidate matches the release bundle; settings were preserved and no automatic reload occurred. Backup: `/tmp/opencode-before-2.3.0-link-review-b295rx4g`. Fresh Linux/Windows CI is triggered on the review-fix commit; previous green CI applies to the prior commit. macOS and Windows real-CLI/WSL2 limits still apply.

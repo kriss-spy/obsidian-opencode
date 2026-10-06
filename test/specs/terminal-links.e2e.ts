@@ -121,6 +121,15 @@ async function clickLink(text: string, modified = false, end = false): Promise<v
 	}
 }
 
+async function clickBlankRowBelow(point: { x: number; y: number }): Promise<void> {
+	const blank = await browser.execute((point: { x: number; y: number }) => {
+		const terminal = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+		const rect = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
+		return { x: point.x, y: Math.round(point.y + rect.height / terminal.rows) };
+	}, point);
+	await browser.action("pointer").move({ ...blank, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
+}
+
 async function activationState(): Promise<string> {
 	return JSON.stringify(await browser.execute(() => {
 		const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0]?.view;
@@ -239,6 +248,27 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		expect(cursor.line).toBe(4);
 		expect(cursor.ch).toBe(0);
 	});
+	it("opens the complete quoted punctuation path when its basename also exists", async function () {
+		const full = "Terminal links/Notes/Hello, world.md";
+		const created = await browser.execute(async (full: string) => {
+			const app = (window as any).app;
+			if (!app.vault.getAbstractFileByPath("Terminal links/Notes")) await app.vault.createFolder("Terminal links/Notes");
+			await app.vault.create(full, "full path\nsecond line\n");
+			if (!app.vault.getAbstractFileByPath("world.md")) { await app.vault.create("world.md", "suffix decoy\n"); return true; }
+			return false;
+		}, full);
+		try {
+			await render(`Created \`${full}:2:3\``);
+			await clickLink(`${full}:2:3`, false, true);
+			await waitActivation(() => browser.execute((full: string) => (window as any).app.workspace.getActiveFile()?.path === full, full));
+			expect(await browser.execute(() => (window as any).app.workspace.activeLeaf.view.editor.getCursor())).toEqual({ line: 1, ch: 2 });
+		} finally {
+			if (created) await browser.execute(async () => {
+				const app = (window as any).app, file = app.vault.getAbstractFileByPath("world.md");
+				if (file) await app.vault.delete(file, true);
+			});
+		}
+	});
 
 	it("uses the safe external opener for web links", async function () {
 		await render("Agent response: https://github.com");
@@ -270,12 +300,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		const end = await linkPoint("https://github.com", true);
 		// xterm ignores clicks beyond a triple-click. Click a different blank
 		// row first so earlier link clicks cannot turn this drag into click four.
-		const blank = await browser.execute((point: { x: number; y: number }) => {
-			const terminal = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
-			const rect = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
-			return { x: point.x, y: Math.round(point.y + rect.height / terminal.rows) };
-		}, start);
-		await browser.action("pointer").move({ ...blank, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
+		await clickBlankRowBelow(start);
 		try {
 			await browser.action("pointer").move({ x: start.x, y: start.y, origin: "viewport" }).down({ button: 0 })
 				.move({ x: Math.round((start.x + end.x) / 2), y: end.y, origin: "viewport", duration: 100 }).pause(50)
@@ -285,6 +310,21 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		} finally { await browser.releaseActions(); }
 		expect(await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.hasSelection())).toBe(true);
 		expect((await externalCalls()).length).toBe(before);
+	});
+	it("clears a selection without opening textual or OSC 8 links", async function () {
+		const url = "https://github.com";
+		for (const text of [url, `\x1b]8;;${url}\x07${url}\x1b]8;;\x07`]) {
+			await render(text);
+			const before = (await externalCalls()).length;
+			// Start a single-click sequence before creating the selection; a
+			// double/triple click would create another selection instead of clearing it.
+			await clickBlankRowBelow(await linkPoint(url, true));
+			await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.select(0, 0, 5));
+			expect(await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.hasSelection())).toBe(true);
+			await clickLink(url, false, true);
+			expect(await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.hasSelection())).toBe(false);
+			expect((await externalCalls()).length).toBe(before);
+		}
 	});
 
 	it("guards OSC 8 schemes and never provides outside-vault or unsupported-scheme file links", async function () {
