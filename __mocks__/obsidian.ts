@@ -37,3 +37,5 @@ export function moment(timestamp: number) {
 		format: (fmt: string) => '2024-01-01 12:00:00',
 	};
 }
+
+export class View {}

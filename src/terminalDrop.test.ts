@@ -65,7 +65,7 @@ describe('TerminalDropHandler', () => {
     });
     it('keeps folders as plain text after the file bridge disconnects', async () => {
         const delivered: string[] = [];
-        const onFileDrop = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+        const onFileDrop = vi.fn<(path: string) => boolean>().mockReturnValueOnce(true).mockReturnValue(false);
         handleTerminalDrop({ dragManager: { draggable: { type: 'files', files: [
             { path: 'a.md' }, { path: 'b.md' }, { path: 'Notes', children: [] }, { path: 'Research 笔记', children: [] },
         ] } }, onFileDrop, terminalInput: text => delivered.push(text), terminalPaste: text => delivered.push(text) });

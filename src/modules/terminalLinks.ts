@@ -1,3 +1,4 @@
+import { hasControlCharacter } from "./controlCharacters";
 import type { IBufferCellPosition, ILink, ILinkProvider, Terminal } from "@xterm/xterm";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
@@ -22,7 +23,7 @@ export interface TerminalLinkOptions {
 }
 
 export function safeWebUrl(text: string): string | null {
-	if (!/^https?:\/\//i.test(text) || /[\x00-\x20\x7f]/.test(text)) return null;
+	if (!/^https?:\/\//i.test(text) || (text.includes(" ") || hasControlCharacter(text))) return null;
 	try {
 		const url = new URL(text);
 		return url.hostname && (url.protocol === "http:" || url.protocol === "https:") ? url.href : null;
@@ -60,7 +61,7 @@ function containedRelative(root: string, target: string): string | null {
 }
 
 export function resolveNoteTarget(text: string, root: string, distro?: string): NoteTarget | null {
-	if (/[\x00-\x1f\x7f]|^[a-z][a-z\d+.-]*:\/\//i.test(text)) return null;
+	if (hasControlCharacter(text) || /^[a-z][a-z\d+.-]*:\/\//i.test(text)) return null;
 	const match = /^(.*\.md)(?::([1-9]\d*))?(?::([1-9]\d*))?$/i.exec(text);
 	if (!match) return null;
 	if (/^[a-z][a-z\d+.-]*:/i.test(match[1]) && !/^[a-z]:[\\/]/i.test(match[1])) return null;
@@ -182,7 +183,7 @@ function logicalLine(terminal: Terminal, y: number): LogicalLine | null {
 
 interface LinkLine {
 	line: LogicalLine;
-	current(): boolean;
+	current: () => boolean;
 	continuation?: "note" | "web";
 	suffix?: ILink["range"];
 	suffixes?: ILink["range"][];
@@ -210,7 +211,7 @@ function tableRow(line: LogicalLine): TableRow | null {
 	const opening = / {2,}│/.exec(text) ?? / {2,}┃/.exec(text);
 	if (!opening || !/[│┃] *$/.test(text) || line.starts[0]?.y !== line.ends[line.ends.length - 1]?.y) return null;
 	const first = opening.index + opening[0].length - 1;
-	const borders = Array.from(text.matchAll(/[│┃]/g), match => match.index!).filter(index => index >= first);
+	const borders = Array.from(text.matchAll(/[│┃]/g), match => match.index ?? 0).filter(index => index >= first);
 	if (borders.length < 2 || borders.length > 17) return null;
 	const cells = borders.slice(0, -1).map((border, index) => {
 		let start = border + 1, end = borders[index + 1];
@@ -235,7 +236,7 @@ function tableRecordEvidence(terminal: Terminal, first: number, table: TableRow,
 		if (start < 0 || end < start) return null;
 		const text = line.text.slice(start, end + 1);
 		if (/^[┌├][─━]+(?:[┬┼][─━]+)+[┐┤]$/.test(text)) {
-			const edges = Array.from(text.matchAll(/[┌├┬┼┐┤]/g), match => line.starts[start + match.index!].x);
+			const edges = Array.from(text.matchAll(/[┌├┬┼┐┤]/g), match => line.starts[start + (match.index ?? 0)].x);
 			return edges.join(",") === [table.leftEdge, ...table.rightEdges].join(",") ? evidence : null;
 		}
 		if (tableRow(line)?.borders !== table.borders) return null;
@@ -457,13 +458,12 @@ export class TerminalLinks implements ILinkProvider {
 		for (const range of ranges) {
 			const row = range.start.y - viewport;
 			if (row < 1 || row > this.terminal.rows) continue;
-			const underline = screen.ownerDocument.createElement("span");
+			const underline = screen.createSpan();
 			underline.className = "opencode-terminal-link-underline";
 			underline.style.left = `${(range.start.x - 1) / this.terminal.cols * 100}%`;
 			underline.style.width = `${(range.end.x - range.start.x + 1) / this.terminal.cols * 100}%`;
 			underline.style.top = `calc(${row / this.terminal.rows * 100}% - 2px)`;
 			underline.style.color = this.terminal.options.theme?.foreground ?? "";
-			screen.appendChild(underline);
 			this.underlines.push(underline);
 		}
 	}

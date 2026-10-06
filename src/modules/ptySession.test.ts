@@ -8,7 +8,6 @@ import type { Terminal } from "@xterm/xterm";
 import { PtySession, stripWindowsConPtyProbeArtifact } from "./ptySession";
 import { isAbsoluteExecutablePath } from "../utils/opencodeExecutable";
 
-/* eslint-disable obsidianmd/prefer-window-timers -- This Node-only window mock must use Vitest's dynamically patched timers. */
 
 vi.mock("obsidian", () => ({
 	Notice: class {},
@@ -62,8 +61,8 @@ describe("PtySession", () => {
 		vi.mocked(accessSync).mockImplementation(() => undefined);
 		vi.mocked(statSync).mockReturnValue({ isFile: () => true } as ReturnType<typeof statSync>);
 		vi.stubGlobal("window", {
-			setTimeout: (callback: () => void, delay?: number) => setTimeout(callback, delay),
-			clearTimeout: (timeout: ReturnType<typeof setTimeout>) => clearTimeout(timeout),
+			setTimeout: (callback: () => void, delay?: number) => global.setTimeout(callback, delay),
+			clearTimeout: (timeout: ReturnType<typeof setTimeout>) => global.clearTimeout(timeout),
 		});
 	});
 

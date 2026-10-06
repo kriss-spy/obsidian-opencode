@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { ItemView, Keymap, MarkdownView, Notice, WorkspaceLeaf } from "obsidian";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -200,7 +201,7 @@ export class OpencodeTerminalView extends ItemView {
 			hasNote: path => Boolean(this.app.vault.getFileByPath(path)?.extension.toLowerCase() === "md"),
 			isModEvent: event => Boolean(Keymap.isModEvent(event)),
 			openExternal: url => {
-				const electron = require("electron") as { shell: { openExternal(url: string): Promise<void> } };
+				const electron = createRequire(__filename)("electron") as { shell: { openExternal(url: string): Promise<void> } };
 				return electron.shell.openExternal(url);
 			},
 			openNote: async (target, event) => {
@@ -354,7 +355,7 @@ export class OpencodeTerminalView extends ItemView {
 		window.addEventListener("resize", doFit);
 		this.register(() => window.removeEventListener("resize", doFit));
 
-		const themePreviewInput = new ThemePreviewInputBatcher((data) => this.ptySession.writeStdin(data));
+		const themePreviewInput = new ThemePreviewInputBatcher((data) => this.ptySession.writeStdin(data), termContainer.win);
 		const inputDisposable = terminal.onData((data: string) => {
 			themePreviewInput.send(data, isOpenCodeThemePicker(terminal.buffer.active, terminal.rows));
 		});
@@ -586,7 +587,7 @@ export class OpencodeTerminalView extends ItemView {
 			onShiftEnterNewline: () => this.sendShiftEnterNewline(terminal),
 			reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
 			suspendTerminalHotkeys: loadOpenCodeSuspendHotkeys(terminalCwd, terminalEnvironment),
-			onSuspendBlocked: () => new Notice("OpenCode cannot be suspended inside Obsidian. Close or restart the terminal instead."),
+			onSuspendBlocked: () => new Notice("Cannot suspend the terminal inside Obsidian. Close or restart it instead."),
 			clipboard: windowsClipboard ?? undefined,
 			copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,
 			onClipboardError: (message) => new Notice(message),

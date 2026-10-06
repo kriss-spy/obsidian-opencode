@@ -204,6 +204,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 			(window as any).__terminalLinkPid = view.ptySession.ptyProcess?.pid;
 			// Only replace the external side effect. Provider, xterm mouse events,
 			// filesystem validation and Obsidian note navigation remain real.
+			(window as any).__terminalLinkOriginalExternal = view.terminalLinks.options.openExternal;
 			view.terminalLinks.options.openExternal = async (url: string) => { (window as any).__terminalLinkExternal.push(url); };
 			(window as any).__terminalLinkInputListener = view.terminal.onData((data: string) => { (window as any).__terminalLinkInput.push(data); });
 		});
@@ -218,6 +219,23 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 			const folder = app.vault.getAbstractFileByPath("Terminal links");
 			if (folder) await app.vault.delete(folder, true);
 		});
+	});
+
+	it("loads Electron lazily and calls its shell with the correct receiver", async function () {
+		const captured = await browser.execute(async () => {
+			const shell = (window as any).require("electron").shell;
+			const original = shell.openExternal;
+			const calls: string[] = [];
+			shell.openExternal = function (this: unknown, url: string) {
+				if (this !== shell) throw new Error("Lost Electron shell receiver");
+				calls.push(url);
+				return Promise.resolve();
+			};
+			try { await (window as any).__terminalLinkOriginalExternal("https://example.com/lazy-electron"); }
+			finally { shell.openExternal = original; }
+			return calls;
+		});
+		expect(captured).toEqual(["https://example.com/lazy-electron"]);
 	});
 
 	it("opens wrapped space/Unicode note paths and cursor locations while preserving terminal leaf/PTY", async function () {

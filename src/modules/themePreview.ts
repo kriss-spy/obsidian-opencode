@@ -9,20 +9,32 @@ interface TerminalBuffer {
 }
 
 const PREVIEW_INPUT_DEBOUNCE_MS = 50;
-const THEME_NAVIGATION = /^(?:(?:\x1b\[|\x1bO)[AB]|\x10|\x0e)+$/;
-const TERMINAL_COLOR_RESPONSE = /^\x1b\](?:10|11);rgb:[\da-f]{4}\/[\da-f]{4}\/[\da-f]{4}\x1b\\$/i;
+const NAVIGATION_KEYS = ["\x1b[A", "\x1b[B", "\x1bOA", "\x1bOB", "\x10", "\x0e"];
+function isThemeNavigation(data: string): boolean {
+	if (!data) return false;
+	while (data) {
+		const key = NAVIGATION_KEYS.find(key => data.startsWith(key));
+		if (!key) return false;
+		data = data.slice(key.length);
+	}
+	return true;
+}
+function isColorResponse(data: string): boolean {
+	return data.startsWith("\x1b]") && data.endsWith("\x1b\\") &&
+		/^(?:10|11);rgb:[\da-f]{4}\/[\da-f]{4}\/[\da-f]{4}$/i.test(data.slice(2, -2));
+}
 
 // OpenCode previews on every navigation event. OpenTUI drains every key from a
 // stdin chunk synchronously but schedules only one render for that chunk, so a
 // short burst in one PTY write paints only the final theme state.
 export class ThemePreviewInputBatcher {
 	private pending = "";
-	private flushTimer: ReturnType<typeof setTimeout> | null = null;
+	private flushTimer: number | null = null;
 
-	constructor(private write: (data: string) => void) {}
+	constructor(private write: (data: string) => void, private window: Window) {}
 
 	send(data: string, themePickerOpen: boolean): void {
-		if (TERMINAL_COLOR_RESPONSE.test(data)) {
+		if (isColorResponse(data)) {
 			this.write(data);
 			return;
 		}
@@ -31,13 +43,13 @@ export class ThemePreviewInputBatcher {
 			this.write(data);
 			return;
 		}
-		if (!themePickerOpen || !THEME_NAVIGATION.test(data)) {
+		if (!themePickerOpen || !isThemeNavigation(data)) {
 			this.flushWith(data);
 			return;
 		}
 		this.pending += data;
-		if (this.flushTimer) clearTimeout(this.flushTimer);
-		this.flushTimer = setTimeout(() => this.flushWith(""), PREVIEW_INPUT_DEBOUNCE_MS);
+		if (this.flushTimer !== null) this.window.clearTimeout(this.flushTimer);
+		this.flushTimer = this.window.setTimeout(() => this.flushWith(""), PREVIEW_INPUT_DEBOUNCE_MS);
 	}
 
 	dispose(): void {
@@ -45,7 +57,7 @@ export class ThemePreviewInputBatcher {
 	}
 
 	private flushWith(data: string): void {
-		if (this.flushTimer) clearTimeout(this.flushTimer);
+		if (this.flushTimer !== null) this.window.clearTimeout(this.flushTimer);
 		this.flushTimer = null;
 		const output = this.pending + data;
 		this.pending = "";
@@ -53,7 +65,7 @@ export class ThemePreviewInputBatcher {
 	}
 
 	private cancelPending(): void {
-		if (this.flushTimer) clearTimeout(this.flushTimer);
+		if (this.flushTimer !== null) this.window.clearTimeout(this.flushTimer);
 		this.flushTimer = null;
 		this.pending = "";
 	}

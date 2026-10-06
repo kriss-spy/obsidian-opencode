@@ -60,12 +60,13 @@ describe("active note line references", () => {
 		const findTerminal = vi.fn(() => ({ addFileReference }));
 		const notice = vi.fn();
 		const command = activeLineReferenceCommand({ findTerminal, revealTerminal, notice });
-		const editor = { getCursor: vi.fn((side: string) => side === "from" ? { line: 2, ch: 3 } : { line: 4, ch: 0 }) } as unknown as Editor;
+		const getCursor = vi.fn((side: string) => side === "from" ? { line: 2, ch: 3 } : { line: 4, ch: 0 });
+		const editor = { getCursor } as unknown as Editor;
 		const file = { path: "active.md", extension: "md" };
 		const view = { file } as unknown as MarkdownView;
 		expect(command.editorCheckCallback!(true, editor, view)).toBe(true);
 		expect(findTerminal).not.toHaveBeenCalled();
-		expect(editor.getCursor).not.toHaveBeenCalled();
+		expect(getCursor).not.toHaveBeenCalled();
 		expect(command.editorCheckCallback!(false, editor, view)).toBe(true);
 		expect(addFileReference).toHaveBeenCalledExactlyOnceWith({ filePath: "active.md", lineStart: 3, lineEnd: 4 });
 		expect(revealTerminal).toHaveBeenCalledOnce();

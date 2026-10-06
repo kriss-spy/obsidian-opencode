@@ -356,10 +356,10 @@ describe('OpencodeClient listSessions', () => {
 	function mockApi(responses: Record<string, unknown>): void {
 		mockExecFile.mockImplementation((_cmd, args, _opts, callback) => {
 			// Windows runs the same API arguments through the Node command host.
-			const commandArgs = Array.isArray(args) ? args : [];
+			const commandArgs: unknown[] = Array.isArray(args) ? args : [];
 			const apiIndex = commandArgs.indexOf('api');
 			const query = apiIndex >= 0 && commandArgs[apiIndex + 1] === 'get' ? commandArgs[apiIndex + 2] : undefined;
-			if (typeof query !== 'string' || !(query in responses)) throw new Error(`Unexpected API query: ${query}`);
+			if (typeof query !== 'string' || !(query in responses)) throw new Error(`Unexpected API query: ${String(query)}`);
 			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(null, JSON.stringify(responses[query]), '');
 			return {} as unknown as ChildProcess;
 		});
@@ -445,7 +445,7 @@ describe('OpencodeClient listSessions', () => {
 
 	it('preserves edits before an in-turn synthetic continuation and excludes read tools and older idle turns', async () => {
 		const read = editMessage([{ file: 'read-only.md' }]);
-		read.content[0]!.name = 'read';
+		read.content[0].name = 'read';
 		mockApi({
 			'/api/session/ses_1/diff?context=0': { data: [] },
 			'/api/session/ses_1/message?limit=20&order=desc': { data: [
