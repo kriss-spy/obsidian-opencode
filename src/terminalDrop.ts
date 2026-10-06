@@ -1,5 +1,6 @@
 interface DraggableFile {
     path?: string;
+    children?: unknown[];
 }
 
 interface DragManagerDraggable {
@@ -21,18 +22,21 @@ function isDragManagerDraggable(val: unknown): val is DragManagerDraggable {
 
 export function handleTerminalDrop(context: DropContext): void {
     const filesToProcess: string[] = [];
+    const addPath = (file: DraggableFile | undefined, folder = false) => {
+        if (!file?.path) return;
+        const directory = folder || Array.isArray(file.children);
+        filesToProcess.push(directory ? file.path.replace(/\/+$/, '') + '/' : file.path);
+    };
 
     const dragMgr = context.dragManager;
     const draggable = dragMgr && isDragManagerDraggable(dragMgr.draggable) ? dragMgr.draggable : undefined;
 
-    if (draggable?.type === 'file') {
-        if (draggable.file?.path) {
-            filesToProcess.push(draggable.file.path);
-        }
+    if (draggable?.type === 'file' || draggable?.type === 'folder') {
+        addPath(draggable.file, draggable.type === 'folder');
     } else if (draggable?.type === 'files') {
         if (Array.isArray(draggable.files)) {
             for (const file of draggable.files) {
-                if (file?.path) filesToProcess.push(file.path);
+                addPath(file);
             }
         }
     } else if (context.dataTransfer?.files && context.dataTransfer.files.length > 0) {
@@ -50,7 +54,10 @@ export function handleTerminalDrop(context: DropContext): void {
         if (index >= filesToProcess.length || !context.terminalInput) return;
 
         const filePath = filesToProcess[index];
-        context.terminalInput(`@${filePath}`);
+        // Autocomplete ends at whitespace. Preserve unusual directory names
+        // as quoted prompt text rather than offering a partial attachment.
+        const quotedDirectory = filePath.endsWith('/') && /[\s@\x00-\x1f\x7f]/.test(filePath);
+        context.terminalInput(quotedDirectory ? ` Directory ${JSON.stringify(filePath)} ` : `@${filePath}`);
 
         window.setTimeout(() => {
             // If there is a next file, insert a space so they don't stick together.

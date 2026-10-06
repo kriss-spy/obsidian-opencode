@@ -614,7 +614,7 @@ export class OpencodeTerminalView extends ItemView {
 		});
 		this.register(() => this.keyRouter.dispose());
 
-		// Handle drag and drop for files
+		// Handle drag and drop for files and folders
 		const dragOverHandler = (e: DragEvent) => {
 			const target = e.target as Node;
 			if (!container.contains(target)) return;

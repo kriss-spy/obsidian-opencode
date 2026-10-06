@@ -36,6 +36,40 @@ describe('TerminalDropHandler', () => {
 
     });
 
+    it('drops an Obsidian folder as one trailing-slash reference over the bridge', () => {
+        const onFileDrop = vi.fn(() => true), terminalInput = vi.fn();
+        handleTerminalDrop({ dragManager: { draggable: { type: 'folder', file: { path: 'Research 笔记', children: [{ path: 'Research 笔记/a.md' }] } } }, onFileDrop, terminalInput });
+        expect(onFileDrop).toHaveBeenCalledExactlyOnceWith('Research 笔记/');
+        expect(terminalInput).not.toHaveBeenCalled();
+    });
+    it('keeps a simple folder mention unsubmitted when the bridge is unavailable', async () => {
+        const terminalInput = vi.fn();
+        handleTerminalDrop({ dragManager: { draggable: { type: 'folder', file: { path: 'research/' } } }, onFileDrop: () => false, terminalInput });
+        await vi.runAllTimersAsync();
+        expect(terminalInput).toHaveBeenCalledExactlyOnceWith('@research/');
+    });
+    it('preserves spaces and special characters in a folder fallback without opening a partial mention', async () => {
+        const terminalInput = vi.fn();
+        handleTerminalDrop({ dragManager: { draggable: { type: 'folder', file: { path: 'Research @笔记/my folder' } } }, terminalInput });
+        await vi.runAllTimersAsync();
+        expect(terminalInput).toHaveBeenCalledExactlyOnceWith(' Directory "Research @笔记/my folder/" ');
+    });
+    it('keeps folders as individual references in mixed Obsidian selections', async () => {
+        const onFileDrop = vi.fn((_path: string) => true);
+        handleTerminalDrop({ dragManager: { draggable: { type: 'files', files: [
+            { path: 'a.md' }, { path: 'Notes', children: [] }, { path: 'Other 笔记', children: [{ path: 'Other 笔记/b.md' }] },
+        ] } }, onFileDrop });
+        await vi.runAllTimersAsync();
+        expect(onFileDrop.mock.calls.map(([value]) => value)).toEqual(['a.md', 'Notes/', 'Other 笔记/']);
+    });
+    it('falls back for the remaining mixed references after disconnecting', async () => {
+        const terminalInput = vi.fn(), onFileDrop = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+        handleTerminalDrop({ dragManager: { draggable: { type: 'files', files: [
+            { path: 'a.md' }, { path: 'Notes', children: [] }, { path: 'Research 笔记', children: [] },
+        ] } }, onFileDrop, terminalInput });
+        await vi.runAllTimersAsync();
+        expect(terminalInput.mock.calls.map(([value]) => value)).toEqual(['@Notes/', ' ', ' Directory "Research 笔记/" ']);
+    });
     it('should inject space only between files for multiple files', async () => {
         const terminalInputMock = vi.fn();
         

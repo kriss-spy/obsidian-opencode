@@ -243,6 +243,18 @@ Session `ses_ef07f9a7affeA2ezHBLKsUB6Yy` has a Section/Destination/Change table.
 
 All GUI tests ran serially under the shared app lock in fresh isolated vaults/profiles. The broader native-wrap hover release-verification check documented above remains outstanding.
 
+### Folder drag and drop (2026-10-06)
+
+Folder drops from Obsidian's explorer add one directory reference, including in mixed selections. The live Obsidian drag-manager implementation confirmed `type: "folder"` stores the folder in `file`, while mixed `type: "files"` uses an array of TFile/TFolder objects; folder `children` identifies those entries without enumerating their contents.
+
+- Directory paths carry one trailing slash. Editor bridge messages omit file-only line fields for these directory references. Simple fallback paths use `@folder/`; whitespace, `@`, and control-bearing folder names use explicit JSON-quoted directory text, matching the existing line-reference fallback's avoidance of partial autocomplete paths. Drops never inject Enter or Tab.
+- Production build/typechecking passed. Full unit suite: 326 passed, 5 platform-only skipped. Coverage includes folders, mixed file/folder selections, connection loss, unusual names, existing file drops, and accurate file-versus-directory protocol fields. Both review axes cleared.
+- Isolated Obsidian 1.12.7 app checks passed both cases. Actual vault TFolder objects and Obsidian's own dragFolder/dragFiles methods produced the payloads. A trusted mouse drag from the explorer into the terminal delivered the correct single Unicode/space-containing directory reference. Mixed drops retained order and file line fields; fallback checks recorded exact, unsubmitted terminal input for simple and nested space/Chinese directory names.
+- The test uses a main-pane terminal so both explorer and target remain visible in the smaller window. Earlier native-drag attempts missed the receiving pane during sidebar layout changes; dropping at the stable pane center and sending a final pointer movement verified real dragover/drop delivery.
+- Installed `main.js` SHA-256: `315fcfcf2db8e4bb55d81ad97fde13e7e7c8ee51a919515e55ee68902de126da`. All artifact hashes match, settings were preserved, and the running user session was not reloaded. Backup: `/tmp/opencode-before-folder-drop-fiuj2st_`.
+
+GUI runs remained serial under the shared lock in fresh isolated vaults/profiles. No model prompt was submitted. The broader release-verification limitations above remain outstanding.
+
 ## WSL2/X410 evidence
 
 On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:

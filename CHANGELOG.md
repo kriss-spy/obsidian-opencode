@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Folder drag and drop** — Add folders from Obsidian's file explorer as individual directory references, including mixed file/folder selections and names with spaces or Unicode.
 - **Configurable Shift+Enter newlines** — Optionally insert a newline in the terminal with Shift+Enter, applying settings immediately and preserving IME input ordering.
 - **Active-line references** — Send the current note's line or selected line range to a running embedded OpenCode terminal. ([#46](https://github.com/kriss-spy/obsidian-opencode/issues/46))
 - **Clickable terminal links** — Open HTTP(S) URLs in the system browser and vault note paths in Obsidian, including line and column references. ([#62](https://github.com/kriss-spy/obsidian-opencode/issues/62))

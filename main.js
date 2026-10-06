@@ -21051,21 +21051,24 @@ function isDragManagerDraggable(val) {
   return typeof val === "object" && val !== null;
 }
 function handleTerminalDrop(context) {
-  var _a, _b;
+  var _a;
   const filesToProcess = [];
+  const addPath = (file, folder = false) => {
+    if (!(file == null ? void 0 : file.path)) return;
+    const directory = folder || Array.isArray(file.children);
+    filesToProcess.push(directory ? file.path.replace(/\/+$/, "") + "/" : file.path);
+  };
   const dragMgr = context.dragManager;
   const draggable = dragMgr && isDragManagerDraggable(dragMgr.draggable) ? dragMgr.draggable : void 0;
-  if ((draggable == null ? void 0 : draggable.type) === "file") {
-    if ((_a = draggable.file) == null ? void 0 : _a.path) {
-      filesToProcess.push(draggable.file.path);
-    }
+  if ((draggable == null ? void 0 : draggable.type) === "file" || (draggable == null ? void 0 : draggable.type) === "folder") {
+    addPath(draggable.file, draggable.type === "folder");
   } else if ((draggable == null ? void 0 : draggable.type) === "files") {
     if (Array.isArray(draggable.files)) {
       for (const file of draggable.files) {
-        if (file == null ? void 0 : file.path) filesToProcess.push(file.path);
+        addPath(file);
       }
     }
-  } else if (((_b = context.dataTransfer) == null ? void 0 : _b.files) && context.dataTransfer.files.length > 0) {
+  } else if (((_a = context.dataTransfer) == null ? void 0 : _a.files) && context.dataTransfer.files.length > 0) {
     for (let i = 0; i < context.dataTransfer.files.length; i++) {
       const file = context.dataTransfer.files[i];
       if (file == null ? void 0 : file.path) {
@@ -21077,7 +21080,8 @@ function handleTerminalDrop(context) {
   const processTerminalDrop = (index) => {
     if (index >= filesToProcess.length || !context.terminalInput) return;
     const filePath = filesToProcess[index];
-    context.terminalInput(`@${filePath}`);
+    const quotedDirectory = filePath.endsWith("/") && /[\s@\x00-\x1f\x7f]/.test(filePath);
+    context.terminalInput(quotedDirectory ? ` Directory ${JSON.stringify(filePath)} ` : `@${filePath}`);
     window.setTimeout(() => {
       var _a2;
       if (index < filesToProcess.length - 1) {
@@ -21090,9 +21094,9 @@ function handleTerminalDrop(context) {
   };
   if (context.onFileDrop) {
     const sendNext = (index) => {
-      var _a2, _b2;
+      var _a2, _b;
       if (index >= filesToProcess.length) return;
-      const queued = (_b2 = (_a2 = context.onFileDrop) == null ? void 0 : _a2.call(context, filesToProcess[index])) != null ? _b2 : false;
+      const queued = (_b = (_a2 = context.onFileDrop) == null ? void 0 : _a2.call(context, filesToProcess[index])) != null ? _b : false;
       if (!queued) {
         processTerminalDrop(index);
         return;
@@ -21228,8 +21232,7 @@ var EditorServer = class {
       method: "at_mentioned",
       params: {
         filePath,
-        lineStart: lineStart != null ? lineStart : 1,
-        lineEnd: lineEnd != null ? lineEnd : 1
+        ...filePath.endsWith("/") ? {} : { lineStart: lineStart != null ? lineStart : 1, lineEnd: lineEnd != null ? lineEnd : 1 }
       }
     };
     const payload = JSON.stringify(msg);

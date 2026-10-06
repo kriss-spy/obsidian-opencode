@@ -127,8 +127,7 @@ export class EditorServer {
 			method: "at_mentioned",
 			params: {
 				filePath,
-				lineStart: lineStart ?? 1,
-				lineEnd: lineEnd ?? 1,
+				...(filePath.endsWith("/") ? {} : { lineStart: lineStart ?? 1, lineEnd: lineEnd ?? 1 }),
 			},
 		};
 		const payload = JSON.stringify(msg);
