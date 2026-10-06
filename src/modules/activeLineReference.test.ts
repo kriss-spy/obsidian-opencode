@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Editor, MarkdownView } from "obsidian";
+import { join, parse } from "node:path";
 import { absoluteLineReference, activeLineReferenceCommand, captureLineReference, deliverLineReference } from "./activeLineReference";
 
 describe("active note line references", () => {
@@ -12,8 +13,11 @@ describe("active note line references", () => {
 
 	it("keeps an absolute outside-vault path and resolves notes against the vault", () => {
 		const reference = { filePath: "folder/笔记.md", lineStart: 5, lineEnd: 9 };
-		expect(absoluteLineReference(reference, "/vault").filePath).toBe("/vault/folder/笔记.md");
-		expect(absoluteLineReference({ ...reference, filePath: "/other/笔记.md" }, "/vault").filePath).toBe("/other/笔记.md");
+		const root = parse(process.cwd()).root;
+		const vault = join(root, "vault");
+		const outside = join(root, "other", "笔记.md");
+		expect(absoluteLineReference(reference, vault).filePath).toBe(join(vault, "folder", "笔记.md"));
+		expect(absoluteLineReference({ ...reference, filePath: outside }, vault).filePath).toBe(outside);
 	});
 
 	it("uses exact bridge ranges for names with spaces and never also pastes", () => {

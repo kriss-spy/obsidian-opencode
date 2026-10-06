@@ -107,7 +107,7 @@ async function clickLink(text: string, modified = false, end = false): Promise<v
 			return { point, hit: document.elementFromPoint(point.x, point.y)?.outerHTML.slice(0, 300), cols: terminal.cols, rows: terminal.rows,
 				rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, hovered: view.terminalLinks.hovered?.text,
 				xterm: { cell: terminal._core.linkifier?._lastBufferCell, activeLine: terminal._core.linkifier?._activeLine, out: terminal._core.linkifier?._isMouseOut, current: terminal._core.linkifier?._currentLink?.link?.text,
-					coords: terminal._core._mouseService?.getCoords(point, terminal.element.querySelector(".xterm-screen"), terminal.cols, terminal.rows),
+					coords: terminal._core._mouseService?.getCoords({ clientX: point.x, clientY: point.y }, terminal.element.querySelector(".xterm-screen"), terminal.cols, terminal.rows),
 					providers: Array.from(terminal._core.linkifier?._activeProviderReplies ?? [], ([key, links]: any) => ({ key, links: links?.map((l: any) => ({ text: l.link.text, range: l.link.range })) })) },
 				buffer: Array.from({ length: terminal.buffer.active.length }, (_, row) => terminal.buffer.active.getLine(row)?.translateToString(true)) };
 		}, point);
