@@ -245,7 +245,7 @@ All GUI tests ran serially under the shared app lock in fresh isolated vaults/pr
 
 ### Folder drag and drop (2026-10-06)
 
-Folder drops from Obsidian's explorer add one directory reference, including in mixed selections. The live Obsidian drag-manager implementation confirmed `type: "folder"` stores the folder in `file`, while mixed `type: "files"` uses an array of TFile/TFolder objects; folder `children` identifies those entries without enumerating their contents.
+Folder drops from Obsidian's explorer now paste a plain vault-relative path with a trailing slash, including in mixed selections. The earlier bridge approach documented below was superseded by the user's plain-text preference. The live Obsidian drag-manager implementation confirmed `type: "folder"` stores the folder in `file`, while mixed `type: "files"` uses an array of TFile/TFolder objects; folder `children` identifies those entries without enumerating their contents.
 
 - Directory paths carry one trailing slash. Editor bridge messages retain numeric `lineStart: 1` and `lineEnd: 1` for directory references, just as for note drops. OpenCode displays a `#1` suffix but reads the directory contents rather than a file line. Simple fallback paths use `@folder/`; whitespace, `@`, and control-bearing folder names use explicit JSON-quoted directory text, matching the existing line-reference fallback's avoidance of partial autocomplete paths. Drops never inject Enter or Tab.
 - Production build/typechecking passed. Full unit suite: 326 passed, 5 platform-only skipped. Coverage includes folders, mixed file/folder selections, connection loss, unusual names, existing file drops, and required numeric line fields for both file and directory protocol messages. Both review axes cleared.
@@ -259,6 +259,13 @@ Follow-up after the user reported no response on reload:
 - Production build/typechecking and the full unit suite passed: 326 passed, 5 platform-only skipped. Standards and Spec reviews cleared.
 - All three focused app cases passed in isolated Obsidian 1.12.7. The additional case ran the installed real OpenCode 2.0.22 in its own XDG profile, established the existing `Smoke.md#1` mention, performed a trusted explorer drag of `Drop 笔记`, then verified complete mixed nested folder/note mentions in the actual prompt. Wrapped prompt rows were joined for assertion. No model prompt was submitted. Screenshot: `test-results/obsidian/real-folder-drop.png`.
 - Installed corrected `main.js` SHA-256: `bf5cd78ad28f48bc068e71bdc6f89109c0d4518f8324bd495cecd80cd2e770ac`. All three artifacts match, settings were preserved, and the running user app was not reloaded. Backup: `/tmp/opencode-before-folder-line-fix-cp6drvfm`.
+
+Plain-text behavior requested by the user (supersedes the bridge approach above):
+
+- Folders bypass the editor bridge and use `terminal.paste` to insert the vault-relative path with exactly one trailing slash. No added `@`, `#1`, label, quoting, Enter, Tab, or autocomplete confirmation. Spaces around each pasted path separate existing prompt text and neighboring file mentions. Names with spaces and Unicode remain intact; folder children are not expanded. File drops retain their existing bridge line mentions and terminal fallback behavior.
+- Production build/typechecking and all 326 unit tests passed (5 platform-only skipped). Both Standards and Spec reviews cleared. Mixed selection order and disconnection behavior are covered.
+- Three focused isolated Obsidian 1.12.7 app cases passed. Connected and disconnected bridge cases recorded the same exact plain folder input; only files produced WebSocket references. A trusted explorer drag in real OpenCode 2.0.22 displayed `Drop 笔记/` as ordinary text beside `@Smoke.md#1`; a mixed drop displayed `Drop 笔记/nested/` beside its note line mention. The shared gesture helper initially used an incorrect selector during extraction; correcting it restored the native drag test. Screenshot: `test-results/obsidian/real-folder-drop.png`. No model prompt was submitted.
+- Installed `main.js` SHA-256: `458d3c612bbf8dfb24d5ce964be5bb38dc753a75c67b5b624f79c8342d825f6e`. All three installed artifacts match the build; settings were preserved and the user's running app was not reloaded. Backup: `/tmp/opencode-before-plain-folder-drop-kfdxsatr`.
 
 GUI runs remained serial under the shared lock in fresh isolated vaults/profiles. No model prompt was submitted. The broader release-verification limitations above remain outstanding.
 

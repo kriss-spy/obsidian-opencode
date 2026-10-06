@@ -36,39 +36,42 @@ describe('TerminalDropHandler', () => {
 
     });
 
-    it('drops an Obsidian folder as one trailing-slash reference over the bridge', () => {
-        const onFileDrop = vi.fn(() => true), terminalInput = vi.fn();
-        handleTerminalDrop({ dragManager: { draggable: { type: 'folder', file: { path: 'Research 笔记', children: [{ path: 'Research 笔记/a.md' }] } } }, onFileDrop, terminalInput });
-        expect(onFileDrop).toHaveBeenCalledExactlyOnceWith('Research 笔记/');
+    it('pastes a folder as plain text even with a connected editor bridge', () => {
+        const onFileDrop = vi.fn(() => true), terminalInput = vi.fn(), terminalPaste = vi.fn();
+        handleTerminalDrop({ dragManager: { draggable: { type: 'folder', file: { path: 'extracurricular/ACG/anime', children: [{ path: 'extracurricular/ACG/anime/a.md' }] } } }, onFileDrop, terminalInput, terminalPaste });
+        expect(terminalPaste).toHaveBeenCalledExactlyOnceWith(' extracurricular/ACG/anime/ ');
+        expect(onFileDrop).not.toHaveBeenCalled();
         expect(terminalInput).not.toHaveBeenCalled();
     });
-    it('keeps a simple folder mention unsubmitted when the bridge is unavailable', async () => {
-        const terminalInput = vi.fn();
-        handleTerminalDrop({ dragManager: { draggable: { type: 'folder', file: { path: 'research/' } } }, onFileDrop: () => false, terminalInput });
+    it('pastes a folder with exactly one trailing slash without an editor bridge', async () => {
+        const terminalPaste = vi.fn();
+        handleTerminalDrop({ dragManager: { draggable: { type: 'folder', file: { path: 'research/' } } }, terminalPaste });
         await vi.runAllTimersAsync();
-        expect(terminalInput).toHaveBeenCalledExactlyOnceWith('@research/');
+        expect(terminalPaste).toHaveBeenCalledExactlyOnceWith(' research/ ');
     });
-    it('preserves spaces and special characters in a folder fallback without opening a partial mention', async () => {
-        const terminalInput = vi.fn();
-        handleTerminalDrop({ dragManager: { draggable: { type: 'folder', file: { path: 'Research @笔记/my folder' } } }, terminalInput });
+    it('preserves spaces and Unicode in pasted folder names', async () => {
+        const terminalPaste = vi.fn();
+        handleTerminalDrop({ dragManager: { draggable: { type: 'folder', file: { path: 'Research 笔记/my folder' } } }, terminalPaste });
         await vi.runAllTimersAsync();
-        expect(terminalInput).toHaveBeenCalledExactlyOnceWith(' Directory "Research @笔记/my folder/" ');
+        expect(terminalPaste).toHaveBeenCalledExactlyOnceWith(' Research 笔记/my folder/ ');
     });
-    it('keeps folders as individual references in mixed Obsidian selections', async () => {
-        const onFileDrop = vi.fn((_path: string) => true);
+    it('keeps mixed folder text and file line mentions in selection order', async () => {
+        const delivered: string[] = [];
         handleTerminalDrop({ dragManager: { draggable: { type: 'files', files: [
-            { path: 'a.md' }, { path: 'Notes', children: [] }, { path: 'Other 笔记', children: [{ path: 'Other 笔记/b.md' }] },
-        ] } }, onFileDrop });
+            { path: 'Notes', children: [] }, { path: 'a.md' }, { path: 'Other 笔记', children: [] }, { path: 'b.md' },
+        ] } }, onFileDrop: path => { delivered.push(`file:${path}`); return true; }, terminalPaste: text => delivered.push(text) });
         await vi.runAllTimersAsync();
-        expect(onFileDrop.mock.calls.map(([value]) => value)).toEqual(['a.md', 'Notes/', 'Other 笔记/']);
+        expect(delivered).toEqual([' Notes/ ', 'file:a.md', ' Other 笔记/ ', 'file:b.md']);
     });
-    it('falls back for the remaining mixed references after disconnecting', async () => {
-        const terminalInput = vi.fn(), onFileDrop = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+    it('keeps folders as plain text after the file bridge disconnects', async () => {
+        const delivered: string[] = [];
+        const onFileDrop = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
         handleTerminalDrop({ dragManager: { draggable: { type: 'files', files: [
-            { path: 'a.md' }, { path: 'Notes', children: [] }, { path: 'Research 笔记', children: [] },
-        ] } }, onFileDrop, terminalInput });
+            { path: 'a.md' }, { path: 'b.md' }, { path: 'Notes', children: [] }, { path: 'Research 笔记', children: [] },
+        ] } }, onFileDrop, terminalInput: text => delivered.push(text), terminalPaste: text => delivered.push(text) });
         await vi.runAllTimersAsync();
-        expect(terminalInput.mock.calls.map(([value]) => value)).toEqual(['@Notes/', ' ', ' Directory "Research 笔记/" ']);
+        expect(delivered).toEqual(['@b.md', ' ', ' Notes/ ', ' Research 笔记/ ']);
+        expect(onFileDrop.mock.calls.map(([path]) => path)).toEqual(['a.md', 'b.md']);
     });
     it('should inject space only between files for multiple files', async () => {
         const terminalInputMock = vi.fn();

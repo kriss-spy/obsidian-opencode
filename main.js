@@ -21078,14 +21078,18 @@ function handleTerminalDrop(context) {
   }
   if (filesToProcess.length === 0) return;
   const processTerminalDrop = (index) => {
-    if (index >= filesToProcess.length || !context.terminalInput) return;
+    var _a2, _b;
+    if (index >= filesToProcess.length) return;
     const filePath = filesToProcess[index];
-    const quotedDirectory = filePath.endsWith("/") && /[\s@\x00-\x1f\x7f]/.test(filePath);
-    context.terminalInput(quotedDirectory ? ` Directory ${JSON.stringify(filePath)} ` : `@${filePath}`);
+    if (filePath.endsWith("/")) {
+      (_a2 = context.terminalPaste) == null ? void 0 : _a2.call(context, ` ${filePath} `);
+    } else {
+      (_b = context.terminalInput) == null ? void 0 : _b.call(context, `@${filePath}`);
+    }
     window.setTimeout(() => {
-      var _a2;
-      if (index < filesToProcess.length - 1) {
-        (_a2 = context.terminalInput) == null ? void 0 : _a2.call(context, " ");
+      var _a3;
+      if (!filePath.endsWith("/") && index < filesToProcess.length - 1) {
+        (_a3 = context.terminalInput) == null ? void 0 : _a3.call(context, " ");
       }
       window.setTimeout(() => {
         processTerminalDrop(index + 1);
@@ -21094,9 +21098,17 @@ function handleTerminalDrop(context) {
   };
   if (context.onFileDrop) {
     const sendNext = (index) => {
-      var _a2, _b;
+      var _a2, _b, _c;
       if (index >= filesToProcess.length) return;
-      const queued = (_b = (_a2 = context.onFileDrop) == null ? void 0 : _a2.call(context, filesToProcess[index])) != null ? _b : false;
+      const filePath = filesToProcess[index];
+      if (filePath.endsWith("/")) {
+        (_a2 = context.terminalPaste) == null ? void 0 : _a2.call(context, ` ${filePath} `);
+        if (index < filesToProcess.length - 1) {
+          window.setTimeout(() => sendNext(index + 1), 75);
+        }
+        return;
+      }
+      const queued = (_c = (_b = context.onFileDrop) == null ? void 0 : _b.call(context, filePath)) != null ? _c : false;
       if (!queued) {
         processTerminalDrop(index);
         return;
@@ -21108,7 +21120,7 @@ function handleTerminalDrop(context) {
     sendNext(0);
     return;
   }
-  if (!context.terminalInput) return;
+  if (!context.terminalInput && !context.terminalPaste) return;
   processTerminalDrop(0);
 }
 
@@ -23339,6 +23351,7 @@ var OpencodeTerminalView = class _OpencodeTerminalView extends import_obsidian4.
         dragManager: dragMgr,
         dataTransfer: e.dataTransfer,
         terminalInput: this.ptySession.getStdin() ? (data) => terminal.input(data, true) : void 0,
+        terminalPaste: this.ptySession.getStdin() ? (text) => terminal.paste(text) : void 0,
         onFileDrop: this.editorServer ? (filePath) => {
           const normalized = normalizeVaultPath(filePath, this.plugin.vaultRoot);
           return this.editorServer.notifyAtMentioned(normalized);

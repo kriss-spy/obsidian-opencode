@@ -633,6 +633,7 @@ export class OpencodeTerminalView extends ItemView {
 				dragManager: dragMgr,
 				dataTransfer: e.dataTransfer,
 				terminalInput: this.ptySession.getStdin() ? (data: string) => terminal.input(data, true) : undefined,
+				terminalPaste: this.ptySession.getStdin() ? (text: string) => terminal.paste(text) : undefined,
 				onFileDrop: this.editorServer ? (filePath: string) => {
 					const normalized = normalizeVaultPath(filePath, this.plugin.vaultRoot);
 					return this.editorServer!.notifyAtMentioned(normalized);

@@ -13,6 +13,7 @@ export interface DropContext {
     dragManager?: { draggable?: unknown };
     dataTransfer?: DataTransfer | null;
     terminalInput?: (data: string) => void;
+    terminalPaste?: (text: string) => void;
     onFileDrop?: (filePath: string) => boolean;
 }
 
@@ -51,19 +52,22 @@ export function handleTerminalDrop(context: DropContext): void {
     if (filesToProcess.length === 0) return;
 
     const processTerminalDrop = (index: number) => {
-        if (index >= filesToProcess.length || !context.terminalInput) return;
+        if (index >= filesToProcess.length) return;
 
         const filePath = filesToProcess[index];
-        // Autocomplete ends at whitespace. Preserve unusual directory names
-        // as quoted prompt text rather than offering a partial attachment.
-        const quotedDirectory = filePath.endsWith('/') && /[\s@\x00-\x1f\x7f]/.test(filePath);
-        context.terminalInput(quotedDirectory ? ` Directory ${JSON.stringify(filePath)} ` : `@${filePath}`);
+        if (filePath.endsWith('/')) {
+            // Folders are plain prompt text. Padding separates existing text and
+            // subsequent file mentions; paste keeps whitespace in names intact.
+            context.terminalPaste?.(` ${filePath} `);
+        } else {
+            context.terminalInput?.(`@${filePath}`);
+        }
 
         window.setTimeout(() => {
             // If there is a next file, insert a space so they don't stick together.
             // We DO NOT inject a space (or Enter/Tab) after the LAST file.
             // This guarantees the TUI mention menu stays OPEN for the user to manually confirm.
-            if (index < filesToProcess.length - 1) {
+            if (!filePath.endsWith('/') && index < filesToProcess.length - 1) {
                 context.terminalInput?.(' ');
             }
 
@@ -77,7 +81,15 @@ export function handleTerminalDrop(context: DropContext): void {
     if (context.onFileDrop) {
         const sendNext = (index: number) => {
             if (index >= filesToProcess.length) return;
-            const queued = context.onFileDrop?.(filesToProcess[index]) ?? false;
+            const filePath = filesToProcess[index];
+            if (filePath.endsWith('/')) {
+                context.terminalPaste?.(` ${filePath} `);
+                if (index < filesToProcess.length - 1) {
+                    window.setTimeout(() => sendNext(index + 1), 75);
+                }
+                return;
+            }
+            const queued = context.onFileDrop?.(filePath) ?? false;
             if (!queued) {
                 processTerminalDrop(index);
                 return;
@@ -91,6 +103,6 @@ export function handleTerminalDrop(context: DropContext): void {
     }
 
     // Legacy terminal keystroke injection path
-    if (!context.terminalInput) return;
+    if (!context.terminalInput && !context.terminalPaste) return;
     processTerminalDrop(0);
 }
