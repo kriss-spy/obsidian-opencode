@@ -182,7 +182,8 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 				trace("note-opened", { file: (window as any).app.workspace.getActiveFile()?.path });
 			};
 			const mouseTrace = (event: MouseEvent) => {
-				trace(event.type, { x: event.clientX, y: event.clientY, button: event.button, target: (event.target as HTMLElement)?.tagName });
+				trace(event.type, { x: event.clientX, y: event.clientY, button: event.button, buttons: event.buttons, detail: event.detail,
+					ctrl: event.ctrlKey, meta: event.metaKey, shift: event.shiftKey, target: (event.target as HTMLElement)?.tagName });
 			};
 			window.addEventListener("mousedown", mouseTrace, true);
 			window.addEventListener("mouseup", mouseTrace, true);
@@ -267,11 +268,19 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.focus());
 		const start = await linkPoint("https://github.com");
 		const end = await linkPoint("https://github.com", true);
+		// xterm ignores clicks beyond a triple-click. Click a different blank
+		// row first so earlier link clicks cannot turn this drag into click four.
+		const blank = await browser.execute((point: { x: number; y: number }) => {
+			const terminal = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+			const rect = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
+			return { x: point.x, y: Math.round(point.y + rect.height / terminal.rows) };
+		}, start);
+		await browser.action("pointer").move({ ...blank, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
 		try {
 			await browser.action("pointer").move({ x: start.x, y: start.y, origin: "viewport" }).down({ button: 0 })
 				.move({ x: Math.round((start.x + end.x) / 2), y: end.y, origin: "viewport", duration: 100 }).pause(50)
 				.move({ x: end.x, y: end.y, origin: "viewport", duration: 100 }).pause(100).perform(true);
-			await browser.waitUntil(() => browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.hasSelection()), { timeoutMsg: "Native pointer drag did not select terminal text" });
+			await waitActivation(() => browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.hasSelection()));
 			await browser.action("pointer").up({ button: 0 }).perform();
 		} finally { await browser.releaseActions(); }
 		expect(await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.hasSelection())).toBe(true);
