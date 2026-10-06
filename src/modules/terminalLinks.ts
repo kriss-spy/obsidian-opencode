@@ -183,6 +183,7 @@ interface LinkLine {
 	blocked?: boolean;
 	noteStartLimit?: number;
 	exactNote?: boolean;
+	exactWeb?: boolean;
 }
 
 /** Each TUI break may independently remove a word space or split a word. */
@@ -194,7 +195,7 @@ function appendNoteFragments(candidates: LogicalLine[], fragment: LogicalLine): 
 	}))).filter(candidate => candidate.text.length <= 4096);
 }
 
-interface TableRow { cells: LogicalLine[]; borders: string }
+interface TableRow { cells: LogicalLine[]; borders: string; rightEdges: number[] }
 
 function tableRow(line: LogicalLine): TableRow | null {
 	const text = line.text.replace(/ +[█▄▀▐▌] *$/, "");
@@ -208,7 +209,48 @@ function tableRow(line: LogicalLine): TableRow | null {
 		return { text: text.slice(start, end), starts: line.starts.slice(start, end), ends: line.ends.slice(start, end) };
 	});
 	// Compare physical columns, not UTF-16 offsets: Unicode cells are wider.
-	return { cells, borders: borders.map(index => `${text[index]}:${line.starts[index].x}`).join(",") };
+	return { cells, borders: borders.map(index => `${text[index]}:${line.starts[index].x}`).join(","),
+		rightEdges: borders.slice(1).map(index => line.starts[index].x) };
+}
+
+/** Join URL tokens within the same bordered cell, keeping every URL byte. */
+function wrappedTableWebLinks(terminal: Terminal, y: number): LinkLine[] {
+	if (terminal.modes.mouseTrackingMode === "none") return [];
+	const result: LinkLine[] = [];
+	for (let first = Math.max(1, y - 31); first <= y; first++) {
+		const initial = logicalLine(terminal, first);
+		const table = initial && tableRow(initial);
+		if (!initial || initial.starts[0]?.y !== first || !table) continue;
+		for (let column = 0; column < table.cells.length; column++) {
+			let line = table.cells[column];
+			if (!/^https?:\/\/[^\s<>"'`]*$/i.test(line.text) || line.text.length > 4096) continue;
+			const sources = [{ y: first, text: initial.text }];
+			const ranges = [{ start: line.starts[0], end: line.ends[line.ends.length - 1] }];
+			let bounded = true, row = first + 1;
+			for (; row <= terminal.buffer.active.length; row++) {
+				const next = logicalLine(terminal, row);
+				const nextTable = next && tableRow(next);
+				if (!next || next.starts[0]?.y !== row || !nextTable || nextTable.borders !== table.borders ||
+					nextTable.cells.some((peer, index) => index !== column && peer.text)) break;
+				const fragment = nextTable.cells[column];
+				if (!/^[^\s<>"'`]+$/.test(fragment.text) || /^[a-z][a-z\d+.-]*:\/\//i.test(fragment.text)) break;
+				const remaining = table.rightEdges[column] - line.ends[line.ends.length - 1].x - 2;
+				// Short completed URLs must not swallow a following prose token.
+				const width = fragment.ends[fragment.ends.length - 1].x - fragment.starts[0].x + 1;
+				if (remaining > 6 && (!/[/.%?=&_-]$/.test(line.text) || width <= remaining)) break;
+				if (row >= first + 32 || line.text.length + fragment.text.length > 4096) { bounded = false; break; }
+				line = { text: line.text + fragment.text, starts: [...line.starts, ...fragment.starts], ends: [...line.ends, ...fragment.ends] };
+				ranges.push({ start: fragment.starts[0], end: fragment.ends[fragment.ends.length - 1] });
+				sources.push({ y: row, text: next.text });
+			}
+			if (line.ends[line.ends.length - 1].y < y || (bounded && !safeWebUrl(line.text))) continue;
+			const following = logicalLine(terminal, row)?.text;
+			result.push({ line, exactWeb: true, continuation: sources.length > 1 || !bounded ? "web" : undefined,
+				blocked: !bounded, suffixes: ranges,
+				current: () => sources.every(source => logicalLine(terminal, source.y)?.text === source.text) && logicalLine(terminal, row)?.text === following });
+		}
+	}
+	return result;
 }
 
 /** Reconnect one bordered cell, never across record or column boundaries. */
@@ -258,7 +300,7 @@ function wrappedWebLines(terminal: Terminal, y: number): LinkLine[] {
 	const content = (text: string) => text.replace(/ +[█▄▀▐▌┃│] *$/, "").trimEnd();
 	for (let first = Math.max(1, y - 31); first <= y; first++) {
 		const initial = logicalLine(terminal, first);
-		if (!initial || initial.starts[0]?.y !== first) continue;
+		if (!initial || initial.starts[0]?.y !== first || tableRow(initial)) continue;
 		const indent = /^(?: +[┃│] {2,}| {2,}(?:[-*•] )?)/.exec(initial.text)?.[0];
 		if (!indent) continue;
 		const start = /https?:\/\/[^\s<>"'`]+$/i.exec(content(initial.text));
@@ -391,7 +433,7 @@ export class TerminalLinks implements ILinkProvider {
 		// Repeated suffixes across boundary combinations share one indexed
 		// lookup. The cache lives only for this buffer snapshot.
 		const noteCache = new Map<string, NoteTarget | null>();
-		const lines = [...wrappedWebLines(this.terminal, y), ...wrappedTableNotes(this.terminal, y), ...linkLines(this.terminal, y)];
+		const lines = [...wrappedTableWebLinks(this.terminal, y), ...wrappedWebLines(this.terminal, y), ...wrappedTableNotes(this.terminal, y), ...linkLines(this.terminal, y)];
 		const suffixes = lines.flatMap(line => {
 			// A prose or quoted cell can still use the ordinary parser. Only an
 			// exact complete path or a reconstructed continuation owns its cells.
@@ -401,14 +443,15 @@ export class TerminalLinks implements ILinkProvider {
 			}));
 		});
 		const before = (a: IBufferCellPosition, b: IBufferCellPosition) => a.y < b.y || (a.y === b.y && a.x <= b.x);
-		const links = lines.flatMap(({ line, current, continuation, blocked, noteStartLimit, exactNote }) => {
+		const links = lines.flatMap(({ line, current, continuation, blocked, noteStartLimit, exactNote, exactWeb }) => {
 			const note = exactNote ? indexedNote(line.text, this.options, noteCache) : null;
 			const matches: TextMatch[] = exactNote ? (note ? [{ start: 0, end: line.text.length, text: line.text, note }] : [])
-				: findTerminalLinks(line.text, this.options, noteStartLimit, noteCache);
+				: exactWeb ? [{ start: 0, end: line.text.length, text: line.text }]
+					: findTerminalLinks(line.text, this.options, noteStartLimit, noteCache);
 			return blocked ? [] : matches.flatMap(match => {
 				const wholeRange = { start: line.starts[match.start], end: line.ends[match.end - 1] };
 				if (continuation && (wholeRange.start.y === wholeRange.end.y || (continuation === "note" ? !match.note : match.note))) return [];
-				if (!continuation && suffixes.some(suffix => (!exactNote || suffix.wrapped) && (!suffix.noteOnly || match.note) && before(wholeRange.start, suffix.range.end) && before(suffix.range.start, wholeRange.end))) return [];
+				if (!continuation && suffixes.some(suffix => ((!exactNote && !exactWeb) || suffix.wrapped) && (!suffix.noteOnly || match.note) && before(wholeRange.start, suffix.range.end) && before(suffix.range.start, wholeRange.end))) return [];
 				if (wholeRange.start.y > y || wholeRange.end.y < y) return [];
 				let range = wholeRange;
 				const fragments: ILink["range"][] = [];

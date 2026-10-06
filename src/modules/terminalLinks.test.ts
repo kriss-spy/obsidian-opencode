@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { ILink, Terminal } from "@xterm/xterm";
+import tableHttpLinks from "../../test/fixtures/table-http-links";
 import { currentOsc8Link } from "./xtermOsc8";
 import { findTerminalLinks, resolveNoteTarget, safeWebUrl, TerminalLinks, TerminalLinkOptions } from "./terminalLinks";
 
@@ -89,6 +90,59 @@ describe("terminal link parsing and containment", () => {
 });
 
 describe("public xterm provider and activation", () => {
+	it.each(tableHttpLinks)("opens the complete table HTTP URL $label from every row and confines the click cells", async ({ url }) => {
+		const fragments = url.match(/.{1,29}/g)!;
+		const rows = fragments.map((fragment, row) => ({ chars: Array.from(`     │ ${row === 0 ? "1" : " "} │ ${fragment.padEnd(29)} │ ${row === 0 ? "272" : "   "} │`) }));
+		const term = terminal(rows);
+		Object.assign(term, { cols: 52 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const config = options();
+		const provider = new TerminalLinks(term, config);
+		for (let y = 1; y <= rows.length; y++) {
+			const found = links(provider, y);
+			expect(found.map(link => link.text)).toEqual([url]);
+			expect(found[0].range).toEqual({ start: { x: 12, y }, end: { x: 11 + fragments[y - 1].length, y } });
+			found[0].activate(event({ ctrlKey: true }), url);
+			await vi.waitFor(() => expect(config.openExternal).toHaveBeenCalledTimes(y));
+		}
+		expect(config.openExternal).toHaveBeenLastCalledWith(url);
+		const stale = links(provider, 2)[0];
+		rows[rows.length - 1].chars = Array.from("     └───┴───────────────────────────────┴─────┘");
+		stale.activate(event({ ctrlKey: true }), url);
+		expect(config.openExternal).toHaveBeenCalledTimes(rows.length);
+	});
+	it("stops table URLs at new records, column changes, separators and prose", () => {
+		const url = "https://example.com/abcdefghij";
+		const cell = (text: string, label = " ") => `  │ ${label} │ ${text.padEnd(29)} │`;
+		for (const boundary of [cell("suffix", "2"), " " + cell("suffix"), "  ├───┼───────────────────────────────┤",
+			cell("following prose"), cell("https://other.example/"), cell("file://outside"), cell("")]) {
+			const term = terminal([{ chars: Array.from(cell(url, "1")) }, { chars: Array.from(boundary) }]);
+			Object.assign(term, { cols: 44 });
+			Object.assign(term.modes, { mouseTrackingMode: "any" });
+			expect(links(new TerminalLinks(term, options()))[0].text).toBe(url);
+		}
+	});
+	it("suppresses partial table URLs when a continuation exceeds row or length limits", () => {
+		for (const fragments of [["https://example.com/", ...Array(32).fill("a".repeat(29))], ["https://example.com/" + "a".repeat(2080), "b".repeat(2080)]]) {
+			const width = Math.max(...fragments.map(fragment => fragment.length));
+			const term = terminal(fragments.map(fragment => ({ chars: Array.from(`  │ ${fragment.padEnd(width)} │`) })));
+			Object.assign(term, { cols: width + 6 });
+			Object.assign(term.modes, { mouseTrackingMode: "any" });
+			const provider = new TerminalLinks(term, options());
+			expect(links(provider)).toEqual([]);
+			expect(links(provider, 2)).toEqual([]);
+		}
+	});
+	it("invalidates a table URL when its following boundary changes", () => {
+		const url = "https://example.com/abcdefghij";
+		const rows = [{ chars: Array.from(`  │ ${url} │`) }, { chars: Array.from("  └───────────────────────────────┘") }];
+		const term = terminal(rows);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const config = options(), link = links(new TerminalLinks(term, config))[0];
+		rows[1].chars = Array.from(`  │ ${"suffix".padEnd(url.length)} │`);
+		link.activate(event({ ctrlKey: true }), url);
+		expect(config.openExternal).not.toHaveBeenCalled();
+	});
 	it("detects single-row notes beside table borders and preserves table web links", () => {
 		expect(findTerminalLinks("  │ Notes/My note.md│ https://example.com │", options()).map(link => link.text))
 			.toEqual(["Notes/My note.md", "https://example.com"]);

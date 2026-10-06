@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import { browser, expect } from "@wdio/globals";
 import { Key } from "webdriverio";
+import tableHttpLinks from "../fixtures/table-http-links";
 
 const notePath = "Terminal links/中文 My note.md";
 const mixedFragments = [
@@ -361,6 +362,60 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 				if (folder) await app.vault.delete(folder, true);
 			}, layout.note);
 		}
+	});
+	for (const fixture of tableHttpLinks) it(`opens every row of wrapped table HTTP URL ${fixture.label} with bounded underlines`, async function () {
+		const fragments = fixture.url.match(/.{1,29}/g)!;
+		await browser.execute(() => {
+			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+			view.terminal.element.parentElement.style.width = "700px";
+			view.fitAddon.fit();
+			(window as any).__terminalLinkExternal = [];
+			(window as any).__terminalLinkInput = [];
+		});
+		const rows = fragments.map((fragment, row) => `     │ ${row === 0 ? fixture.label : " "} │ ${fragment.padEnd(29)} │ ${row === 0 ? fixture.chars : "   "} │`);
+		await render(rows.join("\r\n"), true);
+		for (let row = 1; row <= rows.length; row++) {
+			const point = await browser.execute((row: number, url: string) => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				const terminal = view.terminal;
+				let link: any;
+				view.terminalLinks.provideLinks(row, (found: any[]) => { link = found?.find(value => value.text === url); });
+				if (!link) throw new Error(`Missing complete table URL on row ${row}`);
+				const rect = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
+				return { x: Math.round(rect.left + (link.range.start.x - 0.5) * rect.width / terminal.cols),
+					y: Math.round(rect.top + (row - 0.5) * rect.height / terminal.rows), range: link.range };
+			}, row, fixture.url);
+			expect(point.range).toEqual({ start: { x: 12, y: row }, end: { x: 11 + fragments[row - 1].length, y: row } });
+			await browser.action("pointer").move({ x: point.x, y: point.y, origin: "viewport" }).perform();
+			await browser.waitUntil(() => browser.execute((url: string, count: number) => {
+				const provider = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminalLinks;
+				return provider.hovered?.text === url && document.querySelectorAll(".opencode-terminal-link-underline").length === count;
+			}, fixture.url, fragments.length));
+			if (row === 1) {
+				const underlines = await browser.execute(() => {
+					const terminal = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+					const screen = terminal.element.querySelector(".xterm-screen"), rect = screen.getBoundingClientRect();
+					return { cellWidth: rect.width / terminal.cols, cellHeight: rect.height / terminal.rows,
+						lines: Array.from(screen.querySelectorAll(".opencode-terminal-link-underline"), (element: HTMLElement) => {
+							const line = element.getBoundingClientRect();
+							return { left: line.left - rect.left, width: line.width, top: line.top - rect.top };
+						}) };
+				});
+				for (let index = 0; index < fragments.length; index++) {
+					expect(underlines.lines[index].left).toBeCloseTo(11 * underlines.cellWidth, 1);
+					expect(underlines.lines[index].width).toBeCloseTo(fragments[index].length * underlines.cellWidth, 1);
+					expect(underlines.lines[index].top).toBeCloseTo((index + 1) * underlines.cellHeight - 2, 1);
+				}
+			}
+			await browser.action("key").down(process.platform === "darwin" ? Key.Command : Key.Control).perform(true);
+			try { await browser.action("pointer").move({ x: point.x, y: point.y, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform(); }
+			finally { await browser.releaseActions(); }
+			await waitActivation(async () => (await externalCalls()).length === row);
+		}
+		expect(await externalCalls()).toEqual(fragments.map(() => fixture.url));
+		expect(await browser.execute(() => (window as any).__terminalLinkInput)).toEqual([]);
+		await browser.action("pointer").move({ x: 10, y: 10, origin: "viewport" }).perform();
+		await browser.waitUntil(() => browser.execute(() => document.querySelectorAll(".opencode-terminal-link-underline").length === 0));
 	});
 	it("opens the complete HTTP URL from the first, middle and last TUI rows", async function () {
 		const fragments = ["https://resources.anthropic.", "com/hubfs/", "Claude%20Code%20Advanced%20P", "atterns_%20Subagents%2C%20MC", "P%2C%20and%20Scaling%20to%20", "Real%20Codebases.pdf"];

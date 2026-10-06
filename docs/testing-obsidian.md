@@ -207,6 +207,18 @@ Session `ses_ef3381f6affeIiA6zYLGb8BC5o` contains eight long note paths in a Mar
 
 All app tests ran serially in isolated vaults/profiles under the shared lock. The broader app suite was not repeated for this fix; its previously documented native-wrap hover failure still needs a clean release-verification run.
 
+### Wrapped table HTTP URLs (2026-10-06)
+
+The same session `ses_ef3381f6affeIiA6zYLGb8BC5o` contains five long HTTP URLs in a table. Their exact addresses are retained in `test/fixtures/table-http-links.ts`, including Maps waypoints, Amazon query punctuation, a GitHub line fragment, YouTube parameters, and Wikipedia tracking parameters.
+
+- URLs reconstruct within one bordered column without inserting spaces. Query punctuation and escapes remain intact. New records, populated peer cells, separators, changed columns and prose stop reconstruction. The paragraph reconstructor skips bordered table rows, avoiding an overlapping target that could append a horizontal separator.
+- Production build/typechecking passed. Full unit suite: 309 passed, 5 platform-only skipped. Table URL regressions cover every row, exact cell ranges, continuation limits, record/layout boundaries, short completed URLs and stale source/boundary rejection.
+- Isolated Obsidian 1.12.7 checks passed all five table URL cases: 37 real Ctrl/Cmd-clicks, one per rendered fragment, each opening the full original URL with zero PTY input leakage. Actual underline rectangles match every fragment and exclude borders, padding and neighboring cells; leaving removes the group.
+- Five additional app regression cases passed: 17 note clicks across paragraph/table/punctuation/split-extension layouts, and three paragraph URL clicks with grouped underline verification. Standards and Spec reviews cleared.
+- Installed `main.js` SHA-256: `05aff6d0c157dfb7b7d65e74139182cea1bc8418ff49f9e26ed0fb18ef285b79`. All three artifact hashes match the build; settings were preserved. Backup: `/tmp/opencode-before-table-http-b7r1a9nn`. The user's active terminal was not reloaded.
+
+All GUI runs were serial under the shared app lock in fresh isolated vaults/profiles. The initial table URL app attempt used an offscreen end-cell pointer coordinate; the test now clicks the visible start cell and separately verifies the complete start/end range and every underline rectangle. The broader suite was not rerun; the native-wrap hover release-verification limitation documented above remains.
+
 ## WSL2/X410 evidence
 
 On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:
