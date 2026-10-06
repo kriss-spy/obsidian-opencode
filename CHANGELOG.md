@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-06
+
 ### Added
 
 - **Folder drag and drop** — Paste folders from Obsidian's file explorer as plain vault-relative paths with a trailing slash, including mixed file/folder selections and names with spaces or Unicode. File drops retain their line mentions.

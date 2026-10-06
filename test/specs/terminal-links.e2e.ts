@@ -28,6 +28,19 @@ const stub = path.resolve(`test/fixtures/opencode-stub${process.platform === "wi
 
 async function render(text: string, mouse = false, wrap = false): Promise<void> {
 	await browser.action("pointer").move({ x: 10, y: 10, origin: "viewport" }).perform();
+	await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.fitAddon.fit());
+	// Opening notes and changing fixture fonts can schedule another fit after
+	// this one. Settle real screen geometry before writing and locating cells.
+	let previousGeometry = "", stableSince = Date.now();
+	await browser.waitUntil(async () => {
+		const geometry = await browser.execute(() => {
+			const terminal = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+			const rect = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
+			return JSON.stringify([terminal.cols, terminal.rows, rect.left, rect.top, rect.width, rect.height]);
+		});
+		if (geometry !== previousGeometry) { previousGeometry = geometry; stableSince = Date.now(); }
+		return Date.now() - stableSince >= 300;
+	}, { timeoutMsg: "Terminal fixture geometry did not settle" });
 	await browser.executeAsync((text: string, mouse: boolean, wrap: boolean, done: () => void) => {
 		const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
 		view.terminal.clearSelection();
@@ -93,6 +106,9 @@ async function clickLink(text: string, modified = false, end = false): Promise<v
 			const rect = terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
 			return { point, hit: document.elementFromPoint(point.x, point.y)?.outerHTML.slice(0, 300), cols: terminal.cols, rows: terminal.rows,
 				rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, hovered: view.terminalLinks.hovered?.text,
+				xterm: { cell: terminal._core.linkifier?._lastBufferCell, activeLine: terminal._core.linkifier?._activeLine, out: terminal._core.linkifier?._isMouseOut, current: terminal._core.linkifier?._currentLink?.link?.text,
+					coords: terminal._core._mouseService?.getCoords(point, terminal.element.querySelector(".xterm-screen"), terminal.cols, terminal.rows),
+					providers: Array.from(terminal._core.linkifier?._activeProviderReplies ?? [], ([key, links]: any) => ({ key, links: links?.map((l: any) => ({ text: l.link.text, range: l.link.range })) })) },
 				buffer: Array.from({ length: terminal.buffer.active.length }, (_, row) => terminal.buffer.active.getLine(row)?.translateToString(true)) };
 		}, point);
 		throw new Error(`${String(error)} ${JSON.stringify(context)}`);

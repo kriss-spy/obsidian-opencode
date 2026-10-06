@@ -297,3 +297,9 @@ The #26 test drives Chromium's composition event sequence inside the real macOS 
 - [`wdio-obsidian-service`](https://github.com/jesse-r-s-hines/wdio-obsidian-service)
 - [`wdio-obsidian-service` sample plugin](https://github.com/jesse-r-s-hines/wdio-obsidian-service-sample-plugin)
 - [WebdriverIO Electron testing](https://webdriver.io/docs/desktop-testing/electron/)
+
+## 2.3.0 release candidate verification (2026-10-06)
+
+The versioned candidate passed the production build and 326 unit tests (5 platform-only skipped). The final complete Linux app run passed all eight spec files and 60 tests, including real OpenCode 2.0.22, folder plain-text drops and all 27 terminal-link cases. The initial full run exposed two intermittent hover failures; the link suite passed standalone, and the final full run passed after settling fixture screen geometry before rendering. Click and underline assertions remain enabled. GUI runs stayed serial in isolated profiles under the shared lock.
+
+See [the release checklist](releases/2.3.0-checks.md) for asset hashes, strict static-review findings, platform verification limits and the publishing boundary. This is prepared release material, not a published release.

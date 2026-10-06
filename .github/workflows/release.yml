@@ -24,7 +24,26 @@ jobs:
       - name: Build
         run: |
           npm ci
+          npm test
           npm run build
+
+      - name: Validate release identity and assets
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          node <<'JS'
+          const fs = require('node:fs');
+          const read = name => JSON.parse(fs.readFileSync(name, 'utf8'));
+          const version = process.env.RELEASE_VERSION;
+          const manifest = read('manifest.json');
+          const lock = read('package-lock.json');
+          const versions = [manifest.version, read('package.json').version, lock.version, lock.packages[''].version];
+          if (versions.some(value => value !== version)) throw new Error('Tag and package versions must match');
+          if (read('versions.json')[version] !== manifest.minAppVersion) throw new Error('Compatibility mapping must match');
+          for (const name of ['main.js', 'manifest.json', 'styles.css', `docs/releases/${version}.md`]) {
+            if (!fs.statSync(name).size) throw new Error(`Empty release asset: ${name}`);
+          }
+          JS
 
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -35,7 +54,8 @@ jobs:
             main.js
             manifest.json
             styles.css
-          generate_release_notes: true
+          body_path: docs/releases/${{ github.ref_name }}.md
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
