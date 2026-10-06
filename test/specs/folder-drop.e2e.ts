@@ -55,7 +55,9 @@ async function dragFromExplorer(directory: string): Promise<void> {
 }
 
 async function input(): Promise<string[]> {
-	return browser.execute(() => (window as any).__folderDropInput);
+	// Explorer activation can report focus changes; they are terminal protocol,
+	// separate from the dropped prompt content. Keep every other input byte.
+	return browser.execute(() => (window as any).__folderDropInput.filter((data: string) => data !== "\x1b[I" && data !== "\x1b[O"));
 }
 
 describe("folder drag and drop in an isolated vault", function () {

@@ -264,10 +264,16 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 	it("preserves text selection and rejects same-link drags", async function () {
 		const before = (await externalCalls()).length;
 		await render("https://github.com");
+		await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.focus());
 		const start = await linkPoint("https://github.com");
 		const end = await linkPoint("https://github.com", true);
-		await browser.action("pointer").move({ x: start.x, y: start.y, origin: "viewport" }).down({ button: 0 })
-			.move({ x: end.x, y: end.y, origin: "viewport", duration: 200 }).up({ button: 0 }).perform();
+		try {
+			await browser.action("pointer").move({ x: start.x, y: start.y, origin: "viewport" }).down({ button: 0 })
+				.move({ x: Math.round((start.x + end.x) / 2), y: end.y, origin: "viewport", duration: 100 }).pause(50)
+				.move({ x: end.x, y: end.y, origin: "viewport", duration: 100 }).pause(100).perform(true);
+			await browser.waitUntil(() => browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.hasSelection()), { timeoutMsg: "Native pointer drag did not select terminal text" });
+			await browser.action("pointer").up({ button: 0 }).perform();
+		} finally { await browser.releaseActions(); }
 		expect(await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.hasSelection())).toBe(true);
 		expect((await externalCalls()).length).toBe(before);
 	});
@@ -496,10 +502,21 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		const url = fragments.join("");
 		await browser.execute(() => {
 			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
-			view.terminal.element.parentElement.style.width = "300px";
+			const screen = view.terminal.element.querySelector(".xterm-screen").getBoundingClientRect();
+			const parent = view.terminal.element.parentElement;
+			const padding = parent.getBoundingClientRect().width - screen.width;
+			// Use cell geometry: the default font metrics differ on Windows.
+			parent.style.width = `${padding + screen.width / view.terminal.cols * 35.5}px`;
 			view.fitAddon.fit();
+			// Account for the fit addon's platform scrollbar/padding rounding.
+			for (let attempt = 0; attempt < 3 && view.terminal.cols !== 35; attempt++) {
+				const cellWidth = view.terminal.element.querySelector(".xterm-screen").getBoundingClientRect().width / view.terminal.cols;
+				parent.style.width = `${parseFloat(parent.style.width) - (view.terminal.cols - 35) * cellWidth}px`;
+				view.fitAddon.fit();
+			}
 		});
 		await render(fragments.map(fragment => `    ${fragment}`).join("\r\n"), true);
+		expect(await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.cols)).toBe(35);
 		await browser.execute(() => { (window as any).__terminalLinkExternal = []; (window as any).__terminalLinkInput = []; });
 		await clickLink(url, true);
 		await clickLink(url, true, true);
