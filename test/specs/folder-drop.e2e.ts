@@ -1,4 +1,7 @@
 import * as path from "node:path";
+import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { resolveOpencodeExecutable } from "../../src/utils/opencodeExecutable";
 import { browser, expect } from "@wdio/globals";
 import { WebSocket } from "ws";
 
@@ -78,7 +81,7 @@ describe("folder drag and drop in an isolated vault", function () {
 		try {
 			const received = nextMessage(socket);
 			await drop([folder]);
-			expect(await received).toEqual({ jsonrpc: "2.0", method: "at_mentioned", params: { filePath: `${folder}/` } });
+			expect(await received).toEqual({ jsonrpc: "2.0", method: "at_mentioned", params: { filePath: `${folder}/`, lineStart: 1, lineEnd: 1 } });
 			await browser.execute(async () => {
 				const app = (window as any).app;
 				const explorer = app.workspace.getLeavesOfType("file-explorer")[0];
@@ -106,7 +109,7 @@ describe("folder drag and drop in an isolated vault", function () {
 				.move({ x: points.source.x + 15, y: points.source.y, origin: "viewport", duration: 150 })
 				.move({ ...points.target, origin: "viewport", duration: 500 }).pause(100)
 				.move({ x: points.target.x + 5, y: points.target.y + 5, origin: "viewport", duration: 100 }).pause(100).up({ button: 0 }).perform();
-			expect(await dragged).toEqual({ jsonrpc: "2.0", method: "at_mentioned", params: { filePath: `${folder}/` } });
+			expect(await dragged).toEqual({ jsonrpc: "2.0", method: "at_mentioned", params: { filePath: `${folder}/`, lineStart: 1, lineEnd: 1 } });
 			const messages: any[] = [];
 			const receive = (data: any) => messages.push(JSON.parse(data.toString()));
 			socket.on("message", receive);
@@ -115,8 +118,8 @@ describe("folder drag and drop in an isolated vault", function () {
 				await browser.waitUntil(async () => messages.length === 3);
 				expect(messages.map(message => message.params)).toEqual([
 					{ filePath: "Smoke.md", lineStart: 1, lineEnd: 1 },
-					{ filePath: `${folder}/子目录/` },
-					{ filePath: "FolderDropPlain/" },
+					{ filePath: `${folder}/子目录/`, lineStart: 1, lineEnd: 1 },
+					{ filePath: "FolderDropPlain/", lineStart: 1, lineEnd: 1 },
 				]);
 			} finally { socket.off("message", receive); }
 			expect(await input()).toEqual([]);
@@ -134,6 +137,92 @@ describe("folder drag and drop in an isolated vault", function () {
 			const writes = await input();
 			expect(writes).toEqual([target === "FolderDropPlain" ? "@FolderDropPlain/" : ` Directory ${JSON.stringify(`${target}/`)} `]);
 			expect(writes.join("")).not.toMatch(/[\r\n\t]/);
+		}
+	});
+});
+
+
+describe("folder drag and drop with installed OpenCode", function () {
+	it("[real V2] shows explorer folder and mixed mentions in the actual prompt", async function () {
+		if (process.platform !== "linux" || process.env.OPENCODE_REAL_E2E !== "1") this.skip();
+		const executable = resolveOpencodeExecutable("opencode");
+		const profile = mkdtempSync(path.join(tmpdir(), "obsidian-opencode-folder-real-"));
+		const directory = "Drop 笔记";
+		const previous = await browser.execute(() => {
+			const settings = (window as any).app.plugins.plugins.opencode.settings;
+			return { ...settings, environmentVariables: { ...settings.environmentVariables } };
+		});
+		const buffer = () => browser.execute(() => {
+			const terminal = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0]?.view.terminal;
+			return terminal ? Array.from({ length: terminal.buffer.active.length }, (_, i) =>
+				terminal.buffer.active.getLine(i)?.translateToString(true) ?? "").join("\n") : "";
+		});
+		const visible = async (reference: string) => {
+			try {
+				// OpenCode can wrap a mention across prompt rows, each with a drawn border.
+				await browser.waitUntil(async () => (await buffer()).replace(/[┃\s]/g, "").includes(reference.replace(/\s/g, "")), {
+					timeout: 10_000, timeoutMsg: `OpenCode did not display ${reference} in its prompt`,
+				});
+			} catch (error) { throw new Error(`${String(error)}\nTerminal buffer:\n${await buffer()}`); }
+		};
+		try {
+			await browser.execute(async (executable: string, profile: string, directory: string) => {
+				const app = (window as any).app, plugin = app.plugins.plugins.opencode;
+				await plugin.viewCoordinator.closeTerminal();
+				await app.vault.createFolder(directory);
+				await app.vault.createFolder(`${directory}/nested`);
+				await app.vault.create(`${directory}/nested/note.md`, "directory fixture\n");
+				plugin.settings.opencodePath = executable;
+				plugin.settings.defaultWorkingDirectory = "";
+				plugin.settings.newSessionArgs = "--standalone";
+				plugin.settings.environmentVariables = {
+					XDG_CONFIG_HOME: `${profile}/config`, XDG_DATA_HOME: `${profile}/data`,
+					XDG_CACHE_HOME: `${profile}/cache`, XDG_STATE_HOME: `${profile}/state`,
+					OPENCODE_CONFIG_DIR: `${profile}/config/opencode`,
+				};
+				await plugin.saveSettings();
+				plugin.sessionArgs = null;
+				await app.workspace.getLeaf(false).setViewState({ type: "opencode-terminal", active: true });
+			}, executable, profile, directory);
+			await visible("Ask anything");
+			await browser.waitUntil(() => browser.execute(() =>
+				(window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.editorServer.clients.size === 1));
+			// Establish that the existing v1 line-mention delivery still works.
+			await drop(["Smoke.md"], true);
+			await visible("Smoke.md#1");
+			await browser.execute(async () => {
+				const app = (window as any).app;
+				app.workspace.leftSplit.expand();
+				await app.workspace.revealLeaf(app.workspace.getLeavesOfType("file-explorer")[0]);
+			});
+			await browser.$(`.nav-folder-title[data-path="${directory}"]`).waitForDisplayed();
+			const points = await browser.execute((directory: string) => {
+				const source = document.querySelector(`.nav-folder-title[data-path="${directory}"]`)!.getBoundingClientRect();
+				const target = document.querySelector(".opencode-terminal-container .xterm-screen")!.getBoundingClientRect();
+				return { source: { x: Math.round(source.left + 60), y: Math.round(source.top + source.height / 2) },
+					target: { x: Math.round(target.left + target.width / 2), y: Math.round(target.top + target.height / 2) } };
+			}, directory);
+			await browser.action("pointer").move({ ...points.source, origin: "viewport" }).down({ button: 0 })
+				.move({ x: points.source.x + 15, y: points.source.y, origin: "viewport", duration: 150 })
+				.move({ ...points.target, origin: "viewport", duration: 500 }).pause(100)
+				.move({ x: points.target.x + 5, y: points.target.y + 5, origin: "viewport", duration: 100 }).pause(100).up({ button: 0 }).perform();
+			await visible(`@${directory}#1`);
+			await drop([`${directory}/nested`, `${directory}/nested/note.md`], true);
+			await visible(`@${directory}/nested#1`);
+			await visible(`@${directory}/nested/note.md#1`);
+			mkdirSync(path.resolve("test-results/obsidian"), { recursive: true });
+			await browser.saveScreenshot(path.resolve("test-results/obsidian/real-folder-drop.png"));
+		} finally {
+			await browser.execute(async (payload: string) => {
+				const { settings, directory } = JSON.parse(payload);
+				const app = (window as any).app, plugin = app.plugins.plugins.opencode;
+				await plugin.viewCoordinator.closeTerminal();
+				const folder = app.vault.getAbstractFileByPath(directory);
+				if (folder) await app.vault.delete(folder, true);
+				plugin.settings = settings;
+				await plugin.saveSettings();
+			}, JSON.stringify({ settings: previous, directory }));
+			rmSync(profile, { recursive: true, force: true });
 		}
 	});
 });

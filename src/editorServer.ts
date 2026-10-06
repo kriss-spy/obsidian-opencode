@@ -127,7 +127,9 @@ export class EditorServer {
 			method: "at_mentioned",
 			params: {
 				filePath,
-				...(filePath.endsWith("/") ? {} : { lineStart: lineStart ?? 1, lineEnd: lineEnd ?? 1 }),
+				// OpenCode requires numeric line fields even for directory paths.
+				lineStart: lineStart ?? 1,
+				lineEnd: lineEnd ?? 1,
 			},
 		};
 		const payload = JSON.stringify(msg);

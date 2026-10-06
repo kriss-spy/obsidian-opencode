@@ -16,7 +16,7 @@ Use OpenCode 2's multi-session interface in a full Obsidian editor tab:
 
 - **Native OpenCode Execution:** Runs the OpenCode CLI directly inside Obsidian using an integrated terminal, ensuring smooth performance for long sessions.
 - **Vault-Centric Workflow:** Automatically spawns the agent in your vault's root, ensuring it has immediate access to your notes and project files.
-- **Drag and Drop Context:** Drop notes or folders from Obsidian's file explorer into the terminal. Notes become file references; each folder becomes one directory reference, including in mixed selections. Nothing is submitted automatically. Without an editor bridge, simple folder paths use `@path/to/folder/`; folder names with spaces or special characters are preserved as quoted directory text.
+- **Drag and Drop Context:** Drop notes or folders from Obsidian's file explorer into the terminal. Notes become file references; each folder becomes one directory reference, including in mixed selections. The editor bridge uses the same line-mention format as note drops, so OpenCode displays `#1` for folders too; directory contents are still read as a directory. Nothing is submitted automatically. Without an editor bridge, simple folder paths use `@path/to/folder/`; folder names with spaces or special characters are preserved as quoted directory text.
 - **Session Manager:**
   - **History Browser:** View a list of all your past OpenCode sessions with timestamps.
   - **Conversation Preview:** Inspect message history, token usage and model details.

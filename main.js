@@ -21232,7 +21232,9 @@ var EditorServer = class {
       method: "at_mentioned",
       params: {
         filePath,
-        ...filePath.endsWith("/") ? {} : { lineStart: lineStart != null ? lineStart : 1, lineEnd: lineEnd != null ? lineEnd : 1 }
+        // OpenCode requires numeric line fields even for directory paths.
+        lineStart: lineStart != null ? lineStart : 1,
+        lineEnd: lineEnd != null ? lineEnd : 1
       }
     };
     const payload = JSON.stringify(msg);
