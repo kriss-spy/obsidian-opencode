@@ -195,7 +195,7 @@ function appendNoteFragments(candidates: LogicalLine[], fragment: LogicalLine): 
 	}))).filter(candidate => candidate.text.length <= 4096);
 }
 
-interface TableRow { cells: LogicalLine[]; borders: string; rightEdges: number[] }
+interface TableRow { cells: LogicalLine[]; borders: string; leftEdge: number; rightEdges: number[] }
 
 function tableRow(line: LogicalLine): TableRow | null {
 	const text = line.text.replace(/ +[█▄▀▐▌] *$/, "");
@@ -214,7 +214,33 @@ function tableRow(line: LogicalLine): TableRow | null {
 	});
 	// Compare physical columns, not UTF-16 offsets: Unicode cells are wider.
 	return { cells, borders: borders.map(index => `${text[index]}:${line.starts[index].x}`).join(","),
-		rightEdges: borders.slice(1).map(index => line.starts[index].x) };
+		leftEdge: line.starts[borders[0]].x, rightEdges: borders.slice(1).map(index => line.starts[index].x) };
+}
+
+/** A physical separator defines a record even when all its columns wrap. */
+function tableRecordEvidence(terminal: Terminal, first: number, table: TableRow, limit: number): Array<{ y: number; text: string }> | null {
+	const evidence: Array<{ y: number; text: string }> = [];
+	for (let row = first - 1; row >= Math.max(1, first - limit); row--) {
+		const line = logicalLine(terminal, row);
+		if (!line || line.starts[0]?.y !== row) return null;
+		evidence.push({ y: row, text: line.text });
+		const start = line.starts.findIndex(cell => cell.x === table.leftEdge);
+		const end = line.ends.findIndex(cell => cell.x === table.rightEdges[table.rightEdges.length - 1]);
+		if (start < 0 || end < start) return null;
+		const text = line.text.slice(start, end + 1);
+		if (/^[┌├][─━]+(?:[┬┼][─━]+)+[┐┤]$/.test(text)) {
+			const edges = Array.from(text.matchAll(/[┌├┬┼┐┤]/g), match => line.starts[start + match.index!].x);
+			return edges.join(",") === [table.leftEdge, ...table.rightEdges].join(",") ? evidence : null;
+		}
+		if (tableRow(line)?.borders !== table.borders) return null;
+	}
+	return null;
+}
+
+/** A new numbered row remains a boundary even without a drawn separator. */
+function peerRecordBoundary(next: TableRow, column: number, separated: boolean): boolean {
+	return next.cells.some((peer, index) => index !== column && Boolean(peer.text) &&
+		(!separated || (index < column && /^\d+$/.test(peer.text))));
 }
 
 /** Join URL tokens within the same bordered cell, keeping every URL byte. */
@@ -228,6 +254,7 @@ function wrappedTableWebLinks(terminal: Terminal, y: number): LinkLine[] {
 		for (let column = 0; column < table.cells.length; column++) {
 			let line = table.cells[column];
 			if (!/^https?:\/\/[^\s<>"'`]*$/i.test(line.text) || line.text.length > 4096) continue;
+			const separated = tableRecordEvidence(terminal, first, table, 32);
 			const sources = [{ y: first, text: initial.text }];
 			const ranges = [{ start: line.starts[0], end: line.ends[line.ends.length - 1] }];
 			let bounded = true, row = first + 1;
@@ -235,7 +262,7 @@ function wrappedTableWebLinks(terminal: Terminal, y: number): LinkLine[] {
 				const next = logicalLine(terminal, row);
 				const nextTable = next && tableRow(next);
 				if (!next || next.starts[0]?.y !== row || !nextTable || nextTable.borders !== table.borders ||
-					nextTable.cells.some((peer, index) => index !== column && peer.text)) break;
+					peerRecordBoundary(nextTable, column, Boolean(separated))) break;
 				const fragment = nextTable.cells[column];
 				if (!/^[^\s<>"'`]+$/.test(fragment.text) || /^[a-z][a-z\d+.-]*:\/\//i.test(fragment.text)) break;
 				const remaining = table.rightEdges[column] - line.ends[line.ends.length - 1].x - 2;
@@ -251,7 +278,8 @@ function wrappedTableWebLinks(terminal: Terminal, y: number): LinkLine[] {
 			const following = logicalLine(terminal, row)?.text;
 			result.push({ line, exactWeb: true, continuation: sources.length > 1 || !bounded ? "web" : undefined,
 				blocked: !bounded, suffixes: ranges,
-				current: () => sources.every(source => logicalLine(terminal, source.y)?.text === source.text) && logicalLine(terminal, row)?.text === following });
+				current: () => (!separated || separated.every(source => logicalLine(terminal, source.y)?.text === source.text)) &&
+					sources.every(source => logicalLine(terminal, source.y)?.text === source.text) && logicalLine(terminal, row)?.text === following });
 		}
 	}
 	return result;
@@ -268,6 +296,7 @@ function wrappedTableNotes(terminal: Terminal, y: number): LinkLine[] {
 		for (let column = 0; column < table.cells.length; column++) {
 			const cell = table.cells[column];
 			if (!cell.text || cell.text.length > 4096) continue;
+			const separated = tableRecordEvidence(terminal, first, table, 8);
 			const ranges = [{ start: cell.starts[0], end: cell.ends[cell.ends.length - 1] }];
 			result.push({ line: cell, exactNote: true, suffixes: ranges.slice(),
 				current: () => logicalLine(terminal, first)?.text === initial.text });
@@ -277,7 +306,7 @@ function wrappedTableNotes(terminal: Terminal, y: number): LinkLine[] {
 				const next = logicalLine(terminal, row);
 				const nextTable = next && tableRow(next);
 				if (!next || next.starts[0]?.y !== row || !nextTable || nextTable.borders !== table.borders ||
-					nextTable.cells.some((peer, index) => index !== column && peer.text) || !nextTable.cells[column].text) break;
+					peerRecordBoundary(nextTable, column, Boolean(separated)) || !nextTable.cells[column].text) break;
 				if (candidates.every(candidate => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?[`"')\]]+$/i.test(candidate.text))) break;
 				if (candidates.every(candidate => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?$/i.test(candidate.text)) &&
 					!/^\.|^:[1-9]\d*(?::[1-9]\d*)?$/.test(nextTable.cells[column].text)) break;
@@ -290,7 +319,8 @@ function wrappedTableNotes(terminal: Terminal, y: number): LinkLine[] {
 				const snapshot = sources.slice();
 				for (const candidate of candidates) result.push({ line: candidate, continuation: "note", exactNote: true,
 					suffixes: ranges.slice(),
-					current: () => snapshot.every(source => logicalLine(terminal, source.y)?.text === source.text) });
+					current: () => (!separated || separated.every(source => logicalLine(terminal, source.y)?.text === source.text)) &&
+						snapshot.every(source => logicalLine(terminal, source.y)?.text === source.text) });
 			}
 		}
 	}

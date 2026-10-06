@@ -20470,8 +20470,31 @@ function tableRow(line) {
   return {
     cells,
     borders: borders.map((index) => `${text[index]}:${line.starts[index].x}`).join(","),
+    leftEdge: line.starts[borders[0]].x,
     rightEdges: borders.slice(1).map((index) => line.starts[index].x)
   };
+}
+function tableRecordEvidence(terminal, first, table, limit) {
+  var _a, _b;
+  const evidence = [];
+  for (let row = first - 1; row >= Math.max(1, first - limit); row--) {
+    const line = logicalLine(terminal, row);
+    if (!line || ((_a = line.starts[0]) == null ? void 0 : _a.y) !== row) return null;
+    evidence.push({ y: row, text: line.text });
+    const start = line.starts.findIndex((cell) => cell.x === table.leftEdge);
+    const end = line.ends.findIndex((cell) => cell.x === table.rightEdges[table.rightEdges.length - 1]);
+    if (start < 0 || end < start) return null;
+    const text = line.text.slice(start, end + 1);
+    if (/^[┌├][─━]+(?:[┬┼][─━]+)+[┐┤]$/.test(text)) {
+      const edges = Array.from(text.matchAll(/[┌├┬┼┐┤]/g), (match) => line.starts[start + match.index].x);
+      return edges.join(",") === [table.leftEdge, ...table.rightEdges].join(",") ? evidence : null;
+    }
+    if (((_b = tableRow(line)) == null ? void 0 : _b.borders) !== table.borders) return null;
+  }
+  return null;
+}
+function peerRecordBoundary(next, column, separated) {
+  return next.cells.some((peer, index) => index !== column && Boolean(peer.text) && (!separated || index < column && /^\d+$/.test(peer.text)));
 }
 function wrappedTableWebLinks(terminal, y) {
   var _a, _b, _c;
@@ -20484,13 +20507,14 @@ function wrappedTableWebLinks(terminal, y) {
     for (let column = 0; column < table.cells.length; column++) {
       let line = table.cells[column];
       if (!/^https?:\/\/[^\s<>"'`]*$/i.test(line.text) || line.text.length > 4096) continue;
+      const separated = tableRecordEvidence(terminal, first, table, 32);
       const sources = [{ y: first, text: initial.text }];
       const ranges = [{ start: line.starts[0], end: line.ends[line.ends.length - 1] }];
       let bounded = true, row = first + 1;
       for (; row <= terminal.buffer.active.length; row++) {
         const next = logicalLine(terminal, row);
         const nextTable = next && tableRow(next);
-        if (!next || ((_b = next.starts[0]) == null ? void 0 : _b.y) !== row || !nextTable || nextTable.borders !== table.borders || nextTable.cells.some((peer, index) => index !== column && peer.text)) break;
+        if (!next || ((_b = next.starts[0]) == null ? void 0 : _b.y) !== row || !nextTable || nextTable.borders !== table.borders || peerRecordBoundary(nextTable, column, Boolean(separated))) break;
         const fragment = nextTable.cells[column];
         if (!/^[^\s<>"'`]+$/.test(fragment.text) || /^[a-z][a-z\d+.-]*:\/\//i.test(fragment.text)) break;
         const remaining = table.rightEdges[column] - line.ends[line.ends.length - 1].x - 2;
@@ -20514,7 +20538,10 @@ function wrappedTableWebLinks(terminal, y) {
         suffixes: ranges,
         current: () => {
           var _a2;
-          return sources.every((source) => {
+          return (!separated || separated.every((source) => {
+            var _a3;
+            return ((_a3 = logicalLine(terminal, source.y)) == null ? void 0 : _a3.text) === source.text;
+          })) && sources.every((source) => {
             var _a3;
             return ((_a3 = logicalLine(terminal, source.y)) == null ? void 0 : _a3.text) === source.text;
           }) && ((_a2 = logicalLine(terminal, row)) == null ? void 0 : _a2.text) === following;
@@ -20535,6 +20562,7 @@ function wrappedTableNotes(terminal, y) {
     for (let column = 0; column < table.cells.length; column++) {
       const cell = table.cells[column];
       if (!cell.text || cell.text.length > 4096) continue;
+      const separated = tableRecordEvidence(terminal, first, table, 8);
       const ranges = [{ start: cell.starts[0], end: cell.ends[cell.ends.length - 1] }];
       result.push({
         line: cell,
@@ -20550,7 +20578,7 @@ function wrappedTableNotes(terminal, y) {
       for (let row = first + 1; row < first + 8; row++) {
         const next = logicalLine(terminal, row);
         const nextTable = next && tableRow(next);
-        if (!next || ((_b = next.starts[0]) == null ? void 0 : _b.y) !== row || !nextTable || nextTable.borders !== table.borders || nextTable.cells.some((peer, index) => index !== column && peer.text) || !nextTable.cells[column].text) break;
+        if (!next || ((_b = next.starts[0]) == null ? void 0 : _b.y) !== row || !nextTable || nextTable.borders !== table.borders || peerRecordBoundary(nextTable, column, Boolean(separated)) || !nextTable.cells[column].text) break;
         if (candidates.every((candidate) => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?[`"')\]]+$/i.test(candidate.text))) break;
         if (candidates.every((candidate) => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?$/i.test(candidate.text)) && !/^\.|^:[1-9]\d*(?::[1-9]\d*)?$/.test(nextTable.cells[column].text)) break;
         candidates = appendNoteFragments(candidates, nextTable.cells[column]);
@@ -20565,7 +20593,10 @@ function wrappedTableNotes(terminal, y) {
           continuation: "note",
           exactNote: true,
           suffixes: ranges.slice(),
-          current: () => snapshot.every((source) => {
+          current: () => (!separated || separated.every((source) => {
+            var _a2;
+            return ((_a2 = logicalLine(terminal, source.y)) == null ? void 0 : _a2.text) === source.text;
+          })) && snapshot.every((source) => {
             var _a2;
             return ((_a2 = logicalLine(terminal, source.y)) == null ? void 0 : _a2.text) === source.text;
           })

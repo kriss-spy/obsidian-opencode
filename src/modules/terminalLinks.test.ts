@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { ILink, Terminal } from "@xterm/xterm";
+import multicolumnTableNotes from "../../test/fixtures/multicolumn-table-notes";
 import sidebarTableHttp from "../../test/fixtures/sidebar-table-http";
 import tableHttpLinks from "../../test/fixtures/table-http-links";
 import { currentOsc8Link } from "./xtermOsc8";
@@ -111,6 +112,68 @@ describe("public xterm provider and activation", () => {
 		rows[rows.length - 1].chars = Array.from("     └───┴───────────────────────────────┴─────┘");
 		stale.activate(event({ ctrlKey: true }), url);
 		expect(config.openExternal).toHaveBeenCalledTimes(rows.length);
+	});
+	it.each(multicolumnTableNotes)("opens $note within a separated record while neighboring cells wrap", async ({ note, fragments, lines }) => {
+		const rows = lines.map(text => {
+			const chars: string[] = [], widths: number[] = [];
+			for (const char of text) {
+				const width = /[\u2e80-\u9fff]/.test(char) ? 2 : 1;
+				chars.push(char); widths.push(width);
+				if (width === 2) { chars.push(""); widths.push(0); }
+			}
+			return { chars, widths };
+		});
+		const term = terminal(rows);
+		Object.assign(term, { cols: 101 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const config = options({ hasNote: path => path === note });
+		const provider = new TerminalLinks(term, config);
+		for (let index = 0; index < fragments.length; index++) {
+			const y = index + 2, found = links(provider, y);
+			expect(found.map(link => link.text)).toEqual([note]);
+			expect(found[0].range).toEqual({ start: { x: 40, y }, end: { x: 39 + fragments[index].length, y } });
+			found[0].activate(event({ ctrlKey: true }), note);
+			await vi.waitFor(() => expect(config.openNote).toHaveBeenCalledTimes(index + 1));
+		}
+		for (let y = fragments.length + 2; y <= lines.length; y++) expect(links(provider, y)).toEqual([]);
+	});
+	it("requires aligned record separators and rechecks them before activating joined notes", () => {
+		const fixture = multicolumnTableNotes[0];
+		const rows = fixture.lines.map(text => ({ chars: Array.from(text.replace("Pr剪辑基本流", "Section     ").replace("程", "  ")) }));
+		const term = terminal(rows);
+		Object.assign(term, { cols: 101 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const config = options({ hasNote: value => value === fixture.note });
+		const provider = new TerminalLinks(term, config), stale = links(provider, 2)[0];
+		expect(stale.text).toBe(fixture.note);
+		rows[0].chars.unshift(" ");
+		expect(links(provider, 2)).toEqual([]);
+		stale.activate(event({ ctrlKey: true }), fixture.note);
+		expect(config.openNote).not.toHaveBeenCalled();
+	});
+	it("rejects cached notes if their separator is replaced by data above an older separator", () => {
+		const fixture = multicolumnTableNotes[1];
+		const blank = " ".repeat(21) + "│" + " ".repeat(15) + "│" + " ".repeat(24) + "│" + " ".repeat(33) + "│    ";
+		const rows = [fixture.lines[0], blank, ...fixture.lines].map(text => ({ chars: Array.from(text.replace("预览", "    ")) }));
+		const term = terminal(rows);
+		Object.assign(term, { cols: 101 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const config = options({ hasNote: value => value === fixture.note }), provider = new TerminalLinks(term, config);
+		const stale = links(provider, 4)[0];
+		expect(stale.text).toBe(fixture.note);
+		rows[2].chars = Array.from(blank);
+		stale.activate(event({ ctrlKey: true }), fixture.note);
+		expect(config.openNote).not.toHaveBeenCalled();
+	});
+	it("opens a table URL while neighboring descriptions wrap within a separated record", () => {
+		const term = terminal([
+			{ chars: Array.from("  ├───────┼────────────────────────┼─────────────┤") },
+			{ chars: Array.from("  │ Label │ https://example.com/a  │ First words │") },
+			{ chars: Array.from("  │ more  │ .test?q=1              │ more words  │") },
+			{ chars: Array.from("  ├───────┼────────────────────────┼─────────────┤") },
+		]);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		for (const y of [2, 3]) expect(links(new TerminalLinks(term, options()), y).map(link => link.text)).toEqual(["https://example.com/a.test?q=1"]);
 	});
 	it.each([false, true])("opens every captured table URL row with sidebar text and divider=%s", divider => {
 		const term = terminal(sidebarTableHttp.lines.map(text => ({ chars: Array.from(divider ? text.slice(0, 18) + "┃" + text.slice(19) : text) })));

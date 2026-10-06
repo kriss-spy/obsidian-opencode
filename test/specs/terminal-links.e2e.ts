@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import { browser, expect } from "@wdio/globals";
 import { Key } from "webdriverio";
+import multicolumnTableNotes from "../fixtures/multicolumn-table-notes";
 import sidebarTableHttp from "../fixtures/sidebar-table-http";
 import tableHttpLinks from "../fixtures/table-http-links";
 
@@ -301,12 +302,20 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		expect(cursor.ch).toBe(4);
 		expect(await browser.execute(() => (window as any).__terminalLinkInput)).toEqual([]);
 	});
-	for (const layout of [
+	const noteLayouts: Array<{ kind: string; note: string; lines: string[]; linkRows?: number[] }> = [
 		{ kind: "paragraph", note: mixedNotePath, lines: mixedFragments.map(fragment => `     ${fragment}`) },
 		{ kind: "table", note: tableNotePath, lines: tableFragments.map((fragment, row) => `     │ ${row === 0 ? "215" : "   "}   │ ${fragment.padEnd(47)} │    `) },
 		{ kind: "table with punctuation", note: tableArticlePath, lines: articleFragments.map((fragment, row) => `     │ ${row === 0 ? "214" : "   "}   │ ${fragment.padEnd(47)} │    `) },
 		{ kind: "table with split extension", note: "study/AGENTS.md.md", lines: ["study/AGENTS.md", ".md"].map(fragment => `     │ ${fragment.padEnd(47)} │    `) },
-	]) it(`opens the full ${layout.lines.length}-row ${layout.kind} note from every row`, async function () {
+		...multicolumnTableNotes.map(record => ({ kind: "multi-column table", note: record.note, lines: record.lines, linkRows: record.fragments.map((_, row) => row + 2) })),
+	];
+	for (const layout of noteLayouts) it(`opens the full ${layout.linkRows?.length ?? layout.lines.length}-row ${layout.kind} note from every row: ${layout.note}`, async function () {
+		const originalFont = await browser.execute((compact: boolean) => {
+			const terminal = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+			const font = terminal.options.fontSize ?? 14;
+			if (compact) terminal.options.fontSize = 10;
+			return font;
+		}, layout.kind === "multi-column table");
 		await browser.execute(async (note: string) => {
 			const app = (window as any).app;
 			const folders = note.split("/").slice(0, -1);
@@ -323,7 +332,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 				view.fitAddon.fit();
 			});
 			await browser.execute(() => { (window as any).__terminalLinkInput = []; });
-			for (let row = 1; row <= layout.lines.length; row++) {
+			for (const row of layout.linkRows ?? layout.lines.map((_, index) => index + 1)) {
 				// Opening a tab resizes the test stub PTY, which can write another
 				// frame. Restore this fixture before each independent row click.
 				await render(layout.lines.join("\r\n"), true);
@@ -339,6 +348,25 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 						y: Math.round(rect.top + (row - 0.5) * rect.height / terminal.rows),
 						tabs: app.workspace.getLeavesOfType("markdown").length };
 				}, row, layout.note);
+				if (layout.kind === "multi-column table" && row === 2) {
+					await browser.action("pointer").move({ x: point.x, y: point.y, origin: "viewport" }).perform();
+					await browser.waitUntil(() => browser.execute((note: string, count: number) => {
+						const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+						return view.terminalLinks.hovered?.text === note && document.querySelectorAll(".opencode-terminal-link-underline").length === count;
+					}, layout.note, Number(layout.linkRows?.length)));
+					const bounds = await browser.execute(() => {
+						const t = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+						const screen = t.element.querySelector(".xterm-screen"), rect = screen.getBoundingClientRect();
+						return Array.from(screen.querySelectorAll(".opencode-terminal-link-underline"), (element: HTMLElement) => {
+							const line = element.getBoundingClientRect();
+							return { left: (line.left - rect.left) / (rect.width / t.cols), width: line.width / (rect.width / t.cols) };
+						});
+					});
+					for (let index = 0; index < bounds.length; index++) {
+						expect(bounds[index].left).toBeCloseTo(39, 1);
+						expect(bounds[index].width).toBeCloseTo(layout.lines[index + 1].split("│")[2].trim().length, 1);
+					}
+				}
 				await browser.action("key").down(process.platform === "darwin" ? Key.Command : Key.Control).perform(true);
 				try {
 					await browser.action("pointer").move({ x: point.x, y: point.y, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
@@ -356,6 +384,11 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 			}
 			expect(await browser.execute(() => (window as any).__terminalLinkInput)).toEqual([]);
 		} finally {
+			await browser.execute((font: number) => {
+				const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
+				view.terminal.options.fontSize = font;
+				view.fitAddon.fit();
+			}, Number(originalFont));
 			await browser.execute(async (note: string) => {
 				const app = (window as any).app;
 				app.workspace.getLeavesOfType("markdown").filter((leaf: any) => leaf.view.file?.path === note).forEach((leaf: any) => leaf.detach());

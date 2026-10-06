@@ -231,6 +231,18 @@ The prior table HTTP fix missed the user's actual layout. A read-only snapshot o
 
 App checks ran serially in fresh isolated vaults/profiles under the shared lock. This is focused verification; the broader native-wrap hover release check documented above remains outstanding.
 
+### Wrapped paths beside wrapping text columns (2026-10-06)
+
+Session `ses_ef07f9a7affeA2ezHBLKsUB6Yy` has a Section/Destination/Change table. All five destination notes are indexed, but the previous detector stopped when either neighboring column had continuation text. The screenshot and unobscured lower rows establish a 22-cell destination column with independently wrapping labels and descriptions; the Debug popup obscured the earlier live rows, and the user later changed sessions, so this verification does not claim a full live-buffer probe of all five paths.
+
+- An aligned horizontal separator establishes the record, allowing independently wrapping peers while reconstructing only the destination column. Tables without this evidence retain the blank-peer rule. Drawn separators, changed geometry, blank path cells and new numbered rows still stop reconstruction. The same record handling applies to HTTP table links.
+- Cached continuations retain snapshots of the exact separator and scanned preceding rows. Replacing that separator cannot fall back to older separator evidence. Unit regressions cover misaligned separators, aligned data replacing a nearer separator, multi-column URLs, physical Chinese widths, and full targets/ranges for all five notes.
+- Production build/typechecking passed. Final full unit suite: 320 passed, 5 platform-only skipped. Standards and Spec reviews cleared after addressing the stale-separator finding.
+- Final isolated Obsidian 1.12.7 run passed 15 relevant cases: 17 real clicks on the five multi-column note paths, 17 prior paragraph/table/punctuation/split-extension note clicks, 22 captured sidebar-table URL clicks, and three paragraph URL clicks. Each opened its complete intended target with no PTY leakage. Multi-column note hover checks verified all path fragments underlined together and confined to the destination text cells, including rows beside Chinese labels and prose.
+- Installed `main.js` SHA-256: `afead01c43ec040ede89305351b949906eb8779d5406e4fb02d6a3299271601b`. All three artifact hashes match the build, settings were preserved, and the user's running session was not reloaded. Backup: `/tmp/opencode-before-multicolumn-table-rw3fs_f8`.
+
+All GUI tests ran serially under the shared app lock in fresh isolated vaults/profiles. The broader native-wrap hover release-verification check documented above remains outstanding.
+
 ## WSL2/X410 evidence
 
 On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:
