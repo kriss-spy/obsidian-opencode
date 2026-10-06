@@ -20367,6 +20367,14 @@ function resolveNoteTarget(text, root, distro) {
   if (line !== void 0 && !Number.isSafeInteger(line) || column !== void 0 && !Number.isSafeInteger(column)) return null;
   return { path: relative3, line, column };
 }
+function indexedNote(text, options, cache) {
+  const cached = cache == null ? void 0 : cache.get(text);
+  if (cached !== void 0) return cached;
+  const target = resolveNoteTarget(text, options.vaultRoot, options.wslDistro);
+  const note = target && options.hasNote(target.path) ? target : null;
+  cache == null ? void 0 : cache.set(text, note);
+  return note;
+}
 function findTerminalLinks(text, options, noteStartLimit = text.length, noteCache) {
   const links = [];
   const urls = /https?:\/\/[^\s<>"'`]+/gi;
@@ -20381,12 +20389,12 @@ function findTerminalLinks(text, options, noteStartLimit = text.length, noteCach
     }
     if (safeWebUrl(value)) links.push({ start: match.index, end: match.index + value.length, text: value });
   }
-  const ends = /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/gi;
+  const ends = /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?|│┃])/gi;
   let previousEnd = 0;
   while (match = ends.exec(text)) {
     const end = match.index + match[0].length;
     let segmentStart = match.index;
-    while (segmentStart > previousEnd && !/[\n\r\t`"'<>\[\]{}|,;]/.test(text[segmentStart - 1])) segmentStart--;
+    while (segmentStart > previousEnd && !/[\n\r\t`"'<>\[\]{}|│┃,;]/.test(text[segmentStart - 1])) segmentStart--;
     previousEnd = end;
     if (end - segmentStart > 4096) continue;
     for (let start = segmentStart; start <= Math.min(match.index, noteStartLimit); start++) {
@@ -20395,12 +20403,7 @@ function findTerminalLinks(text, options, noteStartLimit = text.length, noteCach
       const value = text.slice(start, end);
       const explicit = /^(?:[a-z]:[\\/]|[\\/]|\.\.[\\/]|[a-z][a-z\d+.-]*:\/\/)/i.test(value);
       if (links.some((link) => start < link.end && end > link.start)) break;
-      let note = noteCache == null ? void 0 : noteCache.get(value);
-      if (note === void 0) {
-        const target = resolveNoteTarget(value, options.vaultRoot, options.wslDistro);
-        note = target && options.hasNote(target.path) ? target : null;
-        noteCache == null ? void 0 : noteCache.set(value, note);
-      }
+      const note = indexedNote(value, options, noteCache);
       if (note) {
         links.push({ start, end, text: value, note });
         break;
@@ -20438,6 +20441,77 @@ function logicalLine(terminal, y) {
       for (let i = 0; i < value.length; i++) {
         result.starts.push({ x: col + 1, y: row + 1 });
         result.ends.push({ x: col + Math.max(1, cell.getWidth()), y: row + 1 });
+      }
+    }
+  }
+  return result;
+}
+function appendNoteFragments(candidates, fragment) {
+  return candidates.flatMap((candidate) => (/[\\/]$/.test(candidate.text) ? [""] : [" ", ""]).map((separator) => ({
+    text: candidate.text + separator + fragment.text,
+    starts: [...candidate.starts, ...separator ? [candidate.ends[candidate.ends.length - 1]] : [], ...fragment.starts],
+    ends: [...candidate.ends, ...separator ? [candidate.ends[candidate.ends.length - 1]] : [], ...fragment.ends]
+  }))).filter((candidate) => candidate.text.length <= 4096);
+}
+function tableRow(line) {
+  var _a, _b;
+  const text = line.text.replace(/ +[█▄▀▐▌] *$/, "");
+  if (!/^ {2,}[│┃]/.test(text) || !/[│┃] *$/.test(text) || ((_a = line.starts[0]) == null ? void 0 : _a.y) !== ((_b = line.ends[line.ends.length - 1]) == null ? void 0 : _b.y)) return null;
+  const borders = Array.from(text.matchAll(/[│┃]/g), (match) => match.index);
+  if (borders.length < 2 || borders.length > 17) return null;
+  const cells = borders.slice(0, -1).map((border, index) => {
+    let start = border + 1, end = borders[index + 1];
+    while (start < end && text[start] === " ") start++;
+    while (end > start && text[end - 1] === " ") end--;
+    return { text: text.slice(start, end), starts: line.starts.slice(start, end), ends: line.ends.slice(start, end) };
+  });
+  return { cells, borders: borders.map((index) => `${text[index]}:${line.starts[index].x}`).join(",") };
+}
+function wrappedTableNotes(terminal, y) {
+  var _a, _b;
+  if (terminal.modes.mouseTrackingMode === "none") return [];
+  const result = [];
+  for (let first = Math.max(1, y - 7); first <= y; first++) {
+    const initial = logicalLine(terminal, first);
+    const table = initial && tableRow(initial);
+    if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first || !table) continue;
+    for (let column = 0; column < table.cells.length; column++) {
+      const cell = table.cells[column];
+      if (!cell.text || cell.text.length > 4096) continue;
+      const ranges = [{ start: cell.starts[0], end: cell.ends[cell.ends.length - 1] }];
+      result.push({
+        line: cell,
+        exactNote: true,
+        suffixes: ranges.slice(),
+        current: () => {
+          var _a2;
+          return ((_a2 = logicalLine(terminal, first)) == null ? void 0 : _a2.text) === initial.text;
+        }
+      });
+      let candidates = [cell];
+      const sources = [{ y: first, text: initial.text }];
+      for (let row = first + 1; row < first + 8; row++) {
+        const next = logicalLine(terminal, row);
+        const nextTable = next && tableRow(next);
+        if (!next || ((_b = next.starts[0]) == null ? void 0 : _b.y) !== row || !nextTable || nextTable.borders !== table.borders || nextTable.cells.some((peer, index) => index !== column && peer.text) || !nextTable.cells[column].text) break;
+        if (candidates.every((candidate) => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?$/i.test(candidate.text)) && !/^:[1-9]\d*(?::[1-9]\d*)?$/.test(nextTable.cells[column].text)) break;
+        candidates = appendNoteFragments(candidates, nextTable.cells[column]);
+        if (!candidates.length) break;
+        sources.push({ y: row, text: next.text });
+        const fragment = nextTable.cells[column];
+        ranges.push({ start: fragment.starts[0], end: fragment.ends[fragment.ends.length - 1] });
+        if (row < y) continue;
+        const snapshot = sources.slice();
+        for (const candidate of candidates) result.push({
+          line: candidate,
+          continuation: "note",
+          exactNote: true,
+          suffixes: ranges.slice(),
+          current: () => snapshot.every((source) => {
+            var _a2;
+            return ((_a2 = logicalLine(terminal, source.y)) == null ? void 0 : _a2.text) === source.text;
+          })
+        });
       }
     }
   }
@@ -20515,6 +20589,7 @@ function linkLines(terminal, y) {
     if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first) continue;
     const indent = (_b = /^ {2,}(?:[-*•] )?/.exec(initial.text)) == null ? void 0 : _b[0].length;
     if (!indent) continue;
+    if (/^[│┃]/.test(initial.text.slice(indent))) continue;
     const sources = [{ y: first, text: initial.text }];
     const initialEnd = initial.text.trimEnd().length;
     if (initialEnd <= indent) continue;
@@ -20528,12 +20603,7 @@ function linkLines(terminal, y) {
       const end = next.text.trimEnd().length;
       const fragment = { text: next.text.slice(indent, end), starts: next.starts.slice(indent, end), ends: next.ends.slice(indent, end) };
       continuationStart != null ? continuationStart : continuationStart = fragment.starts[0];
-      const append = (previous, separator) => ({
-        text: previous.text + separator + fragment.text,
-        starts: [...previous.starts, ...separator ? [previous.ends[previous.ends.length - 1]] : [], ...fragment.starts],
-        ends: [...previous.ends, ...separator ? [previous.ends[previous.ends.length - 1]] : [], ...fragment.ends]
-      });
-      candidates = candidates.flatMap((candidate) => /[\\/]$/.test(candidate.text) ? [append(candidate, "")] : [append(candidate, " "), append(candidate, "")]).filter((candidate) => candidate.text.length <= 4096);
+      candidates = appendNoteFragments(candidates, fragment);
       if (!candidates.length) break;
       sources.push({ y: row, text: next.text });
       const last = next.ends[next.ends.length - 1].y;
@@ -20596,66 +20666,77 @@ var TerminalLinks = class {
     }
     const seen = /* @__PURE__ */ new Set();
     const noteCache = /* @__PURE__ */ new Map();
-    const lines = [...wrappedWebLines(this.terminal, y), ...linkLines(this.terminal, y)];
-    const suffixes = lines.flatMap((line) => line.suffix ? [line.suffix] : []);
-    const before = (a, b) => a.y < b.y || a.y === b.y && a.x <= b.x;
-    const links = lines.flatMap(({ line, current, continuation, blocked, noteStartLimit }) => blocked ? [] : findTerminalLinks(line.text, this.options, noteStartLimit, noteCache).flatMap((match) => {
-      const wholeRange = { start: line.starts[match.start], end: line.ends[match.end - 1] };
-      if (continuation && (wholeRange.start.y === wholeRange.end.y || (continuation === "note" ? !match.note : match.note))) return [];
-      if (!continuation && suffixes.some((suffix) => before(wholeRange.start, suffix.end) && before(suffix.start, wholeRange.end))) return [];
-      if (wholeRange.start.y > y || wholeRange.end.y < y) return [];
-      let range = wholeRange;
-      const fragments = [];
-      if (continuation) {
-        for (let index = match.start; index < match.end; index++) {
-          const start = line.starts[index], end = line.ends[index];
-          const previous = fragments[fragments.length - 1];
-          if ((previous == null ? void 0 : previous.start.y) === start.y) previous.end = end;
-          else fragments.push({ start, end });
-        }
-        const row = fragments.find((fragment) => fragment.start.y === y);
-        if (!row) return [];
-        range = row;
-      }
-      const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;
-      if (seen.has(key)) return [];
-      seen.add(key);
-      let released = false;
-      const cols = this.terminal.cols;
-      const viewportY = this.terminal.buffer.active.viewportY;
-      const buffer = this.terminal.buffer.active;
-      const valid = () => !released && !this.disposed && this.terminal.cols === cols && this.terminal.buffer.active === buffer && buffer.viewportY === viewportY && current();
-      const link = {
-        text: match.text,
+    const lines = [...wrappedWebLines(this.terminal, y), ...wrappedTableNotes(this.terminal, y), ...linkLines(this.terminal, y)];
+    const suffixes = lines.flatMap((line) => {
+      var _a;
+      return ((_a = line.suffixes) != null ? _a : line.suffix ? [line.suffix] : []).map((range) => ({
         range,
-        decorations: continuation ? { pointerCursor: true, underline: false } : void 0,
-        activate: (event) => {
-          var _a;
-          if (valid() && !((_a = this.pressed) == null ? void 0 : _a.handled)) void this.activate(match.text, event);
-        },
-        hover: () => {
-          if (valid()) {
-            this.hovered = link;
-            this.showUnderlines(fragments);
+        noteOnly: line.exactNote || line.continuation === "note",
+        wrapped: Boolean(line.continuation)
+      }));
+    });
+    const before = (a, b) => a.y < b.y || a.y === b.y && a.x <= b.x;
+    const links = lines.flatMap(({ line, current, continuation, blocked, noteStartLimit, exactNote }) => {
+      const note = exactNote ? indexedNote(line.text, this.options, noteCache) : null;
+      const matches = exactNote ? note ? [{ start: 0, end: line.text.length, text: line.text, note }] : [] : findTerminalLinks(line.text, this.options, noteStartLimit, noteCache);
+      return blocked ? [] : matches.flatMap((match) => {
+        const wholeRange = { start: line.starts[match.start], end: line.ends[match.end - 1] };
+        if (continuation && (wholeRange.start.y === wholeRange.end.y || (continuation === "note" ? !match.note : match.note))) return [];
+        if (!continuation && suffixes.some((suffix) => (!exactNote || suffix.wrapped) && (!suffix.noteOnly || match.note) && before(wholeRange.start, suffix.range.end) && before(suffix.range.start, wholeRange.end))) return [];
+        if (wholeRange.start.y > y || wholeRange.end.y < y) return [];
+        let range = wholeRange;
+        const fragments = [];
+        if (continuation) {
+          for (let index = match.start; index < match.end; index++) {
+            const start = line.starts[index], end = line.ends[index];
+            const previous = fragments[fragments.length - 1];
+            if ((previous == null ? void 0 : previous.start.y) === start.y) previous.end = end;
+            else fragments.push({ start, end });
           }
-        },
-        leave: () => {
-          if (this.hovered === link) {
-            this.hovered = null;
-            this.clearUnderlines();
-          }
-        },
-        dispose: () => {
-          released = true;
-          if (this.hovered === link) {
-            this.hovered = null;
-            this.clearUnderlines();
-          }
+          const row = fragments.find((fragment) => fragment.start.y === y);
+          if (!row) return [];
+          range = row;
         }
-      };
-      this.validations.set(link, valid);
-      return [link];
-    }));
+        const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;
+        if (seen.has(key)) return [];
+        seen.add(key);
+        let released = false;
+        const cols = this.terminal.cols;
+        const viewportY = this.terminal.buffer.active.viewportY;
+        const buffer = this.terminal.buffer.active;
+        const valid = () => !released && !this.disposed && this.terminal.cols === cols && this.terminal.buffer.active === buffer && buffer.viewportY === viewportY && current();
+        const link = {
+          text: match.text,
+          range,
+          decorations: continuation ? { pointerCursor: true, underline: false } : void 0,
+          activate: (event) => {
+            var _a;
+            if (valid() && !((_a = this.pressed) == null ? void 0 : _a.handled)) void this.activate(match.text, event);
+          },
+          hover: () => {
+            if (valid()) {
+              this.hovered = link;
+              this.showUnderlines(fragments);
+            }
+          },
+          leave: () => {
+            if (this.hovered === link) {
+              this.hovered = null;
+              this.clearUnderlines();
+            }
+          },
+          dispose: () => {
+            released = true;
+            if (this.hovered === link) {
+              this.hovered = null;
+              this.clearUnderlines();
+            }
+          }
+        };
+        this.validations.set(link, valid);
+        return [link];
+      });
+    });
     callback(links.length ? links : void 0);
   }
   async activate(text, event) {

@@ -79,6 +79,16 @@ export function resolveNoteTarget(text: string, root: string, distro?: string): 
 
 interface TextMatch { start: number; end: number; text: string; note?: NoteTarget }
 
+function indexedNote(text: string, options: Pick<TerminalLinkOptions, "vaultRoot" | "hasNote" | "wslDistro">,
+	cache?: Map<string, NoteTarget | null>): NoteTarget | null {
+	const cached = cache?.get(text);
+	if (cached !== undefined) return cached;
+	const target = resolveNoteTarget(text, options.vaultRoot, options.wslDistro);
+	const note = target && options.hasNote(target.path) ? target : null;
+	cache?.set(text, note);
+	return note;
+}
+
 /** Spaces are resolved against existing notes rather than guessed from prose. */
 export function findTerminalLinks(text: string, options: Pick<TerminalLinkOptions, "vaultRoot" | "hasNote" | "wslDistro">, noteStartLimit = text.length,
 	noteCache?: Map<string, NoteTarget | null>): TextMatch[] {
@@ -96,13 +106,13 @@ export function findTerminalLinks(text: string, options: Pick<TerminalLinkOption
 		}
 		if (safeWebUrl(value)) links.push({ start: match.index, end: match.index + value.length, text: value });
 	}
-	const ends = /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/gi;
+	const ends = /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?|│┃])/gi;
 	let previousEnd = 0;
 	while ((match = ends.exec(text))) {
 		const end = match.index + match[0].length;
 		// Restrict candidates to the current delimiter-bounded phrase.
 		let segmentStart = match.index;
-		while (segmentStart > previousEnd && !/[\n\r\t`"'<>\[\]{}|,;]/.test(text[segmentStart - 1])) segmentStart--;
+		while (segmentStart > previousEnd && !/[\n\r\t`"'<>\[\]{}|│┃,;]/.test(text[segmentStart - 1])) segmentStart--;
 		previousEnd = end;
 		if (end - segmentStart > 4096) continue;
 		for (let start = segmentStart; start <= Math.min(match.index, noteStartLimit); start++) {
@@ -112,12 +122,7 @@ export function findTerminalLinks(text: string, options: Pick<TerminalLinkOption
 			// Never recover a relative suffix from an explicit rejected absolute/traversal path.
 			const explicit = /^(?:[a-z]:[\\/]|[\\/]|\.\.[\\/]|[a-z][a-z\d+.-]*:\/\/)/i.test(value);
 			if (links.some(link => start < link.end && end > link.start)) break;
-			let note = noteCache?.get(value);
-			if (note === undefined) {
-				const target = resolveNoteTarget(value, options.vaultRoot, options.wslDistro);
-				note = target && options.hasNote(target.path) ? target : null;
-				noteCache?.set(value, note);
-			}
+			const note = indexedNote(value, options, noteCache);
 			if (note) {
 				links.push({ start, end, text: value, note });
 				break;
@@ -169,7 +174,81 @@ function logicalLine(terminal: Terminal, y: number): LogicalLine | null {
 	return result;
 }
 
-interface LinkLine { line: LogicalLine; current(): boolean; continuation?: "note" | "web"; suffix?: ILink["range"]; blocked?: boolean; noteStartLimit?: number }
+interface LinkLine {
+	line: LogicalLine;
+	current(): boolean;
+	continuation?: "note" | "web";
+	suffix?: ILink["range"];
+	suffixes?: ILink["range"][];
+	blocked?: boolean;
+	noteStartLimit?: number;
+	exactNote?: boolean;
+}
+
+/** Each TUI break may independently remove a word space or split a word. */
+function appendNoteFragments(candidates: LogicalLine[], fragment: LogicalLine): LogicalLine[] {
+	return candidates.flatMap(candidate => (/[\\/]$/.test(candidate.text) ? [""] : [" ", ""]).map(separator => ({
+		text: candidate.text + separator + fragment.text,
+		starts: [...candidate.starts, ...(separator ? [candidate.ends[candidate.ends.length - 1]] : []), ...fragment.starts],
+		ends: [...candidate.ends, ...(separator ? [candidate.ends[candidate.ends.length - 1]] : []), ...fragment.ends],
+	}))).filter(candidate => candidate.text.length <= 4096);
+}
+
+interface TableRow { cells: LogicalLine[]; borders: string }
+
+function tableRow(line: LogicalLine): TableRow | null {
+	const text = line.text.replace(/ +[█▄▀▐▌] *$/, "");
+	if (!/^ {2,}[│┃]/.test(text) || !/[│┃] *$/.test(text) || line.starts[0]?.y !== line.ends[line.ends.length - 1]?.y) return null;
+	const borders = Array.from(text.matchAll(/[│┃]/g), match => match.index!);
+	if (borders.length < 2 || borders.length > 17) return null;
+	const cells = borders.slice(0, -1).map((border, index) => {
+		let start = border + 1, end = borders[index + 1];
+		while (start < end && text[start] === " ") start++;
+		while (end > start && text[end - 1] === " ") end--;
+		return { text: text.slice(start, end), starts: line.starts.slice(start, end), ends: line.ends.slice(start, end) };
+	});
+	// Compare physical columns, not UTF-16 offsets: Unicode cells are wider.
+	return { cells, borders: borders.map(index => `${text[index]}:${line.starts[index].x}`).join(",") };
+}
+
+/** Reconnect one bordered cell, never across record or column boundaries. */
+function wrappedTableNotes(terminal: Terminal, y: number): LinkLine[] {
+	if (terminal.modes.mouseTrackingMode === "none") return [];
+	const result: LinkLine[] = [];
+	for (let first = Math.max(1, y - 7); first <= y; first++) {
+		const initial = logicalLine(terminal, first);
+		const table = initial && tableRow(initial);
+		if (!initial || initial.starts[0]?.y !== first || !table) continue;
+		for (let column = 0; column < table.cells.length; column++) {
+			const cell = table.cells[column];
+			if (!cell.text || cell.text.length > 4096) continue;
+			const ranges = [{ start: cell.starts[0], end: cell.ends[cell.ends.length - 1] }];
+			result.push({ line: cell, exactNote: true, suffixes: ranges.slice(),
+				current: () => logicalLine(terminal, first)?.text === initial.text });
+			let candidates = [cell];
+			const sources = [{ y: first, text: initial.text }];
+			for (let row = first + 1; row < first + 8; row++) {
+				const next = logicalLine(terminal, row);
+				const nextTable = next && tableRow(next);
+				if (!next || next.starts[0]?.y !== row || !nextTable || nextTable.borders !== table.borders ||
+					nextTable.cells.some((peer, index) => index !== column && peer.text) || !nextTable.cells[column].text) break;
+				if (candidates.every(candidate => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?$/i.test(candidate.text)) &&
+					!/^:[1-9]\d*(?::[1-9]\d*)?$/.test(nextTable.cells[column].text)) break;
+				candidates = appendNoteFragments(candidates, nextTable.cells[column]);
+				if (!candidates.length) break;
+				sources.push({ y: row, text: next.text });
+				const fragment = nextTable.cells[column];
+				ranges.push({ start: fragment.starts[0], end: fragment.ends[fragment.ends.length - 1] });
+				if (row < y) continue;
+				const snapshot = sources.slice();
+				for (const candidate of candidates) result.push({ line: candidate, continuation: "note", exactNote: true,
+					suffixes: ranges.slice(),
+					current: () => snapshot.every(source => logicalLine(terminal, source.y)?.text === source.text) });
+			}
+		}
+	}
+	return result;
+}
 
 /** Join URL tokens only within a bounded, consistently indented TUI wrap. */
 function wrappedWebLines(terminal: Terminal, y: number): LinkLine[] {
@@ -231,6 +310,7 @@ function linkLines(terminal: Terminal, y: number): LinkLine[] {
 		if (!initial || initial.starts[0]?.y !== first) continue;
 		const indent = /^ {2,}(?:[-*•] )?/.exec(initial.text)?.[0].length;
 		if (!indent) continue;
+		if (/^[│┃]/.test(initial.text.slice(indent))) continue;
 		const sources = [{ y: first, text: initial.text }];
 		const initialEnd = initial.text.trimEnd().length;
 		if (initialEnd <= indent) continue;
@@ -245,17 +325,10 @@ function linkLines(terminal: Terminal, y: number): LinkLine[] {
 			const end = next.text.trimEnd().length;
 			const fragment: LogicalLine = { text: next.text.slice(indent, end), starts: next.starts.slice(indent, end), ends: next.ends.slice(indent, end) };
 			continuationStart ??= fragment.starts[0];
-			const append = (previous: LogicalLine, separator: string): LogicalLine => ({
-				text: previous.text + separator + fragment.text,
-				starts: [...previous.starts, ...(separator ? [previous.ends[previous.ends.length - 1]] : []), ...fragment.starts],
-				ends: [...previous.ends, ...(separator ? [previous.ends[previous.ends.length - 1]] : []), ...fragment.ends],
-			});
 			// Each boundary can independently be a word break or a mid-word
 			// break (including inside .md). Eight rows bound this to 128
 			// candidates; only an exact indexed note becomes a link.
-			candidates = candidates.flatMap(candidate => /[\\/]$/.test(candidate.text)
-				? [append(candidate, "")] : [append(candidate, " "), append(candidate, "")])
-				.filter(candidate => candidate.text.length <= 4096);
+			candidates = appendNoteFragments(candidates, fragment);
 			if (!candidates.length) break;
 			sources.push({ y: row, text: next.text });
 			const last = next.ends[next.ends.length - 1].y;
@@ -317,54 +390,61 @@ export class TerminalLinks implements ILinkProvider {
 		// Repeated suffixes across boundary combinations share one indexed
 		// lookup. The cache lives only for this buffer snapshot.
 		const noteCache = new Map<string, NoteTarget | null>();
-		const lines = [...wrappedWebLines(this.terminal, y), ...linkLines(this.terminal, y)];
-		const suffixes = lines.flatMap(line => line.suffix ? [line.suffix] : []);
+		const lines = [...wrappedWebLines(this.terminal, y), ...wrappedTableNotes(this.terminal, y), ...linkLines(this.terminal, y)];
+		const suffixes = lines.flatMap(line => (line.suffixes ?? (line.suffix ? [line.suffix] : [])).map(range => ({
+			range, noteOnly: line.exactNote || line.continuation === "note", wrapped: Boolean(line.continuation),
+		})));
 		const before = (a: IBufferCellPosition, b: IBufferCellPosition) => a.y < b.y || (a.y === b.y && a.x <= b.x);
-		const links = lines.flatMap(({ line, current, continuation, blocked, noteStartLimit }) => blocked ? [] : findTerminalLinks(line.text, this.options, noteStartLimit, noteCache).flatMap(match => {
-			const wholeRange = { start: line.starts[match.start], end: line.ends[match.end - 1] };
-			if (continuation && (wholeRange.start.y === wholeRange.end.y || (continuation === "note" ? !match.note : match.note))) return [];
-			if (!continuation && suffixes.some(suffix => before(wholeRange.start, suffix.end) && before(suffix.start, wholeRange.end))) return [];
-			if (wholeRange.start.y > y || wholeRange.end.y < y) return [];
-			let range = wholeRange;
-			const fragments: ILink["range"][] = [];
-			if (continuation) {
-				// xterm underlines full-width intermediate rows for multi-row
-				// ranges. TUI layout has indentation/padding between fragments:
-				// expose this row's actual cells, retaining the complete target.
-				for (let index = match.start; index < match.end; index++) {
-					const start = line.starts[index], end = line.ends[index];
-					const previous = fragments[fragments.length - 1];
-					if (previous?.start.y === start.y) previous.end = end;
-					else fragments.push({ start, end });
+		const links = lines.flatMap(({ line, current, continuation, blocked, noteStartLimit, exactNote }) => {
+			const note = exactNote ? indexedNote(line.text, this.options, noteCache) : null;
+			const matches: TextMatch[] = exactNote ? (note ? [{ start: 0, end: line.text.length, text: line.text, note }] : [])
+				: findTerminalLinks(line.text, this.options, noteStartLimit, noteCache);
+			return blocked ? [] : matches.flatMap(match => {
+				const wholeRange = { start: line.starts[match.start], end: line.ends[match.end - 1] };
+				if (continuation && (wholeRange.start.y === wholeRange.end.y || (continuation === "note" ? !match.note : match.note))) return [];
+				if (!continuation && suffixes.some(suffix => (!exactNote || suffix.wrapped) && (!suffix.noteOnly || match.note) && before(wholeRange.start, suffix.range.end) && before(suffix.range.start, wholeRange.end))) return [];
+				if (wholeRange.start.y > y || wholeRange.end.y < y) return [];
+				let range = wholeRange;
+				const fragments: ILink["range"][] = [];
+				if (continuation) {
+					// xterm underlines full-width intermediate rows for multi-row
+					// ranges. TUI layout has indentation/padding between fragments:
+					// expose this row's actual cells, retaining the complete target.
+					for (let index = match.start; index < match.end; index++) {
+						const start = line.starts[index], end = line.ends[index];
+						const previous = fragments[fragments.length - 1];
+						if (previous?.start.y === start.y) previous.end = end;
+						else fragments.push({ start, end });
+					}
+					const row = fragments.find(fragment => fragment.start.y === y);
+					if (!row) return [];
+					range = row;
 				}
-				const row = fragments.find(fragment => fragment.start.y === y);
-				if (!row) return [];
-				range = row;
-			}
-			const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;
-			if (seen.has(key)) return [];
-			seen.add(key);
-			let released = false;
-			const cols = this.terminal.cols;
-			const viewportY = this.terminal.buffer.active.viewportY;
-			const buffer = this.terminal.buffer.active;
-			const valid = () => !released && !this.disposed && this.terminal.cols === cols &&
-				this.terminal.buffer.active === buffer && buffer.viewportY === viewportY &&
-				current();
-			const link: ILink = {
-				text: match.text,
-				range,
-				decorations: continuation ? { pointerCursor: true, underline: false } : undefined,
-				activate: event => {
-					if (valid() && !this.pressed?.handled) void this.activate(match.text, event);
-				},
-				hover: () => { if (valid()) { this.hovered = link; this.showUnderlines(fragments); } },
-				leave: () => { if (this.hovered === link) { this.hovered = null; this.clearUnderlines(); } },
-				dispose: () => { released = true; if (this.hovered === link) { this.hovered = null; this.clearUnderlines(); } },
-			};
-			this.validations.set(link, valid);
-			return [link];
-		}));
+				const key = `${match.text}:${range.start.x}:${range.start.y}:${range.end.x}:${range.end.y}`;
+				if (seen.has(key)) return [];
+				seen.add(key);
+				let released = false;
+				const cols = this.terminal.cols;
+				const viewportY = this.terminal.buffer.active.viewportY;
+				const buffer = this.terminal.buffer.active;
+				const valid = () => !released && !this.disposed && this.terminal.cols === cols &&
+					this.terminal.buffer.active === buffer && buffer.viewportY === viewportY &&
+					current();
+				const link: ILink = {
+					text: match.text,
+					range,
+					decorations: continuation ? { pointerCursor: true, underline: false } : undefined,
+					activate: event => {
+						if (valid() && !this.pressed?.handled) void this.activate(match.text, event);
+					},
+					hover: () => { if (valid()) { this.hovered = link; this.showUnderlines(fragments); } },
+					leave: () => { if (this.hovered === link) { this.hovered = null; this.clearUnderlines(); } },
+					dispose: () => { released = true; if (this.hovered === link) { this.hovered = null; this.clearUnderlines(); } },
+				};
+				this.validations.set(link, valid);
+				return [link];
+			});
+		});
 		callback(links.length ? links : undefined);
 	}
 

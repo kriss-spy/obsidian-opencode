@@ -89,6 +89,111 @@ describe("terminal link parsing and containment", () => {
 });
 
 describe("public xterm provider and activation", () => {
+	it("detects single-row notes beside table borders and preserves table web links", () => {
+		expect(findTerminalLinks("  │ Notes/My note.md│ https://example.com │", options()).map(link => link.text))
+			.toEqual(["Notes/My note.md", "https://example.com"]);
+		const term = terminal([{ chars: Array.from("  │ https://example.com │") }, { chars: Array.from("  │ continuation       │") }]);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		expect(links(new TerminalLinks(term, options()))[0].text).toBe("https://example.com");
+		const noteTerm = terminal([{ chars: Array.from("  │ Notes/Project.md │") }, { chars: Array.from("  │ explanation      │") }]);
+		Object.assign(noteTerm.modes, { mouseTrackingMode: "any" });
+		expect(links(new TerminalLinks(noteTerm, options()))[0].text).toBe("Notes/Project.md");
+	});
+	it("retains line and column references continued in the same table cell", () => {
+		const term = terminal([{ chars: Array.from("  │ Notes/Project.md │") }, { chars: Array.from("  │ :3:5             │") }]);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options());
+		for (const y of [1, 2]) expect(links(provider, y).map(link => link.text)).toEqual(["Notes/Project.md:3:5"]);
+	});
+	it("resolves the entire table cell for punctuation and repeated .md filenames", () => {
+		const note = "Notes/Project (one), and AGENTS.md.md";
+		const config = options({ hasNote: value => [note, "AGENTS.md.md"].includes(value) });
+		for (const fragments of [[note], ["Notes/Project (one),", "and AGENTS.md.md"]]) {
+			const term = terminal(fragments.map(fragment => ({ chars: Array.from(`  │ ${fragment.padEnd(40)} │`) })));
+			Object.assign(term.modes, { mouseTrackingMode: "any" });
+			const provider = new TerminalLinks(term, config);
+			for (let y = 1; y <= fragments.length; y++) expect(links(provider, y).map(link => link.text)).toEqual([note]);
+		}
+	});
+	it("keeps an adjacent complete note active when another column wraps", () => {
+		const row = (cells: string[]) => `  │ ${cells.map(cell => cell.padEnd(12)).join(" │ ")} │`;
+		const term = terminal([
+			{ chars: Array.from(row(["Notes/My", "Other.md"])) },
+			{ chars: Array.from(row(["note.md", ""])) },
+		]);
+		Object.assign(term, { cols: 35 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options());
+		expect(links(provider, 1).map(link => link.text)).toEqual(["Notes/My note.md", "Other.md"]);
+		expect(links(provider, 2).map(link => link.text)).toEqual(["Notes/My note.md"]);
+	});
+	it("rejects missing and outside table paths without salvaging a root basename", () => {
+		for (const prefix of ["/outside/Notes/", "../../Notes/", "file:///vault/Notes/", "Missing/"]) {
+			const term = terminal([
+				{ chars: Array.from(`  │ 1 │ ${prefix.padEnd(24)} │`) },
+				{ chars: Array.from(`  │   │ ${"My note.md".padEnd(24)} │`) },
+			]);
+			Object.assign(term.modes, { mouseTrackingMode: "any" });
+			const provider = new TerminalLinks(term, options({ hasNote: value => value === "My note.md" }));
+			expect(links(provider, 1)).toEqual([]);
+			expect(links(provider, 2)).toEqual([]);
+		}
+	});
+	it("does not join table cells across separators, changed columns or a new numbered record", () => {
+		for (const boundary of ["  ├───┼───────────────────┤", "  │ 2 │ My note.md        │", "   │   │ My note.md        │"]) {
+			const term = terminal([
+				{ chars: Array.from("  │ 1 │ Notes/            │") },
+				{ chars: Array.from(boundary) },
+				{ chars: Array.from("  │   │ My note.md        │") },
+			]);
+			Object.assign(term.modes, { mouseTrackingMode: "any" });
+			const provider = new TerminalLinks(term, options());
+			for (let y = 1; y <= 3; y++) expect(links(provider, y).map(link => link.text)).not.toContain("Notes/My note.md");
+		}
+	});
+	it("compares table columns by physical cells when another column contains Unicode", () => {
+		const strings = ["  │ 中  │ Notes/My │", "  │     │ note.md  │"];
+		const rows = strings.map(text => {
+			const chars: string[] = [], widths: number[] = [];
+			for (const char of text) {
+				chars.push(char); widths.push(char === "中" ? 2 : 1);
+				if (char === "中") { chars.push(""); widths.push(0); }
+			}
+			return { chars, widths };
+		});
+		const term = terminal(rows);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options());
+		for (const y of [1, 2]) expect(links(provider, y).map(link => link.text)).toEqual(["Notes/My note.md"]);
+	});
+	it("opens the full path from every wrapped table cell row without including borders", async () => {
+		const fragments = [
+			"study/Science/formal sciences/mathematics/pure",
+			"mathematics/analysis/calculus/Single-variable",
+			"integral calculus/definite integral/mean value",
+			"theorems of definite integrals/mean value",
+			"theorems of definite integrals.md",
+		];
+		const note = fragments.join(" ");
+		const rows = fragments.map((fragment, row) => ({ chars: Array.from(`     │ ${row === 0 ? "215" : "   "}   │ ${fragment.padEnd(47)} │    `) }));
+		const term = terminal(rows);
+		Object.assign(term, { cols: 68 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const config = options({ hasNote: value => value === note });
+		const provider = new TerminalLinks(term, config);
+		for (let y = 1; y <= rows.length; y++) {
+			const found = links(provider, y);
+			expect(found.map(link => link.text)).toEqual([note]);
+			expect(found[0].range).toEqual({ start: { x: 16, y }, end: { x: 15 + fragments[y - 1].length, y } });
+			found[0].activate(event({ ctrlKey: true }), note);
+			await vi.waitFor(() => expect(config.openNote).toHaveBeenCalledTimes(y));
+		}
+		const stale = links(provider, 2)[0];
+		rows[0].chars = Array.from("     ├───────┼─────────────────────────────────────────────────┤");
+		stale.activate(event({ ctrlKey: true }), note);
+		await Promise.resolve();
+		expect(config.openNote).toHaveBeenCalledTimes(5);
+	});
 	it("underlines all wrapped fragments together and removes them on leave/dispose", () => {
 		const created: Array<{ style: Record<string, string>; remove: ReturnType<typeof vi.fn> }> = [];
 		const screen = { ownerDocument: { createElement: () => {

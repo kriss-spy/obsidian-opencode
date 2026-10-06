@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Wrapped table note paths** — Open existing vault paths split across a bordered table cell, including filenames with punctuation and repeated `.md` suffixes.
 - **Wrapped-link underline overflow** — Underline every wrapped fragment together on hover, keeping each underline and click target within its row's actual link text.
 - **Wrapped HTTP links** — Open the full URL from any row when OpenCode splits a long address across an indented paragraph or code block.
 - **Wrapped note paths in session history** — Detect existing vault paths split across indented rows by OpenCode's paragraph renderer, including mixed word and mid-word breaks, split `.md` extensions, spaces and line/column references.
