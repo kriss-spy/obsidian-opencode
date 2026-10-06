@@ -356,8 +356,9 @@ describe('OpencodeClient listSessions', () => {
 	function mockApi(responses: Record<string, unknown>): void {
 		mockExecFile.mockImplementation((_cmd, args, _opts, callback) => {
 			// Windows runs the same API arguments through the Node command host.
-			const apiIndex = Array.isArray(args) ? args.indexOf('api') : -1;
-			const query = apiIndex >= 0 && args[apiIndex + 1] === 'get' ? args[apiIndex + 2] : undefined;
+			const commandArgs = Array.isArray(args) ? args : [];
+			const apiIndex = commandArgs.indexOf('api');
+			const query = apiIndex >= 0 && commandArgs[apiIndex + 1] === 'get' ? commandArgs[apiIndex + 2] : undefined;
 			if (typeof query !== 'string' || !(query in responses)) throw new Error(`Unexpected API query: ${query}`);
 			(callback as unknown as (error: null, stdout: string, stderr: string) => void)(null, JSON.stringify(responses[query]), '');
 			return {} as unknown as ChildProcess;
