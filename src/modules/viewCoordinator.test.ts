@@ -12,6 +12,7 @@ interface MockLeaf {
 
 interface MockWorkspace {
 	activeLeaf: MockLeaf | null;
+	getActiveViewOfType(): { leaf: MockLeaf } | null;
 	containerEl: { ownerDocument: { activeElement: object | null } };
 	setActiveLeaf: ReturnType<typeof vi.fn>;
 	getLeavesOfType: ReturnType<typeof vi.fn>;
@@ -35,12 +36,13 @@ const createMockWorkspace = (): MockWorkspace => {
 	const leaves: MockLeaf[] = [];
 	return {
 		activeLeaf: null,
+		getActiveViewOfType() { return this.activeLeaf ? { leaf: this.activeLeaf } : null; },
 		containerEl: { ownerDocument: { activeElement: null } },
 		setActiveLeaf: vi.fn(),
 		getLeavesOfType: vi.fn((type: string): MockLeaf[] => leaves.filter(leaf => leaf.type === type)),
 		getRightLeaf: vi.fn(() => {
 			const leaf = createMockLeaf('right-leaf');
-			leaf.setViewState.mockImplementation(async (state: { type: string }) => {
+			leaf.setViewState.mockImplementation((state: { type: string }) => {
 				leaf.type = state.type;
 				leaves.push(leaf);
 			});

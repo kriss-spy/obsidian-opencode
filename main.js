@@ -20042,7 +20042,7 @@ __export(main_exports, {
   default: () => OpencodePlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian9 = require("obsidian");
+var import_obsidian10 = require("obsidian");
 var path10 = __toESM(require("node:path"));
 
 // src/settings.ts
@@ -20300,9 +20300,15 @@ var OpencodeSettingTab = class extends import_obsidian.PluginSettingTab {
 };
 
 // src/views/opencodeTerminalView.ts
+var import_node_module = require("node:module");
 var import_obsidian4 = require("obsidian");
 var import_xterm = __toESM(require_xterm());
 var import_addon_fit = __toESM(require_addon_fit());
+
+// src/modules/controlCharacters.ts
+function hasControlCharacter(text) {
+  return Array.from(text).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
+}
 
 // src/modules/terminalLinks.ts
 var import_node_fs = require("node:fs");
@@ -20321,7 +20327,7 @@ function currentOsc8Link(terminal, cell) {
 
 // src/modules/terminalLinks.ts
 function safeWebUrl(text) {
-  if (!/^https?:\/\//i.test(text) || /[\x00-\x20\x7f]/.test(text)) return null;
+  if (!/^https?:\/\//i.test(text) || (text.includes(" ") || hasControlCharacter(text))) return null;
   try {
     const url = new URL(text);
     return url.hostname && (url.protocol === "http:" || url.protocol === "https:") ? url.href : null;
@@ -20352,7 +20358,7 @@ function containedRelative(root, target) {
   return relative3 && relative3 !== ".." && !relative3.startsWith(`..${api.sep}`) && !api.isAbsolute(relative3) ? relative3.split(api.sep).join("/") : null;
 }
 function resolveNoteTarget(text, root, distro) {
-  if (/[\x00-\x1f\x7f]|^[a-z][a-z\d+.-]*:\/\//i.test(text)) return null;
+  if (hasControlCharacter(text) || /^[a-z][a-z\d+.-]*:\/\//i.test(text)) return null;
   const match = /^(.*\.md)(?::([1-9]\d*))?(?::([1-9]\d*))?$/i.exec(text);
   if (!match) return null;
   if (/^[a-z][a-z\d+.-]*:/i.test(match[1]) && !/^[a-z]:[\\/]/i.test(match[1])) return null;
@@ -20464,7 +20470,10 @@ function tableRow(line) {
   const opening = (_a = / {2,}│/.exec(text)) != null ? _a : / {2,}┃/.exec(text);
   if (!opening || !/[│┃] *$/.test(text) || ((_b = line.starts[0]) == null ? void 0 : _b.y) !== ((_c = line.ends[line.ends.length - 1]) == null ? void 0 : _c.y)) return null;
   const first = opening.index + opening[0].length - 1;
-  const borders = Array.from(text.matchAll(/[│┃]/g), (match) => match.index).filter((index) => index >= first);
+  const borders = Array.from(text.matchAll(/[│┃]/g), (match) => {
+    var _a2;
+    return (_a2 = match.index) != null ? _a2 : 0;
+  }).filter((index) => index >= first);
   if (borders.length < 2 || borders.length > 17) return null;
   const cells = borders.slice(0, -1).map((border, index) => {
     let start = border + 1, end = borders[index + 1];
@@ -20491,7 +20500,10 @@ function tableRecordEvidence(terminal, first, table, limit) {
     if (start < 0 || end < start) return null;
     const text = line.text.slice(start, end + 1);
     if (/^[┌├][─━]+(?:[┬┼][─━]+)+[┐┤]$/.test(text)) {
-      const edges = Array.from(text.matchAll(/[┌├┬┼┐┤]/g), (match) => line.starts[start + match.index].x);
+      const edges = Array.from(text.matchAll(/[┌├┬┼┐┤]/g), (match) => {
+        var _a2;
+        return line.starts[start + ((_a2 = match.index) != null ? _a2 : 0)].x;
+      });
       return edges.join(",") === [table.leftEdge, ...table.rightEdges].join(",") ? evidence : null;
     }
     if (((_b = tableRow(line)) == null ? void 0 : _b.borders) !== table.borders) return null;
@@ -20744,13 +20756,12 @@ var TerminalLinks = class {
     for (const range of ranges) {
       const row = range.start.y - viewport;
       if (row < 1 || row > this.terminal.rows) continue;
-      const underline = screen2.ownerDocument.createElement("span");
+      const underline = screen2.createSpan();
       underline.className = "opencode-terminal-link-underline";
       underline.style.left = `${(range.start.x - 1) / this.terminal.cols * 100}%`;
       underline.style.width = `${(range.end.x - range.start.x + 1) / this.terminal.cols * 100}%`;
       underline.style.top = `calc(${row / this.terminal.rows * 100}% - 2px)`;
       underline.style.color = (_c = (_b = this.terminal.options.theme) == null ? void 0 : _b.foreground) != null ? _c : "";
-      screen2.appendChild(underline);
       this.underlines.push(underline);
     }
   }
@@ -21025,7 +21036,7 @@ function deliverLineReference(reference, context) {
   if (!context.ready) return false;
   if ((_a = context.notify) == null ? void 0 : _a.call(context, reference)) return "bridge";
   const range = reference.lineStart === reference.lineEnd ? String(reference.lineStart) : `${reference.lineStart}-${reference.lineEnd}`;
-  if (/[\s@\x00-\x1f\x7f]/.test(reference.filePath)) {
+  if (/[\s@]/.test(reference.filePath) || hasControlCharacter(reference.filePath)) {
     context.paste(` File ${JSON.stringify(reference.filePath)} (lines ${range}) `);
     return "text";
   }
@@ -21144,7 +21155,7 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // manifest.json
-var version = "2.3.0";
+var version = "2.3.1";
 
 // src/editorServer.ts
 var fs2 = __toESM(require("fs"));
@@ -21931,7 +21942,7 @@ var TerminalKeyRouter = class {
   registerSuspendGuard(context) {
     const handler = (event) => {
       var _a, _b;
-      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+      if (event.defaultPrevented || event.isComposing || isImeKey(event)) return;
       const modifiers = [
         ...event.ctrlKey ? ["Ctrl"] : [],
         ...event.altKey ? ["Alt"] : [],
@@ -21954,10 +21965,13 @@ var TerminalKeyRouter = class {
     this.clearShiftEnterTimers();
     if (!enabled || !onShiftEnterNewline) return;
     terminal.attachCustomKeyEventHandler((event) => {
-      if (event.isComposing || event.keyCode === 229) return true;
+      var _a2, _b;
+      if (event.isComposing || isImeKey(event)) return true;
       if (event.type === "keydown" && event.key === "Enter" && event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
         event.preventDefault();
-        const timer = setTimeout(() => {
+        const ownerWindow = (_b = (_a2 = terminal.element) == null ? void 0 : _a2.ownerDocument.defaultView) != null ? _b : window;
+        const timer = { id: 0, window: ownerWindow };
+        timer.id = ownerWindow.setTimeout(() => {
           this.shiftEnterTimers.delete(timer);
           onShiftEnterNewline();
         }, 0);
@@ -21969,7 +21983,7 @@ var TerminalKeyRouter = class {
     this.shiftEnterDisposer = () => terminal.attachCustomKeyEventHandler(() => true);
   }
   clearShiftEnterTimers() {
-    for (const timer of this.shiftEnterTimers) clearTimeout(timer);
+    for (const timer of this.shiftEnterTimers) timer.window.clearTimeout(timer.id);
     this.shiftEnterTimers.clear();
   }
   registerWslClipboard(context) {
@@ -22064,8 +22078,7 @@ var TerminalKeyRouter = class {
         if (context.reservedTerminalHotkeys.has(normalizeObsidianHotkey(hotkey))) continue;
         const handler = scope.register(hotkey.modifiers, hotkey.key, (event) => {
           var _a2;
-          const legacyKeyCode = Reflect.get(event, "keyCode");
-          if (event.isComposing || legacyKeyCode === 229) return;
+          if (event.isComposing || isImeKey(event)) return;
           return ((_a2 = appInternals.commands) == null ? void 0 : _a2.executeCommandById(commandId)) ? false : void 0;
         });
         this.disposers.push(() => scope.unregister(handler));
@@ -22128,6 +22141,9 @@ var TerminalKeyRouter = class {
     this.disposers = [];
   }
 };
+function isImeKey(event) {
+  return Reflect.get(event, "keyCode") === 229;
+}
 
 // src/modules/windowsTerminalMouse.ts
 var CLEAR_PICKER_QUERY = "\x7F".repeat(200);
@@ -22750,16 +22766,28 @@ ${result.stderr}`;
 
 // src/modules/themePreview.ts
 var PREVIEW_INPUT_DEBOUNCE_MS = 50;
-var THEME_NAVIGATION = /^(?:(?:\x1b\[|\x1bO)[AB]|\x10|\x0e)+$/;
-var TERMINAL_COLOR_RESPONSE = /^\x1b\](?:10|11);rgb:[\da-f]{4}\/[\da-f]{4}\/[\da-f]{4}\x1b\\$/i;
+var NAVIGATION_KEYS = ["\x1B[A", "\x1B[B", "\x1BOA", "\x1BOB", "", ""];
+function isThemeNavigation(data) {
+  if (!data) return false;
+  while (data) {
+    const key = NAVIGATION_KEYS.find((key2) => data.startsWith(key2));
+    if (!key) return false;
+    data = data.slice(key.length);
+  }
+  return true;
+}
+function isColorResponse(data) {
+  return data.startsWith("\x1B]") && data.endsWith("\x1B\\") && /^(?:10|11);rgb:[\da-f]{4}\/[\da-f]{4}\/[\da-f]{4}$/i.test(data.slice(2, -2));
+}
 var ThemePreviewInputBatcher = class {
-  constructor(write) {
+  constructor(write, window2) {
     this.write = write;
+    this.window = window2;
     this.pending = "";
     this.flushTimer = null;
   }
   send(data, themePickerOpen) {
-    if (TERMINAL_COLOR_RESPONSE.test(data)) {
+    if (isColorResponse(data)) {
       this.write(data);
       return;
     }
@@ -22768,26 +22796,26 @@ var ThemePreviewInputBatcher = class {
       this.write(data);
       return;
     }
-    if (!themePickerOpen || !THEME_NAVIGATION.test(data)) {
+    if (!themePickerOpen || !isThemeNavigation(data)) {
       this.flushWith(data);
       return;
     }
     this.pending += data;
-    if (this.flushTimer) clearTimeout(this.flushTimer);
-    this.flushTimer = setTimeout(() => this.flushWith(""), PREVIEW_INPUT_DEBOUNCE_MS);
+    if (this.flushTimer !== null) this.window.clearTimeout(this.flushTimer);
+    this.flushTimer = this.window.setTimeout(() => this.flushWith(""), PREVIEW_INPUT_DEBOUNCE_MS);
   }
   dispose() {
     this.cancelPending();
   }
   flushWith(data) {
-    if (this.flushTimer) clearTimeout(this.flushTimer);
+    if (this.flushTimer !== null) this.window.clearTimeout(this.flushTimer);
     this.flushTimer = null;
     const output = this.pending + data;
     this.pending = "";
     if (output) this.write(output);
   }
   cancelPending() {
-    if (this.flushTimer) clearTimeout(this.flushTimer);
+    if (this.flushTimer !== null) this.window.clearTimeout(this.flushTimer);
     this.flushTimer = null;
     this.pending = "";
   }
@@ -22955,7 +22983,7 @@ var OpencodeTerminalView = class _OpencodeTerminalView extends import_obsidian4.
       },
       isModEvent: (event) => Boolean(import_obsidian4.Keymap.isModEvent(event)),
       openExternal: (url) => {
-        const electron = require("electron");
+        const electron = (0, import_node_module.createRequire)(__filename)("electron");
         return electron.shell.openExternal(url);
       },
       openNote: async (target, event) => {
@@ -23088,7 +23116,7 @@ var OpencodeTerminalView = class _OpencodeTerminalView extends import_obsidian4.
     );
     window.addEventListener("resize", doFit);
     this.register(() => window.removeEventListener("resize", doFit));
-    const themePreviewInput = new ThemePreviewInputBatcher((data) => this.ptySession.writeStdin(data));
+    const themePreviewInput = new ThemePreviewInputBatcher((data) => this.ptySession.writeStdin(data), termContainer.win);
     const inputDisposable = terminal.onData((data) => {
       themePreviewInput.send(data, isOpenCodeThemePicker(terminal.buffer.active, terminal.rows));
     });
@@ -23314,7 +23342,7 @@ var OpencodeTerminalView = class _OpencodeTerminalView extends import_obsidian4.
       onShiftEnterNewline: () => this.sendShiftEnterNewline(terminal),
       reservedTerminalHotkeys: loadOpenCodeHotkeys(terminalCwd, terminalEnvironment),
       suspendTerminalHotkeys: loadOpenCodeSuspendHotkeys(terminalCwd, terminalEnvironment),
-      onSuspendBlocked: () => new import_obsidian4.Notice("OpenCode cannot be suspended inside Obsidian. Close or restart the terminal instead."),
+      onSuspendBlocked: () => new import_obsidian4.Notice("Cannot suspend the terminal inside Obsidian. Close or restart it instead."),
       clipboard: windowsClipboard != null ? windowsClipboard : void 0,
       copySelectionOnCtrlC: () => this.copySelectionOnCtrlC,
       onClipboardError: (message) => new import_obsidian4.Notice(message),
@@ -23929,6 +23957,7 @@ var SessionState = class {
 };
 
 // src/modules/viewCoordinator.ts
+var import_obsidian8 = require("obsidian");
 var ViewCoordinator = class {
   constructor(workspace, config) {
     this.workspace = workspace;
@@ -23999,25 +24028,26 @@ var ViewCoordinator = class {
     return null;
   }
   async revealTerminal(leaf) {
-    var _a;
-    const activeLeaf = this.workspace.activeLeaf;
+    var _a, _b, _c;
+    const activeLeaf = (_a = this.workspace.getActiveViewOfType(import_obsidian8.View)) == null ? void 0 : _a.leaf;
     const document2 = this.workspace.containerEl.ownerDocument;
     const activeElement = document2.activeElement;
     await this.workspace.revealLeaf(leaf);
     if (!this.workspace.getLeavesOfType(this.config.terminalViewType).includes(leaf)) return;
     const container = leaf.view.containerEl;
     if (!container.isConnected || container.clientWidth === 0 || container.clientHeight === 0) return;
-    if (this.workspace.activeLeaf !== activeLeaf && this.workspace.activeLeaf !== leaf) return;
+    const currentLeaf = (_b = this.workspace.getActiveViewOfType(import_obsidian8.View)) == null ? void 0 : _b.leaf;
+    if (currentLeaf !== activeLeaf && currentLeaf !== leaf) return;
     if (document2.activeElement !== activeElement && !container.contains(document2.activeElement)) return;
     this.workspace.setActiveLeaf(leaf, { focus: true });
     const view = leaf.view;
-    (_a = view.focusTerminal) == null ? void 0 : _a.call(view);
+    (_c = view.focusTerminal) == null ? void 0 : _c.call(view);
   }
 };
 
 // src/modules/ptySession.ts
 var import_child_process2 = require("child_process");
-var import_obsidian8 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 var fs6 = __toESM(require("fs"));
 var os6 = __toESM(require("os"));
 var path8 = __toESM(require("path"));
@@ -24404,7 +24434,7 @@ Unable to start the OpenCode Windows PTY: ${message}\r
     (_f = ptyProcess.stdout) == null ? void 0 : _f.on("data", (chunk) => {
       const str = chunk.toString();
       if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-        new import_obsidian8.Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND}' on your host system to allow command execution.`, 15e3);
+        new import_obsidian9.Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND}' on your host system to allow command execution.`, 15e3);
       }
       const output = this.backend === 1 /* WindowsConPty */ ? stripWindowsConPtyProbeArtifact(str) : chunk;
       if (output.length > 0) terminal.write(output);
@@ -24428,7 +24458,7 @@ Unable to start the OpenCode Windows PTY: ${message}\r
         terminal.write(chunk);
       }
       if (str.includes("org.freedesktop.DBus.Error.ServiceUnknown")) {
-        new import_obsidian8.Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND}' on your host system to allow command execution.`, 15e3);
+        new import_obsidian9.Notice(`Additional sandbox permissions are required. Run '${FLATPAK_OVERRIDE_COMMAND}' on your host system to allow command execution.`, 15e3);
       }
     });
     ptyProcess.on("exit", (code, signal) => {
@@ -24683,7 +24713,7 @@ var OPENCODE_ICON_SVG = `
 </g>`;
 
 // src/main.ts
-var OpencodePlugin = class extends import_obsidian9.Plugin {
+var OpencodePlugin = class extends import_obsidian10.Plugin {
   constructor() {
     super(...arguments);
     this.vaultRoot = "";
@@ -24721,7 +24751,7 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
       conversationViewType: OPENCODE_CONVERSATION_VIEW_TYPE
     });
     await this.loadSettings();
-    if (this.app.vault.adapter instanceof import_obsidian9.FileSystemAdapter) {
+    if (this.app.vault.adapter instanceof import_obsidian10.FileSystemAdapter) {
       this.vaultRoot = this.app.vault.adapter.getBasePath();
     } else {
       this.vaultRoot = "/";
@@ -24736,7 +24766,7 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
       OPENCODE_CONVERSATION_VIEW_TYPE,
       (leaf) => new OpencodeConversationView(leaf, this)
     );
-    (0, import_obsidian9.addIcon)(OPENCODE_ICON_ID, OPENCODE_ICON_SVG);
+    (0, import_obsidian10.addIcon)(OPENCODE_ICON_ID, OPENCODE_ICON_SVG);
     this.addRibbonIcon(OPENCODE_ICON_ID, "Opencode terminal", (evt) => {
       void this.activateTerminalView();
     });
@@ -24802,7 +24832,7 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
       },
       revealTerminal: () => this.activateTerminalView(),
       notice: (message) => {
-        new import_obsidian9.Notice(message);
+        new import_obsidian10.Notice(message);
       }
     }));
     this.addSettingTab(new OpencodeSettingTab(this.app, this));
@@ -24838,7 +24868,7 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
     });
   }
   setupStatusBar() {
-    if (!import_obsidian9.Platform.isDesktopApp) return;
+    if (!import_obsidian10.Platform.isDesktopApp) return;
     const item = this.addStatusBarItem();
     item.addClass("opencode-status-bar-item");
     this.statusButton = item.createEl("button", {
@@ -24846,7 +24876,7 @@ var OpencodePlugin = class extends import_obsidian9.Plugin {
       attr: { type: "button" }
     });
     const icon = this.statusButton.createSpan({ cls: "opencode-status-icon", attr: { "aria-hidden": "true" } });
-    (0, import_obsidian9.setIcon)(icon, "terminal");
+    (0, import_obsidian10.setIcon)(icon, "terminal");
     this.statusBadge = this.statusButton.createSpan({
       cls: "opencode-status-badge",
       attr: { "aria-hidden": "true" }

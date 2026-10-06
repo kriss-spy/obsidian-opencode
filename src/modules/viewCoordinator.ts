@@ -1,4 +1,4 @@
-import { WorkspaceLeaf, Workspace } from "obsidian";
+import { WorkspaceLeaf, Workspace, View } from "obsidian";
 
 export interface ViewCoordinatorConfig {
 	terminalViewType: string;
@@ -89,7 +89,7 @@ export class ViewCoordinator {
 	}
 
 	private async revealTerminal(leaf: WorkspaceLeaf): Promise<void> {
-		const activeLeaf = this.workspace.activeLeaf;
+		const activeLeaf = this.workspace.getActiveViewOfType(View)?.leaf;
 		const document = this.workspace.containerEl.ownerDocument;
 		const activeElement = document.activeElement;
 		await this.workspace.revealLeaf(leaf);
@@ -99,7 +99,8 @@ export class ViewCoordinator {
 		if (!this.workspace.getLeavesOfType(this.config.terminalViewType).includes(leaf)) return;
 		const container = leaf.view.containerEl;
 		if (!container.isConnected || container.clientWidth === 0 || container.clientHeight === 0) return;
-		if (this.workspace.activeLeaf !== activeLeaf && this.workspace.activeLeaf !== leaf) return;
+		const currentLeaf = this.workspace.getActiveViewOfType(View)?.leaf;
+		if (currentLeaf !== activeLeaf && currentLeaf !== leaf) return;
 		if (document.activeElement !== activeElement && !container.contains(document.activeElement)) return;
 		this.workspace.setActiveLeaf(leaf, { focus: true });
 		const view = leaf.view as unknown as Partial<TerminalFocusView>;

@@ -31,7 +31,7 @@ export interface KeyRouterContext {
 export class TerminalKeyRouter {
 	private disposers: Array<() => void> = [];
 	private shiftEnterDisposer: (() => void) | null = null;
-	private shiftEnterTimers = new Set<ReturnType<typeof setTimeout>>();
+	private shiftEnterTimers = new Set<{ id: number; window: Window }>();
 
 	register(context: KeyRouterContext): void {
 		this.registerSuspendGuard(context);
@@ -46,7 +46,7 @@ export class TerminalKeyRouter {
 
 	private registerSuspendGuard(context: KeyRouterContext): void {
 		const handler = (event: KeyboardEvent) => {
-			if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+			if (event.defaultPrevented || event.isComposing || isImeKey(event)) return;
 			const modifiers = [
 				...(event.ctrlKey ? ["Ctrl"] : []), ...(event.altKey ? ["Alt"] : []),
 				...(event.shiftKey ? ["Shift"] : []), ...(event.metaKey ? ["Meta"] : []),
@@ -68,13 +68,15 @@ export class TerminalKeyRouter {
 		if (!enabled || !onShiftEnterNewline) return;
 
 		terminal.attachCustomKeyEventHandler((event) => {
-			if (event.isComposing || event.keyCode === 229) return true;
+			if (event.isComposing || isImeKey(event)) return true;
 			if (event.type === "keydown" && event.key === "Enter" && event.shiftKey &&
 				!event.ctrlKey && !event.altKey && !event.metaKey) {
 				event.preventDefault();
 				// xterm defers compositionend commits by one task. Queue this after
 				// that task so composed text reaches onData before the newline.
-				const timer = setTimeout(() => {
+				const ownerWindow = terminal.element?.ownerDocument.defaultView ?? window;
+				const timer = { id: 0, window: ownerWindow };
+				timer.id = ownerWindow.setTimeout(() => {
 					this.shiftEnterTimers.delete(timer);
 					onShiftEnterNewline();
 				}, 0);
@@ -87,7 +89,7 @@ export class TerminalKeyRouter {
 	}
 
 	private clearShiftEnterTimers(): void {
-		for (const timer of this.shiftEnterTimers) clearTimeout(timer);
+		for (const timer of this.shiftEnterTimers) timer.window.clearTimeout(timer.id);
 		this.shiftEnterTimers.clear();
 	}
 
@@ -196,8 +198,7 @@ export class TerminalKeyRouter {
 			for (const hotkey of hotkeys) {
 				if (context.reservedTerminalHotkeys.has(normalizeObsidianHotkey(hotkey))) continue;
 				const handler = scope.register(hotkey.modifiers, hotkey.key, (event) => {
-					const legacyKeyCode = Reflect.get(event, "keyCode") as unknown;
-					if (event.isComposing || legacyKeyCode === 229) return;
+					if (event.isComposing || isImeKey(event)) return;
 					return appInternals.commands?.executeCommandById(commandId) ? false : undefined;
 				});
 				this.disposers.push(() => scope.unregister(handler));
@@ -262,4 +263,10 @@ export class TerminalKeyRouter {
 		}
 		this.disposers = [];
 	}
+}
+
+// Some Electron IMEs send 229 before isComposing becomes true. Keep that
+// compatibility check isolated instead of using deprecated keyCode for keys.
+function isImeKey(event: KeyboardEvent): boolean {
+	return Reflect.get(event, "keyCode") === 229;
 }

@@ -1,3 +1,4 @@
+import { hasControlCharacter } from "./controlCharacters";
 import type { Command, Editor, EditorPosition } from "obsidian";
 import { isAbsolute, join } from "node:path";
 
@@ -39,7 +40,7 @@ export function deliverLineReference(
 	// Both v1 and v2 autocomplete parse #5-9. #L5-9 is not accepted by the TUI.
 	// Whitespace ends an autocomplete query, so preserve these paths as explicit
 	// text instead of creating an attachment that points to the wrong note.
-	if (/[\s@\x00-\x1f\x7f]/.test(reference.filePath)) {
+	if (/[\s@]/.test(reference.filePath) || hasControlCharacter(reference.filePath)) {
 		context.paste(` File ${JSON.stringify(reference.filePath)} (lines ${range}) `);
 		return "text";
 	}

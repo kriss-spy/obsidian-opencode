@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.1] - Unreleased
+
+### Fixed
+
+- Use the terminal's window for deferred Shift+Enter and theme-preview timers, retaining cleanup when a terminal moves between windows.
+- Resolve community directory source warnings while preserving control-character rejection, terminal escape handling, legacy IME protection, link underlines, lazy Electron loading, and focus-on-open behavior.
+- Remove mocked-test lint debt and make the local public-rule review reproducible, including element-creation checks and reliable multiline diagnostics.
+
+### Security
+
+- Update transitive development dependencies to resolve all six currently open Dependabot alerts: source-map-js, Moment, three brace-expansion ranges, and serialize-javascript. No runtime dependency upgrade is required. ([#58](https://github.com/kriss-spy/obsidian-opencode/issues/58))
+
 ## [2.3.0] - 2026-10-06
 
 ### Added

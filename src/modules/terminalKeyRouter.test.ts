@@ -46,6 +46,7 @@ function registerRouter(
 			keymap: { pushScope, popScope },
 		},
 		terminal: {
+			element: { ownerDocument: { defaultView: global } },
 			attachCustomKeyEventHandler: (handler: (event: KeyboardEvent) => boolean) => {
 				customKeyEventHandler = handler;
 			},
@@ -140,11 +141,25 @@ function registerRouter(
 		},
 		setShiftEnterNewline: (enabled: boolean, callback?: () => void) =>
 			router.setShiftEnterNewline(context.terminal, enabled, callback),
+		terminal: context.terminal,
 		router,
 	};
 }
 
 describe("TerminalKeyRouter", () => {
+	it("cancels deferred input through its original window after moving the terminal", () => {
+		const context = registerRouter();
+		const firstWindow = { setTimeout: vi.fn(() => 7), clearTimeout: vi.fn() };
+		const nextWindow = { setTimeout: vi.fn(() => 7), clearTimeout: vi.fn() };
+		Object.assign(context.terminal, { element: { ownerDocument: { defaultView: firstWindow } } });
+		context.setShiftEnterNewline(true, vi.fn());
+		context.dispatchTerminalKey();
+		Object.assign(context.terminal, { element: { ownerDocument: { defaultView: nextWindow } } });
+		context.dispatchTerminalKey();
+		context.router.dispose();
+		expect(firstWindow.clearTimeout).toHaveBeenCalledWith(7);
+		expect(nextWindow.clearTimeout).toHaveBeenCalledWith(7);
+	});
 	it("blocks suspend shortcuts before xterm while preserving composition and other modifiers", () => {
 		const context = registerRouter({}, new Set(), undefined, undefined, undefined, false, new Set(["ctrl+z"]));
 		const blocked = context.dispatchKeydown({ key: "z", ctrlKey: true });

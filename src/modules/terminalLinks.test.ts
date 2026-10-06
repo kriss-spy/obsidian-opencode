@@ -10,12 +10,12 @@ import { currentOsc8Link } from "./xtermOsc8";
 import { findTerminalLinks, resolveNoteTarget, safeWebUrl, TerminalLinks, TerminalLinkOptions } from "./terminalLinks";
 
 const event = (properties: Partial<MouseEvent> = {}): MouseEvent => ({ button: 0, ctrlKey: false, metaKey: false, ...properties } as MouseEvent);
-function options(properties: Partial<TerminalLinkOptions> = {}): TerminalLinkOptions {
+function options(properties: Partial<TerminalLinkOptions> = {}) {
 	return {
-		vaultRoot: "/vault", hasNote: value => ["Notes/Project.md", "Notes/My note.md", "中文/😀 é.md", "Other.md"].includes(value),
+		vaultRoot: "/vault", hasNote: (value: string) => ["Notes/Project.md", "Notes/My note.md", "中文/😀 é.md", "Other.md"].includes(value),
 		openNote: vi.fn(async () => {}), openExternal: vi.fn(async () => {}), onError: vi.fn(),
-		isModEvent: event => event.ctrlKey || event.metaKey,
-		realpath: async value => value,
+		isModEvent: (event: MouseEvent) => event.ctrlKey || event.metaKey,
+		realpath: async (value: string) => value,
 		...properties,
 	};
 }
@@ -39,6 +39,13 @@ function links(provider: TerminalLinks, y = 1): ILink[] {
 }
 
 describe("terminal link parsing and containment", () => {
+	it("rejects every C0 control and DEL in URLs and note paths", () => {
+		for (const code of [...Array.from({ length: 32 }, (_, index) => index), 127]) {
+			const control = String.fromCharCode(code);
+			expect(safeWebUrl(`https://example.com/a${control}b`)).toBeNull();
+			expect(resolveNoteTarget(`Notes/a${control}b.md`, "/vault")).toBeNull();
+		}
+	});
 	it.each(["https://github.com", "HTTP://example.com:80/a?q=1#part", "https://例子.测试/笔记"])("accepts explicit HTTP(S): %s", value => {
 		expect(safeWebUrl(value)).not.toBeNull();
 	});
@@ -69,7 +76,7 @@ describe("terminal link parsing and containment", () => {
 	});
 	it.each(["Hello, world", "Hello; world", "Hello [draft] world", "Hello {draft} world"])("prefers the complete punctuation path over an existing basename: %s", name => {
 		const full = `Notes/${name}.md`;
-		const config = options({ hasNote: value => [full, "world.md"].includes(value) });
+		const config = options({ hasNote: (value: string) => [full, "world.md"].includes(value) });
 		for (const text of [`Created ${full}`, `Created \`${full}:3:5\``]) {
 			expect(findTerminalLinks(text, config).map(link => ({ text: link.text, path: link.note?.path })))
 				.toEqual([{ text: text.endsWith("`") ? `${full}:3:5` : full, path: full }]);
@@ -83,7 +90,7 @@ describe("terminal link parsing and containment", () => {
 		expect(findTerminalLinks(`Updated /tmp/cache${delimiter} Other.md`, options()).map(link => link.text))
 			.toEqual(["Other.md"]);
 		const full = "Notes/Hello, world.md";
-		const config = options({ hasNote: value => [full, "world.md"].includes(value) });
+		const config = options({ hasNote: (value: string) => [full, "world.md"].includes(value) });
 		expect(findTerminalLinks(`Updated /tmp/cache${delimiter} ${full}`, config).map(link => link.text)).toEqual([full]);
 	});
 	it("avoids prose false positives and never falls back from an absolute/traversal URL path", () => {
@@ -95,7 +102,7 @@ describe("terminal link parsing and containment", () => {
 			.toEqual(["Notes/Project.md:42", "Notes/My note.md:3:5"]);
 	});
 	it("keeps interior parentheses in quoted and Markdown note destinations", () => {
-		const config = options({ hasNote: value => value === "Notes/My (draft).md" });
+		const config = options({ hasNote: (value: string) => value === "Notes/My (draft).md" });
 		expect(findTerminalLinks("`Notes/My (draft).md:3` [note](Notes/My (draft).md:3)", config).map(link => link.text))
 			.toEqual(["Notes/My (draft).md:3", "Notes/My (draft).md:3"]);
 		expect(findTerminalLinks("/outside/Notes/My (draft).md", config)).toEqual([]);
@@ -162,7 +169,7 @@ describe("public xterm provider and activation", () => {
 		const term = terminal(rows);
 		Object.assign(term, { cols: 101 });
 		Object.assign(term.modes, { mouseTrackingMode: "any" });
-		const config = options({ hasNote: value => value === fixture.note });
+		const config = options({ hasNote: (value: string) => value === fixture.note });
 		const provider = new TerminalLinks(term, config), stale = links(provider, 2)[0];
 		expect(stale.text).toBe(fixture.note);
 		rows[0].chars.unshift(" ");
@@ -177,7 +184,7 @@ describe("public xterm provider and activation", () => {
 		const term = terminal(rows);
 		Object.assign(term, { cols: 101 });
 		Object.assign(term.modes, { mouseTrackingMode: "any" });
-		const config = options({ hasNote: value => value === fixture.note }), provider = new TerminalLinks(term, config);
+		const config = options({ hasNote: (value: string) => value === fixture.note }), provider = new TerminalLinks(term, config);
 		const stale = links(provider, 4)[0];
 		expect(stale.text).toBe(fixture.note);
 		rows[2].chars = Array.from(blank);
@@ -232,7 +239,7 @@ describe("public xterm provider and activation", () => {
 		}
 	});
 	it("suppresses partial table URLs when a continuation exceeds row or length limits", () => {
-		for (const fragments of [["https://example.com/", ...Array(32).fill("a".repeat(29))], ["https://example.com/" + "a".repeat(2080), "b".repeat(2080)]]) {
+		for (const fragments of [["https://example.com/", ...Array.from({ length: 32 }, () => "a".repeat(29))], ["https://example.com/" + "a".repeat(2080), "b".repeat(2080)]]) {
 			const width = Math.max(...fragments.map(fragment => fragment.length));
 			const term = terminal(fragments.map(fragment => ({ chars: Array.from(`  │ ${fragment.padEnd(width)} │`) })));
 			Object.assign(term, { cols: width + 6 });
@@ -270,7 +277,7 @@ describe("public xterm provider and activation", () => {
 	});
 	it("resolves the entire table cell for punctuation and repeated .md filenames", () => {
 		const note = "Notes/Project (one), and AGENTS.md.md";
-		const config = options({ hasNote: value => [note, "AGENTS.md.md"].includes(value) });
+		const config = options({ hasNote: (value: string) => [note, "AGENTS.md.md"].includes(value) });
 		for (const fragments of [[note], ["Notes/Project (one),", "and AGENTS.md.md"]]) {
 			const term = terminal(fragments.map(fragment => ({ chars: Array.from(`  │ ${fragment.padEnd(40)} │`) })));
 			Object.assign(term.modes, { mouseTrackingMode: "any" });
@@ -284,7 +291,7 @@ describe("public xterm provider and activation", () => {
 			{ chars: Array.from("  │ .md             │") },
 		]);
 		Object.assign(term.modes, { mouseTrackingMode: "any" });
-		const provider = new TerminalLinks(term, options({ hasNote: value => ["Notes/AGENTS.md", "Notes/AGENTS.md.md"].includes(value) }));
+		const provider = new TerminalLinks(term, options({ hasNote: (value: string) => ["Notes/AGENTS.md", "Notes/AGENTS.md.md"].includes(value) }));
 		for (const y of [1, 2]) expect(links(provider, y).map(link => link.text)).toEqual(["Notes/AGENTS.md.md"]);
 	});
 	it.each(["`Notes/Project.md`", "See Notes/Project.md", '"Notes/Project.md"'])("preserves ordinary references in a table cell: %s", text => {
@@ -321,7 +328,7 @@ describe("public xterm provider and activation", () => {
 				{ chars: Array.from(`  │   │ ${"My note.md".padEnd(24)} │`) },
 			]);
 			Object.assign(term.modes, { mouseTrackingMode: "any" });
-			const provider = new TerminalLinks(term, options({ hasNote: value => value === "My note.md" }));
+			const provider = new TerminalLinks(term, options({ hasNote: (value: string) => value === "My note.md" }));
 			expect(links(provider, 1)).toEqual([]);
 			expect(links(provider, 2)).toEqual([]);
 		}
@@ -366,7 +373,7 @@ describe("public xterm provider and activation", () => {
 		const term = terminal(rows);
 		Object.assign(term, { cols: 68 });
 		Object.assign(term.modes, { mouseTrackingMode: "any" });
-		const config = options({ hasNote: value => value === note });
+		const config = options({ hasNote: (value: string) => value === note });
 		const provider = new TerminalLinks(term, config);
 		for (let y = 1; y <= rows.length; y++) {
 			const found = links(provider, y);
@@ -383,11 +390,11 @@ describe("public xterm provider and activation", () => {
 	});
 	it("underlines all wrapped fragments together and removes them on leave/dispose", () => {
 		const created: Array<{ style: Record<string, string>; remove: ReturnType<typeof vi.fn> }> = [];
-		const screen = { ownerDocument: { createElement: () => {
+		const screen = { createSpan: () => {
 			const element = { style: {}, remove: vi.fn() };
 			created.push(element);
 			return element;
-		} }, appendChild: vi.fn() };
+		} };
 		const term = terminal([{ chars: Array.from("    https://resources.anthropic.") }, { chars: Array.from("    com/hubfs/") }]);
 		Object.assign(term, { cols: 35, element: { querySelector: () => screen } });
 		Object.assign(term.modes, { mouseTrackingMode: "any" });
@@ -420,13 +427,13 @@ describe("public xterm provider and activation", () => {
 			expect(links(provider, y).map(link => link.text)).toEqual([fragments.join("")]);
 			const link = links(provider, y)[0];
 			expect(link.range).toEqual({ start: { x: 5, y }, end: { x: 4 + fragments[y - 1].length, y } });
-			await link.activate(event({ ctrlKey: true }), link.text);
+			link.activate(event({ ctrlKey: true }), link.text);
 		}
 		expect(config.openExternal).toHaveBeenCalledTimes(rows.length);
 		expect(config.openExternal).toHaveBeenLastCalledWith(fragments.join(""));
 		const stale = links(provider, 3)[0];
 		rows[3].chars = Array.from("    changed output");
-		await stale.activate(event({ ctrlKey: true }), stale.text);
+		stale.activate(event({ ctrlKey: true }), stale.text);
 		expect(config.openExternal).toHaveBeenCalledTimes(rows.length);
 	});
 	it("does not join a short complete URL to prose or another URL", () => {
@@ -450,7 +457,7 @@ describe("public xterm provider and activation", () => {
 	});
 	it("blocks partial first-row URLs when a recognized continuation exceeds either bound", () => {
 		for (const fragments of [
-			["https://example.com/", ...Array(32).fill("continued/")],
+			["https://example.com/", ...Array.from({ length: 32 }, () => "continued/")],
 			["https://example.com/", "x".repeat(4100)],
 		]) {
 			const term = terminal(fragments.map(fragment => ({ chars: Array.from(`    ${fragment}`.padEnd(25)) })));
@@ -467,7 +474,7 @@ describe("public xterm provider and activation", () => {
 		];
 		const term = terminal(rows);
 		Object.assign(term.modes, { mouseTrackingMode: "any" });
-		const config = options({ hasNote: value => value === note });
+		const config = options({ hasNote: (value: string) => value === note });
 		const provider = new TerminalLinks(term, config);
 		const first = links(provider, 1)[0];
 		expect(first.text).toBe(note);
@@ -502,13 +509,13 @@ describe("public xterm provider and activation", () => {
 		const term = terminal(rows);
 		Object.assign(term, { cols: 68 });
 		Object.assign(term.modes, { mouseTrackingMode: "any" });
-		const config = options({ hasNote: value => value === note });
+		const config = options({ hasNote: (value: string) => value === note });
 		const provider = new TerminalLinks(term, config);
 		for (let y = 1; y <= rows.length; y++) {
 			const found = links(provider, y);
 			expect(found.map(link => link.text)).toEqual([note]);
 			expect(found[0].range).toEqual({ start: { x: 6, y }, end: { x: 5 + fragments[y - 1].length, y } });
-			await found[0].activate(event({ ctrlKey: true }), note);
+			found[0].activate(event({ ctrlKey: true }), note);
 			await vi.waitFor(() => expect(config.openNote).toHaveBeenCalledTimes(y));
 		}
 		expect(config.openNote).toHaveBeenCalledTimes(5);
@@ -548,7 +555,7 @@ describe("public xterm provider and activation", () => {
 			{ chars: Array.from("    My note.md:3, then Other.md") },
 		]);
 		Object.assign(term.modes, { mouseTrackingMode: "any" });
-		const provider = new TerminalLinks(term, options({ hasNote: value => ["Notes/My note.md", "My note.md", "Other.md"].includes(value) }));
+		const provider = new TerminalLinks(term, options({ hasNote: (value: string) => ["Notes/My note.md", "My note.md", "Other.md"].includes(value) }));
 		expect(links(provider, 2).map(link => link.text)).toEqual(["Notes/My note.md:3", "Other.md"]);
 	});
 
@@ -563,7 +570,7 @@ describe("public xterm provider and activation", () => {
 		]) {
 			const term = terminal([{ chars: Array.from(first) }, { chars: Array.from(second) }]);
 			Object.assign(term.modes, { mouseTrackingMode: "any" });
-			const provider = new TerminalLinks(term, options({ hasNote: value => ["Notes/My note.md", "My note.md"].includes(value) }));
+			const provider = new TerminalLinks(term, options({ hasNote: (value: string) => ["Notes/My note.md", "My note.md"].includes(value) }));
 			expect(links(provider, 1)).toEqual([]);
 			const separate = second.startsWith("     ") || second.startsWith("  - ");
 			expect(links(provider, 2).map(link => link.text)).toEqual(separate ? ["My note.md"] : []);
@@ -580,8 +587,8 @@ describe("public xterm provider and activation", () => {
 	});
 	it("ignores null padding from an alternate-buffer viewport growth while retaining printed wrap spaces", () => {
 		const term = terminal([
-			{ chars: [...Array.from("See Notes/My "), ...Array(11).fill("")] },
-			{ chars: [...Array.from("note.md:42:8"), ...Array(12).fill("")], wrapped: true },
+			{ chars: [...Array.from("See Notes/My "), ...Array.from({ length: 11 }, () => "")] },
+			{ chars: [...Array.from("note.md:42:8"), ...Array.from({ length: 12 }, () => "")], wrapped: true },
 		]);
 		const provider = new TerminalLinks(term, options());
 		expect(links(provider, 2)[0]).toMatchObject({ text: "Notes/My note.md:42:8", range: { start: { x: 5, y: 1 }, end: { x: 12, y: 2 } } });
@@ -692,9 +699,10 @@ function interactionFixture(config = options()) {
 	provider.attach(container);
 	const link = links(provider)[0];
 	const mouse = (name: string, properties: Partial<MouseEvent> = {}) => {
-		const value = event({ clientX: 5, clientY: 5, target: {} as Node, preventDefault: vi.fn(), stopImmediatePropagation: vi.fn(), ...properties });
+		const preventDefault = vi.fn(), stopImmediatePropagation = vi.fn();
+		const value = event({ clientX: 5, clientY: 5, target: {} as Node, preventDefault, stopImmediatePropagation, ...properties });
 		listeners.get(name)?.(value);
-		return value;
+		return { ...value, preventDefault, stopImmediatePropagation };
 	};
 	return { term, provider, link, config, listeners, subscriptions, disposers, mouse, modes };
 }

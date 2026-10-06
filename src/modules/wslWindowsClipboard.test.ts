@@ -17,7 +17,7 @@ describe("isWsl2", () => {
 
 describe("WSL Windows clipboard bridge", () => {
 	it("writes arbitrary Unicode through encoded arguments without a shell", async () => {
-		const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
+		const run = vi.fn<(executable: string, args: string[], input?: string) => Promise<{ stdout: string; stderr: string }>>().mockResolvedValue({ stdout: "", stderr: "" });
 		const clipboard = createWslWindowsClipboard({
 			platform: "linux",
 			release: "6.6.87.2-microsoft-standard-WSL2",
@@ -44,7 +44,7 @@ describe("WSL Windows clipboard bridge", () => {
 	});
 
 	it("keeps large text payloads out of the Windows command line", async () => {
-		const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
+		const run = vi.fn<(executable: string, args: string[], input?: string) => Promise<{ stdout: string; stderr: string }>>().mockResolvedValue({ stdout: "", stderr: "" });
 		const clipboard = createWslWindowsClipboard({
 			platform: "linux",
 			release: "6.6.87.2-microsoft-standard-WSL2",
@@ -63,7 +63,7 @@ describe("WSL Windows clipboard bridge", () => {
 
 	it("reads Unicode from Base64 ASCII output", async () => {
 		const expected = "éàèêôù 中文 😀\r\nsecond line";
-		const run = vi.fn().mockResolvedValue({
+		const run = vi.fn<(executable: string, args: string[], input?: string) => Promise<{ stdout: string; stderr: string }>>().mockResolvedValue({
 			stdout: `${Buffer.from(expected, "utf8").toString("base64")}\r\n`,
 			stderr: "",
 		});
@@ -78,7 +78,7 @@ describe("WSL Windows clipboard bridge", () => {
 	});
 
 	it("clears the Windows clipboard when writing empty text", async () => {
-		const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
+		const run = vi.fn<(executable: string, args: string[], input?: string) => Promise<{ stdout: string; stderr: string }>>().mockResolvedValue({ stdout: "", stderr: "" });
 		const clipboard = createWslWindowsClipboard({
 			platform: "linux",
 			release: "6.6.87.2-microsoft-standard-WSL2",
@@ -113,7 +113,7 @@ describe("WSL Windows clipboard bridge", () => {
 
 	it("reads and writes PNG clipboard images without placing binary data in command arguments", async () => {
 		const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
-		const run = vi.fn()
+		const run = vi.fn<(executable: string, args: string[], input?: string) => Promise<{ stdout: string; stderr: string }>>()
 			.mockResolvedValueOnce({ stdout: png.toString("base64"), stderr: "" })
 			.mockResolvedValueOnce({ stdout: "", stderr: "" });
 		const clipboard = createWslWindowsClipboard({

@@ -1,6 +1,6 @@
 {
   "name": "obsidian-opencode",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "OpenCode CLI wrapper for Obsidian",
   "main": "main.js",
   "scripts": {
@@ -56,7 +56,10 @@
     "@puppeteer/browsers": "3.2.2",
     "mocha@11.8.0": {
       "diff": "8.0.4",
-      "serialize-javascript": "7.1.1"
+      "serialize-javascript": "7.1.2"
+    },
+    "obsidian": {
+      "moment": "2.31.0"
     }
   }
 }
