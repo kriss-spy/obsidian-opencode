@@ -195,6 +195,18 @@ The live cloudnotes terminal displayed an indexed note across five hard rows, co
 - Standards and Spec reviews cleared the fix and cache. Wide-output lookup cost remains a possible follow-up optimization within the existing fixed limits.
 - Installed `main.js` SHA-256: `ffe0acdc389f8bd7199099259d1547977922c6a54e6833f8690fcb0b7318fc09`. Artifact hashes were verified, settings preserved, and the user's active terminal was not reloaded. Backup: `/tmp/opencode-before-mixed-note-yv5hl616`.
 
+### Wrapped table note paths (2026-10-06)
+
+Session `ses_ef3381f6affeIiA6zYLGb8BC5o` contains eight long note paths in a Markdown table. Its live 68-column terminal displayed the indexed 215-character path across five bordered rows; the previous provider returned no links. A read-only probe of the new provider recognizes the same complete note on all five rows, mapping only the path cells.
+
+- Bordered-cell reconstruction matches physical column positions, strips padding, and stops at separators, changed borders, blank path cells, or a new record's nonempty peer cell. It retains the eight-row/4,096-unit limits and adds a 16-column limit.
+- Exact whole-cell lookup supports commas, parentheses, and the session's `AGENTS.md.md` filename. Reconstructed suppression ranges stay inside their individual cells; adjacent notes, web URLs, and ordinary quoted/prose references remain active. Complete quoted references stop reconstruction before following prose, while unquoted repeated extensions can continue across rows.
+- Production build/typechecking passed. Final full unit suite: 301 passed, 5 platform-only skipped. Regression coverage includes physical Unicode column widths, repeated extensions split between rows (with the shorter note also indexed), quoted/prose cells, record boundaries, stale content, and rejection of missing/outside path suffixes.
+- Final isolated Obsidian 1.12.7 app checks passed: four cases, 17 real Ctrl/Cmd-clicks across paragraph, table, punctuation, and split-extension layouts. Every click opened the full intended note in a new tab; no PTY input leaked. Both review axes cleared.
+- Installed `main.js` SHA-256: `533dca20f39473b4b6060f8450247d2afc570c64e4f55b5bd74aeaa509162173`. Hashes were verified, settings preserved, and the user's active terminal was not reloaded. Final backup: `/tmp/opencode-before-reviewed-table-3kuch3qz`.
+
+All app tests ran serially in isolated vaults/profiles under the shared lock. The broader app suite was not repeated for this fix; its previously documented native-wrap hover failure still needs a clean release-verification run.
+
 ## WSL2/X410 evidence
 
 On 2026-09-12, the dedicated suite ran on Ubuntu under kernel `6.18.33.2-microsoft-standard-WSL2`, with X410 as the selected X11 display, Obsidian app and installer 1.12.7, and formal OpenCode V2 CLI 2.0.1:
