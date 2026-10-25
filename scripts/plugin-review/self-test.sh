@@ -27,3 +27,16 @@ MOCK
 ESLINT_BIN="$fixture/eslint" "$scripts/review.sh" --skip-release --skip-manifest --skip-behavior --report-dir "$fixture/reports" "$fixture" > "$fixture/summary"
 grep -q '^Errors: 0  Warnings: 0  Recommendations: 0  Passes: 0$' "$fixture/summary"
 echo 'Review report regression checks passed'
+# A private prerelease exception is explicit and bound to the reviewed tag.
+cat > "$fixture/manifest.json" <<'MANIFEST'
+{"id":"ci-test","name":"CI Test","version":"2.3.2-beta.1","minAppVersion":"1.7.2","description":"Test the release checker.","author":"Tester","isDesktopOnly":true}
+MANIFEST
+if PLUGIN_REVIEW_PRERELEASE_VERSION= "$scripts/lib/manifest-check.sh" "$fixture" > "$fixture/manifest-findings"; then
+  echo 'Manifest checker accepted a prerelease without an explicit tag' >&2; exit 1
+fi
+grep -q $'Error\tversion\t' "$fixture/manifest-findings"
+PLUGIN_REVIEW_PRERELEASE_VERSION=2.3.2-beta.1 "$scripts/lib/manifest-check.sh" "$fixture" > "$fixture/manifest-findings"
+if PLUGIN_REVIEW_PRERELEASE_VERSION=2.3.2-beta.2 "$scripts/lib/manifest-check.sh" "$fixture" > "$fixture/manifest-findings"; then
+  echo 'Manifest checker accepted a mismatched prerelease tag' >&2; exit 1
+fi
+echo 'Prerelease manifest regression checks passed'

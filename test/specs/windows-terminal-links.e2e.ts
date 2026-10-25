@@ -180,13 +180,17 @@ describe("Windows ConPTY terminal link responsiveness", function () {
 			} finally {
 				await browser.execute(async (settings: typeof previous) => {
 					const plugin = (window as any).app.plugins.plugins.opencode;
+					const views = (window as any).app.workspace.getLeavesOfType("opencode-terminal").map((leaf: any) => leaf.view);
 					await plugin.viewCoordinator.closeTerminal();
+					// detach() starts async onClose cleanup; wait for the PTY teardown
+					// before deleting its profile (Windows keeps open files locked).
+					await Promise.all(views.map((view: any) => view.lifecycle.enqueue(() => {})));
 					Object.assign(plugin.settings, settings);
 					await plugin.saveSettings();
 					delete (window as any).__hover70;
 				}, previous);
 				await browser.execute((size: number[]) => (window as any).electron.remote.getCurrentWindow().setSize(size[0], size[1]), windowSize);
-				rmSync(profile, { recursive: true, force: true });
+				rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 			}
 		}
 	});

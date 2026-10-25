@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 export type OpencodeStatus =
 	| { kind: "idle"; tooltip: "OpenCode is idle" }
 	| { kind: "running"; tooltip: "OpenCode is working" }
@@ -109,8 +110,17 @@ function directoriesOverlap(left: string, right: string): boolean {
 	return isSameOrInside(left, right) || isSameOrInside(right, left);
 }
 
+function canonicalPath(value: string): string {
+	try {
+		return realpathSync.native(value);
+	} catch {
+		// Session metadata may mention a file that has since been removed.
+		return path.resolve(value);
+	}
+}
+
 function isSameOrInside(parent: string, candidate: string): boolean {
-	const relative = path.relative(path.resolve(parent), path.resolve(candidate));
+	const relative = path.relative(canonicalPath(parent), canonicalPath(candidate));
 	return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
 }
 
@@ -121,7 +131,7 @@ export class OpencodeStatusTracker {
 	get status(): OpencodeStatus {
 		if (this.activeFile && this.sessions.some((session) => session.files.some((file) => {
 			const absoluteFile = path.isAbsolute(file) ? path.normalize(file) : path.resolve(session.directory, file);
-			return absoluteFile === path.normalize(this.activeFile!);
+			return canonicalPath(absoluteFile) === canonicalPath(this.activeFile!);
 		}))) {
 			return { kind: "touched", tooltip: "OpenCode changed this note" };
 		}
