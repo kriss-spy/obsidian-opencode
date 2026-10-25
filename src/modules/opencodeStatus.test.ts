@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as path from "node:path";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { OpencodeActivitySource, OpencodeStatusTracker } from "./opencodeStatus";
 
 describe("OpencodeStatusTracker", () => {
@@ -154,5 +156,34 @@ describe("OpencodeActivitySource", () => {
 			{ id: "ses_other", directory: "/vault", files: [], running: true },
 			{ id: "ses_touched", directory: "/vault", files: ["Notes/plan.md"], running: false },
 		]);
+	});
+});
+
+// macOS launchers can hand Obsidian /var/... while child cwd resolves /private/var/....
+describe("status through filesystem aliases", () => {
+	it("recognizes running and touched sessions across a vault directory alias", async () => {
+		const root = mkdtempSync(path.join(tmpdir(), "opencode-status-alias-"));
+		try {
+			const vault = path.join(root, "vault");
+			const alias = path.join(root, "alias");
+			mkdirSync(vault);
+			writeFileSync(path.join(vault, "Smoke.md"), "fixture");
+			symlinkSync(vault, alias, process.platform === "win32" ? "junction" : "dir");
+			const directory = realpathSync(vault);
+			const source = new OpencodeActivitySource({
+				listActiveSessions: async () => [{ id: "aliased", directory }],
+				listSessionChangedFiles: async () => [],
+			}, alias);
+			const sessions = await source.read();
+			expect(sessions).toHaveLength(1);
+			const tracker = new OpencodeStatusTracker();
+			tracker.updateActiveFile(path.join(alias, "Smoke.md"));
+			tracker.updateSessions(sessions);
+			expect(tracker.status.kind).toBe("running");
+			tracker.updateSessions([{ ...sessions[0], files: ["Smoke.md"], running: false }]);
+			expect(tracker.status.kind).toBe("touched");
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 });

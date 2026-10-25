@@ -24658,6 +24658,7 @@ var PtySessionRegistry = class {
 };
 
 // src/modules/opencodeStatus.ts
+var import_node_fs3 = require("node:fs");
 var path9 = __toESM(require("node:path"));
 var OpencodeActivitySource = class {
   constructor(client, scopeDirectory) {
@@ -24739,8 +24740,15 @@ var OpencodeActivitySource = class {
 function directoriesOverlap(left, right) {
   return isSameOrInside(left, right) || isSameOrInside(right, left);
 }
+function canonicalPath(value) {
+  try {
+    return import_node_fs3.realpathSync.native(value);
+  } catch (e) {
+    return path9.resolve(value);
+  }
+}
 function isSameOrInside(parent, candidate) {
-  const relative3 = path9.relative(path9.resolve(parent), path9.resolve(candidate));
+  const relative3 = path9.relative(canonicalPath(parent), canonicalPath(candidate));
   return relative3 === "" || !relative3.startsWith(`..${path9.sep}`) && relative3 !== ".." && !path9.isAbsolute(relative3);
 }
 var OpencodeStatusTracker = class {
@@ -24751,7 +24759,7 @@ var OpencodeStatusTracker = class {
   get status() {
     if (this.activeFile && this.sessions.some((session) => session.files.some((file) => {
       const absoluteFile = path9.isAbsolute(file) ? path9.normalize(file) : path9.resolve(session.directory, file);
-      return absoluteFile === path9.normalize(this.activeFile);
+      return canonicalPath(absoluteFile) === canonicalPath(this.activeFile);
     }))) {
       return { kind: "touched", tooltip: "OpenCode changed this note" };
     }
