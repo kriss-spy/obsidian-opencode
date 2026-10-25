@@ -4,77 +4,27 @@ on:
   pull_request:
   push:
     branches: [main]
+  merge_group:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  validate:
+    uses: ./.github/workflows/compatibility.yml
+    with:
+      commit: ${{ github.sha }}
+
+  compatibility:
+    # Stable check name for branch protection, independent of matrix changes.
+    name: Required compatibility
+    if: always()
+    needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      DISPLAY: :99
-      OBSIDIAN_VERSION: 1.12.7
-      OBSIDIAN_INSTALLER_VERSION: 1.12.7
+    timeout-minutes: 2
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - run: npm ci
-      - run: npm test
-
-      - name: Cache Obsidian downloads
-        uses: actions/cache@v4
-        with:
-          path: .obsidian-cache
-          key: obsidian-linux-1.12.7-${{ hashFiles('package-lock.json') }}
-
-      - name: Start virtual display
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -q herbstluftwm
-          Xvfb "$DISPLAY" -screen 0 1280x1024x24 +extension GLX -noreset &
-          sleep 1
-          herbstluftwm &
-          sleep 1
-
-      - run: npm run test:obsidian
-
-      - name: Upload Obsidian screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: obsidian-e2e-screenshots
-          path: test-results/obsidian/
-          if-no-files-found: ignore
-
-  windows:
-    runs-on: windows-latest
-    timeout-minutes: 20
-    env:
-      OBSIDIAN_VERSION: 1.12.7
-      OBSIDIAN_INSTALLER_VERSION: 1.12.7
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - run: npm ci
-      - run: npm test
-      - run: npm run test:obsidian
-
-      - name: Upload Windows Obsidian screenshots
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: obsidian-e2e-screenshots-windows
-          path: test-results/obsidian/
-          if-no-files-found: ignore
+      - name: Require successful validation
+        env:
+          RESULT: ${{ needs.validate.result }}
+        run: test "$RESULT" = success

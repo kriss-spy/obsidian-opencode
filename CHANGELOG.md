@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-10-25
+
+### Fixed
+
+- Restore complete wrapped note-path highlights beside the OpenCode session sidebar.
+- Reconstruct wrapped URLs in user input when the next URL follows on the same row, supporting session-sidebar layouts and ignoring stale hidden cells after a terminal resize (#68).
+- Fix Obsidian freezing when hovering the terminal after a resize on Windows (#70).
+
 ## [2.3.1] - 2026-10-06
 
 ### Fixed

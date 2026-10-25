@@ -219,6 +219,28 @@
 
 /* --- End of xterm.css --- */
 
+.opencode-terminal-maximized.workspace-leaf {
+	position: fixed;
+	top: var(--header-height, 40px);
+	right: 0;
+	bottom: 0;
+	left: 0;
+	z-index: 20;
+	display: flex;
+	flex-direction: column;
+	background: var(--background-primary);
+}
+
+.opencode-terminal-maximized > .workspace-leaf-content {
+	flex: 1;
+	min-height: 0;
+}
+
+.opencode-terminal-restore {
+	align-self: flex-end;
+	margin: 6px 8px;
+}
+
 .opencode-terminal-container {
 	display: flex;
 	flex-direction: column;

@@ -106,6 +106,24 @@ export default class OpencodePlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "toggle-terminal-tab-maximize",
+			name: "Toggle terminal tab maximize",
+			checkCallback: (checking) => {
+				const views = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)
+					.map((leaf) => leaf.view)
+					.filter((view): view is OpencodeTerminalView => view instanceof OpencodeTerminalView);
+				const view = views.find((view) => view.isMaximized)
+					?? this.app.workspace.getActiveViewOfType(OpencodeTerminalView)
+					?? views[0];
+				if (!view) return false;
+				if (!checking) {
+					void this.app.workspace.revealLeaf(view.leaf).then(() => view.toggleMaximize());
+				}
+				return true;
+			},
+		});
+
+		this.addCommand({
 			id: "new-session",
 			name: "New session",
 			callback: () => { void this.newSession(); },

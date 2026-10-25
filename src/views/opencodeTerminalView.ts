@@ -61,6 +61,8 @@ export class OpencodeTerminalView extends ItemView {
 	private clipboardImageCounter = 0;
 	private clipboardImageCleanupTimers: number[] = [];
 	private copySelectionOnCtrlC = false;
+	private maximizeOverlay: HTMLElement | null = null;
+	private maximizePlaceholder: Comment | null = null;
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
@@ -117,7 +119,43 @@ export class OpencodeTerminalView extends ItemView {
 		this.terminal?.focus();
 	}
 
+	get isMaximized(): boolean {
+		return this.maximizeOverlay !== null;
+	}
+
+	toggleMaximize(): void {
+		if (this.closing || !this.containerEl.isConnected) return;
+		if (this.isMaximized) {
+			this.restoreMaximize();
+		} else {
+			const document = this.containerEl.ownerDocument;
+			const placeholder = document.createComment("opencode-terminal-position");
+			this.containerEl.before(placeholder);
+			this.maximizePlaceholder = placeholder;
+			const overlay = document.body.createDiv({ cls: "opencode-terminal-maximized workspace-leaf" });
+			this.maximizeOverlay = overlay;
+			const restoreButton = overlay.createEl("button", {
+				cls: "opencode-terminal-restore",
+				text: "Restore terminal",
+			});
+			restoreButton.addEventListener("click", () => this.toggleMaximize());
+			// Move the existing view so the terminal and PTY keep their session.
+			overlay.appendChild(this.containerEl);
+		}
+		this.app.workspace.setActiveLeaf(this.leaf, { focus: true });
+		this.focusTerminal();
+	}
+
+	private restoreMaximize(): void {
+		const placeholder = this.maximizePlaceholder;
+		if (placeholder?.parentNode) placeholder.replaceWith(this.containerEl);
+		this.maximizePlaceholder = null;
+		this.maximizeOverlay?.remove();
+		this.maximizeOverlay = null;
+	}
+
 	async onOpen() {
+		this.register(() => this.restoreMaximize());
 		const terminalCwd = this.plugin.sessionCwd
 			|| this.plugin.settings.defaultWorkingDirectory
 			|| this.plugin.vaultRoot;
@@ -724,6 +762,7 @@ export class OpencodeTerminalView extends ItemView {
 
 	async onClose() {
 		this.closing = true;
+		this.restoreMaximize();
 		this.terminalLinks?.dispose();
 		this.terminalLinks = null;
 		await this.lifecycle.enqueue(async () => {

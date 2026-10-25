@@ -1,6 +1,6 @@
 {
   "name": "obsidian-opencode",
-  "version": "2.3.1",
+  "version": "2.3.2",
   "description": "OpenCode CLI wrapper for Obsidian",
   "main": "main.js",
   "scripts": {
@@ -8,9 +8,13 @@
     "build": "tsc --noEmit && node esbuild.config.mjs production",
     "version": "node version-bump.mjs && git add manifest.json versions.json",
     "test": "vitest run",
+    "test:ci": "node --test scripts/ci-tests/*.check.mjs",
     "test:obsidian": "npm run build && wdio run ./wdio.conf.mts",
+    "ci:install-opencode": "node scripts/install-ci-opencode.mjs",
+    "test:obsidian:real": "npm run build && node scripts/run-real-opencode-tests.mjs",
     "test:obsidian:smoke": "npm run build && cross-env OBSIDIAN_TEST_GREP='\\[smoke\\]' wdio run ./wdio.conf.mts",
     "test:obsidian:macos-ime": "npm run build && cross-env OBSIDIAN_TEST_GREP='#26' wdio run ./wdio.conf.mts",
+    "test:obsidian:windows-links": "npm run build && cross-env OPENCODE_WINDOWS_REGRESSION=1 wdio run ./wdio.windows-links.conf.mts",
     "test:obsidian:windows-ui": "npm run build && cross-env OPENCODE_REAL_E2E=1 OBSIDIAN_TEST_GREP=\"real OpenCode\" wdio run ./wdio.conf.mts",
     "test:obsidian:wsl-x410": "npm run build && node scripts/run-wsl-x410-tests.mjs",
     "embed:windows-pty": "node embed-windows-pty-binary.mjs && node embed-windows-pty-binary.mjs node_modules/zigpty/prebuilds/zigpty.win32-arm64.node src/pty/windowsPtyNativeArm64.ts WINDOWS_PTY_NATIVE_ARM64_BASE64",

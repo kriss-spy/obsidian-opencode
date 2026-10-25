@@ -1,0 +1,151 @@
+name: Platform compatibility
+
+on:
+  workflow_call:
+    inputs:
+      commit:
+        description: Exact commit to validate (including the tagged commit for releases)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  source-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm ci --prefix scripts/plugin-review/lib
+      - run: scripts/plugin-review/self-test.sh
+      - run: scripts/plugin-review/review.sh --skip-release --skip-behavior --fail-on error --report-dir test-results/review
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-review
+          path: test-results/review/
+          if-no-files-found: warn
+
+  platforms:
+    name: ${{ matrix.runner }} / Obsidian ${{ matrix.obsidian }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, windows-latest, macos-latest]
+        obsidian: ["1.12.7", "latest"]
+    env:
+      CI_EXPECTED_SHA: ${{ inputs.commit }}
+      OBSIDIAN_VERSION: ${{ matrix.obsidian }}
+      OBSIDIAN_INSTALLER_VERSION: ${{ matrix.obsidian }}
+      DISPLAY: ':99'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - name: Verify exact checkout
+        run: node -e "const cp=require('node:child_process'); const sha=cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(); if(sha!==process.env.CI_EXPECTED_SHA)throw Error('Unexpected checkout '+sha); console.log('Testing '+sha);"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        if: runner.os != 'Windows'
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:ci
+      - run: npm run ci:install-opencode
+
+      - name: Cache Obsidian downloads
+        uses: actions/cache@v4
+        with:
+          path: .obsidian-cache
+          key: obsidian-${{ runner.os }}-${{ runner.arch }}-${{ matrix.obsidian }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Start Linux display
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -q herbstluftwm
+          Xvfb "$DISPLAY" -screen 0 1400x1100x24 +extension GLX -noreset &
+          sleep 1
+          herbstluftwm &
+          sleep 1
+
+      - name: Isolated Obsidian app suite (includes typecheck and build)
+        run: npm run test:obsidian
+      - name: Mandatory real OpenCode lifecycle
+        run: npm run test:obsidian:real
+
+      - name: Upload platform evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-${{ matrix.runner }}-${{ matrix.obsidian }}
+          path: test-results/obsidian/
+          if-no-files-found: warn
+
+  windows-terminal-links:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        obsidian: ["1.14.5", "latest"]
+    env:
+      CI_EXPECTED_SHA: ${{ inputs.commit }}
+      OBSIDIAN_VERSION: ${{ matrix.obsidian }}
+      OBSIDIAN_INSTALLER_VERSION: ${{ matrix.obsidian }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - name: Verify exact checkout
+        run: node -e "const cp=require('node:child_process'); if(cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()!==process.env.CI_EXPECTED_SHA)throw Error('Unexpected checkout');"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run ci:install-opencode
+      - run: npm run test:obsidian:windows-links
+      - name: Upload hover evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-terminal-links-${{ matrix.obsidian }}
+          path: test-results/obsidian/windows-terminal-links/
+          if-no-files-found: warn
+
+  gate:
+    name: All platforms passed
+    if: always()
+    needs: [source-review, platforms, windows-terminal-links]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Reject failed, skipped or cancelled platform jobs
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node <<'JS'
+          const results = JSON.parse(process.env.RESULTS);
+          for (const [name, job] of Object.entries(results)) {
+            if (job.result !== 'success') throw new Error(`${name}: ${job.result}`);
+          }
+          JS

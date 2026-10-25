@@ -20424,6 +20424,14 @@ function findTerminalLinks(text, options, noteStartLimit = text.length, noteCach
   }
   return links.sort((a, b) => a.start - b.start);
 }
+function inputBorder(line) {
+  const match = /(?:^ +| {2,})([┃│]) {2,}/.exec(line.text);
+  if (!match) return null;
+  const border = match.index + match[0].indexOf(match[1]);
+  const offset = match.index + match[0].length;
+  const column = line.starts[border].x;
+  return { offset, column, contentColumn: column + offset - border, marker: match[1] };
+}
 function logicalLine(terminal, y) {
   var _a, _b, _c;
   const buffer = terminal.buffer.active;
@@ -20439,13 +20447,14 @@ function logicalLine(terminal, y) {
     if (!line || row > first && !line.isWrapped) break;
     if (row - first > 128) return null;
     const next = buffer.getLine(row + 1);
-    let length = line.length;
+    const visibleLength = Math.min(line.length, terminal.cols);
+    let length = visibleLength;
     while (length > 0 && !((_b = line.getCell(length - 1)) == null ? void 0 : _b.getChars())) length--;
     for (let col = 0; col < length; col++) {
       const cell = line.getCell(col);
       if (!cell || cell.getWidth() === 0) continue;
       const chars = cell.getChars();
-      if (!chars && col === line.length - 1 && (next == null ? void 0 : next.isWrapped) && ((_c = next.getCell(0)) == null ? void 0 : _c.getWidth()) === 2) continue;
+      if (!chars && col === visibleLength - 1 && (next == null ? void 0 : next.isWrapped) && ((_c = next.getCell(0)) == null ? void 0 : _c.getWidth()) === 2) continue;
       const value = chars || " ";
       result.text += value;
       if (result.text.length > 16384) return null;
@@ -20457,6 +20466,59 @@ function logicalLine(terminal, y) {
   }
   return result;
 }
+var LogicalLineCache = class {
+  constructor(terminal) {
+    this.terminal = terminal;
+    this.firstRows = /* @__PURE__ */ new Map();
+    this.lastRows = /* @__PURE__ */ new Map();
+    this.lines = /* @__PURE__ */ new Map();
+    this.borderedRows = /* @__PURE__ */ new Map();
+  }
+  invalidate() {
+    this.buffer = this.terminal.buffer.active;
+    this.firstRows.clear();
+    this.lastRows.clear();
+    this.lines.clear();
+    this.borderedRows.clear();
+  }
+  read(y, maxRows = 129) {
+    var _a, _b, _c, _d, _e, _f, _g;
+    if (this.buffer !== this.terminal.buffer.active) this.invalidate();
+    const buffer = this.terminal.buffer.active, row = y - 1;
+    if (!buffer.getLine(row)) return null;
+    let first = this.firstRows.get(row);
+    if (first === void 0) {
+      first = row;
+      while (first > 0 && ((_a = buffer.getLine(first)) == null ? void 0 : _a.isWrapped)) {
+        const known = this.firstRows.get(first);
+        if (known !== void 0) {
+          first = known;
+          break;
+        }
+        first--;
+      }
+      let last = (_b = this.lastRows.get(first)) != null ? _b : first;
+      while (last + 1 < buffer.length && ((_c = buffer.getLine(last + 1)) == null ? void 0 : _c.isWrapped)) last++;
+      for (let index = first; index <= last; index++) this.firstRows.set(index, first);
+      this.lastRows.set(first, last);
+    }
+    if (((_d = this.lastRows.get(first)) != null ? _d : first) - first + 1 > maxRows) {
+      if (maxRows !== 8 && maxRows !== 1) return null;
+      if (!this.borderedRows.has(row)) {
+        const block = this.read(y);
+        const start = (_e = block == null ? void 0 : block.starts.findIndex((cell) => cell.y === y)) != null ? _e : -1;
+        let end = start;
+        while (block && end >= 0 && end < block.starts.length && block.starts[end].y === y) end++;
+        const line2 = block && start >= 0 ? { text: block.text.slice(start, end), starts: block.starts.slice(start, end), ends: block.ends.slice(start, end) } : null;
+        this.borderedRows.set(row, line2);
+      }
+      const line = (_f = this.borderedRows.get(row)) != null ? _f : null;
+      return maxRows === 1 || line && inputBorder(line) ? line : null;
+    }
+    if (!this.lines.has(first)) this.lines.set(first, logicalLine(this.terminal, first + 1));
+    return (_g = this.lines.get(first)) != null ? _g : null;
+  }
+};
 function appendNoteFragments(candidates, fragment) {
   return candidates.flatMap((candidate) => (/[\\/]$/.test(candidate.text) ? [""] : [" ", ""]).map((separator) => ({
     text: candidate.text + separator + fragment.text,
@@ -20488,11 +20550,11 @@ function tableRow(line) {
     rightEdges: borders.slice(1).map((index) => line.starts[index].x)
   };
 }
-function tableRecordEvidence(terminal, first, table, limit) {
+function tableRecordEvidence(first, table, limit, read) {
   var _a, _b;
   const evidence = [];
   for (let row = first - 1; row >= Math.max(1, first - limit); row--) {
-    const line = logicalLine(terminal, row);
+    const line = read(row);
     if (!line || ((_a = line.starts[0]) == null ? void 0 : _a.y) !== row) return null;
     evidence.push({ y: row, text: line.text });
     const start = line.starts.findIndex((cell) => cell.x === table.leftEdge);
@@ -20513,23 +20575,23 @@ function tableRecordEvidence(terminal, first, table, limit) {
 function peerRecordBoundary(next, column, separated) {
   return next.cells.some((peer, index) => index !== column && Boolean(peer.text) && (!separated || index < column && /^\d+$/.test(peer.text)));
 }
-function wrappedTableWebLinks(terminal, y) {
+function wrappedTableWebLinks(terminal, y, read) {
   var _a, _b, _c;
   if (terminal.modes.mouseTrackingMode === "none") return [];
   const result = [];
   for (let first = Math.max(1, y - 31); first <= y; first++) {
-    const initial = logicalLine(terminal, first);
+    const initial = read(first);
     const table = initial && tableRow(initial);
     if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first || !table) continue;
     for (let column = 0; column < table.cells.length; column++) {
       let line = table.cells[column];
       if (!/^https?:\/\/[^\s<>"'`]*$/i.test(line.text) || line.text.length > 4096) continue;
-      const separated = tableRecordEvidence(terminal, first, table, 32);
+      const separated = tableRecordEvidence(first, table, 32, read);
       const sources = [{ y: first, text: initial.text }];
       const ranges = [{ start: line.starts[0], end: line.ends[line.ends.length - 1] }];
       let bounded = true, row = first + 1;
       for (; row <= terminal.buffer.active.length; row++) {
-        const next = logicalLine(terminal, row);
+        const next = read(row);
         const nextTable = next && tableRow(next);
         if (!next || ((_b = next.starts[0]) == null ? void 0 : _b.y) !== row || !nextTable || nextTable.borders !== table.borders || peerRecordBoundary(nextTable, column, Boolean(separated))) break;
         const fragment = nextTable.cells[column];
@@ -20546,7 +20608,7 @@ function wrappedTableWebLinks(terminal, y) {
         sources.push({ y: row, text: next.text });
       }
       if (line.ends[line.ends.length - 1].y < y || bounded && !safeWebUrl(line.text)) continue;
-      const following = (_c = logicalLine(terminal, row)) == null ? void 0 : _c.text;
+      const following = (_c = read(row)) == null ? void 0 : _c.text;
       result.push({
         line,
         exactWeb: true,
@@ -20557,29 +20619,29 @@ function wrappedTableWebLinks(terminal, y) {
           var _a2;
           return (!separated || separated.every((source) => {
             var _a3;
-            return ((_a3 = logicalLine(terminal, source.y)) == null ? void 0 : _a3.text) === source.text;
+            return ((_a3 = read(source.y)) == null ? void 0 : _a3.text) === source.text;
           })) && sources.every((source) => {
             var _a3;
-            return ((_a3 = logicalLine(terminal, source.y)) == null ? void 0 : _a3.text) === source.text;
-          }) && ((_a2 = logicalLine(terminal, row)) == null ? void 0 : _a2.text) === following;
+            return ((_a3 = read(source.y)) == null ? void 0 : _a3.text) === source.text;
+          }) && ((_a2 = read(row)) == null ? void 0 : _a2.text) === following;
         }
       });
     }
   }
   return result;
 }
-function wrappedTableNotes(terminal, y) {
+function wrappedTableNotes(terminal, y, read) {
   var _a, _b;
   if (terminal.modes.mouseTrackingMode === "none") return [];
   const result = [];
   for (let first = Math.max(1, y - 7); first <= y; first++) {
-    const initial = logicalLine(terminal, first);
+    const initial = read(first);
     const table = initial && tableRow(initial);
     if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first || !table) continue;
     for (let column = 0; column < table.cells.length; column++) {
       const cell = table.cells[column];
       if (!cell.text || cell.text.length > 4096) continue;
-      const separated = tableRecordEvidence(terminal, first, table, 8);
+      const separated = tableRecordEvidence(first, table, 8, read);
       const ranges = [{ start: cell.starts[0], end: cell.ends[cell.ends.length - 1] }];
       result.push({
         line: cell,
@@ -20587,13 +20649,13 @@ function wrappedTableNotes(terminal, y) {
         suffixes: ranges.slice(),
         current: () => {
           var _a2;
-          return ((_a2 = logicalLine(terminal, first)) == null ? void 0 : _a2.text) === initial.text;
+          return ((_a2 = read(first)) == null ? void 0 : _a2.text) === initial.text;
         }
       });
       let candidates = [cell];
       const sources = [{ y: first, text: initial.text }];
       for (let row = first + 1; row < first + 8; row++) {
-        const next = logicalLine(terminal, row);
+        const next = read(row);
         const nextTable = next && tableRow(next);
         if (!next || ((_b = next.starts[0]) == null ? void 0 : _b.y) !== row || !nextTable || nextTable.borders !== table.borders || peerRecordBoundary(nextTable, column, Boolean(separated)) || !nextTable.cells[column].text) break;
         if (candidates.every((candidate) => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?[`"')\]]+$/i.test(candidate.text))) break;
@@ -20612,10 +20674,10 @@ function wrappedTableNotes(terminal, y) {
           suffixes: ranges.slice(),
           current: () => (!separated || separated.every((source) => {
             var _a2;
-            return ((_a2 = logicalLine(terminal, source.y)) == null ? void 0 : _a2.text) === source.text;
+            return ((_a2 = read(source.y)) == null ? void 0 : _a2.text) === source.text;
           })) && snapshot.every((source) => {
             var _a2;
-            return ((_a2 = logicalLine(terminal, source.y)) == null ? void 0 : _a2.text) === source.text;
+            return ((_a2 = read(source.y)) == null ? void 0 : _a2.text) === source.text;
           })
         });
       }
@@ -20623,18 +20685,19 @@ function wrappedTableNotes(terminal, y) {
   }
   return result;
 }
-function wrappedWebLines(terminal, y) {
-  var _a, _b, _c, _d, _e;
+function wrappedWebLines(terminal, y, read) {
+  var _a, _b, _c, _d, _e, _f;
   if (terminal.modes.mouseTrackingMode === "none") return [];
   const result = [];
   const content = (text) => text.replace(/ +[█▄▀▐▌┃│] *$/, "").trimEnd();
   for (let first = Math.max(1, y - 31); first <= y; first++) {
-    const initial = logicalLine(terminal, first);
+    const initial = read(first);
     if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first || tableRow(initial)) continue;
-    const indent = (_b = /^(?: +[┃│] {2,}| {2,}(?:[-*•] )?)/.exec(initial.text)) == null ? void 0 : _b[0];
+    const border = inputBorder(initial);
+    const indent = (_c = border == null ? void 0 : border.offset) != null ? _c : (_b = /^ {2,}(?:[-*•] )?/.exec(initial.text)) == null ? void 0 : _b[0].length;
     if (!indent) continue;
-    const start = /https?:\/\/[^\s<>"'`]+$/i.exec(content(initial.text));
-    if (!start || start.index < indent.length) continue;
+    const start = /https?:\/\/[^\s<>"'`]*$/i.exec(content(initial.text));
+    if (!start || start.index < indent) continue;
     let line = { text: start[0], starts: initial.starts.slice(start.index, start.index + start[0].length), ends: initial.ends.slice(start.index, start.index + start[0].length) };
     const sources = [{ y: first, text: initial.text }];
     let row = initial.ends[initial.ends.length - 1].y + 1;
@@ -20642,28 +20705,34 @@ function wrappedWebLines(terminal, y) {
     while (row <= terminal.buffer.active.length) {
       const end = line.ends[line.ends.length - 1];
       if (terminal.cols - end.x > 6 && !/[/.%?=&_-]$/.test(line.text)) break;
-      const next = logicalLine(terminal, row);
-      if (!next || ((_c = next.starts[0]) == null ? void 0 : _c.y) !== row) break;
-      const prefix = indent.includes("\u2503") || indent.includes("\u2502") ? indent : " ".repeat(indent.length);
+      const next = read(row);
+      if (!next || ((_d = next.starts[0]) == null ? void 0 : _d.y) !== row) break;
+      const nextBorder = inputBorder(next);
+      if (border && (!nextBorder || nextBorder.column !== border.column || nextBorder.contentColumn !== border.contentColumn || nextBorder.marker !== border.marker)) break;
+      const offset = border ? nextBorder.offset : indent;
       const text = content(next.text);
-      if (!text.startsWith(prefix)) break;
-      const token = (_d = /^[^\s<>"'`]+/.exec(text.slice(prefix.length))) == null ? void 0 : _d[0];
-      if (!token || /^(?:[-*•]|[a-z][a-z\d+.-]*:\/\/)/i.test(token) || text.slice(prefix.length + token.length).replace(/^["'`\])},;.!?]+/, "").trim()) break;
-      if (terminal.cols - end.x > 6 && token.length <= terminal.cols - end.x - 4) break;
+      if (!border && !text.startsWith(" ".repeat(indent))) break;
+      const token = (_e = /^[^\s<>"'`]+/.exec(text.slice(offset))) == null ? void 0 : _e[0];
+      if (!token || /^(?:[-*•]|[a-z][a-z\d+.-]*:\/\/)/i.test(token)) break;
+      const remainder = text.slice(offset + token.length).replace(/^["'`\])},;.!?]+/, "").trim();
+      if (remainder && !/[,;]$/.test(token) && !/^https?:\/\//i.test(remainder)) break;
+      const pathId = /^\d+[.,!?:;\])}]*$/.test(token) && /^https?:\/\/[^/?#]+\/[^?#]+\/$/i.test(line.text);
+      if (terminal.cols - end.x > 6 && token.length <= terminal.cols - end.x - 4 && !pathId) break;
       if (row >= first + 32 || line.text.length + token.length > 4096) {
         bounded = false;
         break;
       }
       line = {
         text: line.text + token,
-        starts: [...line.starts, ...next.starts.slice(prefix.length, prefix.length + token.length)],
-        ends: [...line.ends, ...next.ends.slice(prefix.length, prefix.length + token.length)]
+        starts: [...line.starts, ...next.starts.slice(offset, offset + token.length)],
+        ends: [...line.ends, ...next.ends.slice(offset, offset + token.length)]
       };
       sources.push({ y: row, text: next.text });
       row = next.ends[next.ends.length - 1].y + 1;
+      if (remainder) break;
     }
     if (bounded && (sources.length < 2 || line.ends[line.ends.length - 1].y < y || !safeWebUrl(line.text))) continue;
-    const following = (_e = logicalLine(terminal, row)) == null ? void 0 : _e.text;
+    const following = (_f = read(row)) == null ? void 0 : _f.text;
     result.push({
       line,
       continuation: "web",
@@ -20673,25 +20742,54 @@ function wrappedWebLines(terminal, y) {
         var _a2;
         return sources.every((source) => {
           var _a3;
-          return ((_a3 = logicalLine(terminal, source.y)) == null ? void 0 : _a3.text) === source.text;
-        }) && ((_a2 = logicalLine(terminal, row)) == null ? void 0 : _a2.text) === following;
+          return ((_a3 = read(source.y)) == null ? void 0 : _a3.text) === source.text;
+        }) && ((_a2 = read(row)) == null ? void 0 : _a2.text) === following;
       }
     });
   }
   return result;
 }
-function linkLines(terminal, y) {
+function notePaneLine(y, read, physicalRead) {
+  var _a, _b;
+  const physical = physicalRead(y);
+  if (!physical || tableRow(physical)) return read(y);
+  let column = (_a = inputBorder(physical)) == null ? void 0 : _a.column;
+  if (column === void 0) {
+    const evidence = /* @__PURE__ */ new Map();
+    for (let row = y - 1; row >= Math.max(1, y - 32); row--) {
+      const previous = physicalRead(row), border = previous && inputBorder(previous);
+      if (!previous || !border || border.column < 20 || tableRow(previous)) continue;
+      const item = (_b = evidence.get(border.column)) != null ? _b : { count: 0, sidebar: false };
+      item.count++;
+      item.sidebar || (item.sidebar = /\S/.test(previous.text.slice(0, previous.starts.findIndex((cell) => cell.x === border.column))));
+      evidence.set(border.column, item);
+      if (item.count >= 2 && item.sidebar) {
+        column = border.column;
+        break;
+      }
+    }
+  }
+  if (column === void 0) return read(y);
+  const outputColumn = column + 1;
+  const start = physical.starts.findIndex((cell) => cell.x === outputColumn);
+  if (start < 0) return null;
+  let end = physical.text.replace(/ +[█▄▀▐▌] *$/, "").trimEnd().length;
+  end = Math.max(start, end);
+  return { text: physical.text.slice(start, end), starts: physical.starts.slice(start, end), ends: physical.ends.slice(start, end) };
+}
+function linkLines(terminal, y, rawRead, ordinaryRead, physicalRead) {
   var _a, _b, _c, _d;
-  const normal = logicalLine(terminal, y);
+  const normal = ordinaryRead(y);
   if (!normal) return [];
   const ordinary = { line: normal, current: () => {
     var _a2;
-    return ((_a2 = logicalLine(terminal, y)) == null ? void 0 : _a2.text) === normal.text;
+    return ((_a2 = ordinaryRead(y)) == null ? void 0 : _a2.text) === normal.text;
   } };
   const result = [];
   if (terminal.modes.mouseTrackingMode === "none") return [ordinary];
+  const read = (row) => notePaneLine(row, rawRead, physicalRead);
   for (let first = Math.max(1, y - 7); first <= y; first++) {
-    const initial = logicalLine(terminal, first);
+    const initial = read(first);
     if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first) continue;
     const indent = (_b = /^ {2,}(?:[-*•] )?/.exec(initial.text)) == null ? void 0 : _b[0].length;
     if (!indent) continue;
@@ -20704,7 +20802,7 @@ function linkLines(terminal, y) {
     const pathPrefix = /[\\/]/.test(candidates[0].text) && !/\.md(?:[:\s`"')]|$)/i.test(candidates[0].text);
     let continuationStart;
     for (let row = initial.ends[initial.ends.length - 1].y + 1; row < first + 8; ) {
-      const next = logicalLine(terminal, row);
+      const next = read(row);
       if (!next || ((_c = next.starts[0]) == null ? void 0 : _c.y) !== row || !next.text.startsWith(" ".repeat(indent)) || /\s/.test((_d = next.text[indent]) != null ? _d : " ")) break;
       const end = next.text.trimEnd().length;
       const fragment = { text: next.text.slice(indent, end), starts: next.starts.slice(indent, end), ends: next.ends.slice(indent, end) };
@@ -20718,7 +20816,7 @@ function linkLines(terminal, y) {
       const snapshot = sources.slice();
       const current = () => snapshot.every((source) => {
         var _a2;
-        return ((_a2 = logicalLine(terminal, source.y)) == null ? void 0 : _a2.text) === source.text;
+        return ((_a2 = read(source.y)) == null ? void 0 : _a2.text) === source.text;
       });
       for (const candidate of candidates) {
         const noteEnd = pathPrefix ? /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/i.exec(candidate.text) : null;
@@ -20742,6 +20840,15 @@ var TerminalLinks = class {
     this.pressed = null;
     this.cleanups = [];
     this.underlines = [];
+    this.logicalLines = new LogicalLineCache(terminal);
+    const invalidate = () => this.logicalLines.invalidate();
+    const subscriptions = [
+      terminal.onWriteParsed(invalidate),
+      terminal.onResize(invalidate),
+      terminal.onScroll(invalidate),
+      terminal.buffer.onBufferChange(invalidate)
+    ];
+    this.cleanups.push(() => subscriptions.forEach((subscription) => subscription.dispose()));
   }
   clearUnderlines() {
     for (const element of this.underlines) element.remove();
@@ -20772,7 +20879,13 @@ var TerminalLinks = class {
     }
     const seen = /* @__PURE__ */ new Set();
     const noteCache = /* @__PURE__ */ new Map();
-    const lines = [...wrappedTableWebLinks(this.terminal, y), ...wrappedWebLines(this.terminal, y), ...wrappedTableNotes(this.terminal, y), ...linkLines(this.terminal, y)];
+    const read = (row) => this.logicalLines.read(row, 8);
+    const lines = [
+      ...wrappedTableWebLinks(this.terminal, y, read),
+      ...wrappedWebLines(this.terminal, y, read),
+      ...wrappedTableNotes(this.terminal, y, read),
+      ...linkLines(this.terminal, y, read, (row) => this.logicalLines.read(row), (row) => this.logicalLines.read(row, 1))
+    ];
     const suffixes = lines.flatMap((line) => {
       var _a;
       if (line.exactNote && !line.continuation && !indexedNote(line.line.text, this.options, noteCache)) return [];
@@ -20811,7 +20924,10 @@ var TerminalLinks = class {
         const cols = this.terminal.cols;
         const viewportY = this.terminal.buffer.active.viewportY;
         const buffer = this.terminal.buffer.active;
-        const valid = () => !released && !this.disposed && this.terminal.cols === cols && this.terminal.buffer.active === buffer && buffer.viewportY === viewportY && current();
+        const valid = () => {
+          this.logicalLines.invalidate();
+          return !released && !this.disposed && this.terminal.cols === cols && this.terminal.buffer.active === buffer && buffer.viewportY === viewportY && current();
+        };
         const link = {
           text: match.text,
           range,
@@ -20858,7 +20974,7 @@ var TerminalLinks = class {
     if (this.terminal.modes.mouseTrackingMode !== "none" && !this.options.isModEvent(event)) return;
     const revision = this.revision;
     const hoveredRow = ((_b = this.hovered) == null ? void 0 : _b.text) === text ? this.hovered.range.start.y : void 0;
-    const snapshot = hoveredRow ? (_c = logicalLine(this.terminal, hoveredRow)) == null ? void 0 : _c.text : void 0;
+    const snapshot = hoveredRow ? (_c = this.logicalLines.read(hoveredRow)) == null ? void 0 : _c.text : void 0;
     try {
       const url = safeWebUrl(text);
       if (url) {
@@ -20873,7 +20989,8 @@ var TerminalLinks = class {
         realpath(this.options.vaultRoot),
         realpath(api.join(this.options.vaultRoot, note.path))
       ]);
-      if (this.disposed || revision !== this.revision || hoveredRow && snapshot !== ((_e = logicalLine(this.terminal, hoveredRow)) == null ? void 0 : _e.text) || !containedRelative(root, file) || !this.options.hasNote(note.path)) return;
+      this.logicalLines.invalidate();
+      if (this.disposed || revision !== this.revision || hoveredRow && snapshot !== ((_e = this.logicalLines.read(hoveredRow)) == null ? void 0 : _e.text) || !containedRelative(root, file) || !this.options.hasNote(note.path)) return;
       await this.options.openNote(note, event);
     } catch (error) {
       if (!this.disposed) this.options.onError(error);
@@ -20971,6 +21088,7 @@ var TerminalLinks = class {
       if (pressed.modified) this.pressed = null;
     };
     const clear = () => {
+      this.logicalLines.invalidate();
       this.revision++;
       this.hovered = null;
       this.pressed = null;
@@ -20985,6 +21103,7 @@ var TerminalLinks = class {
     const scroll = this.terminal.onScroll(clear);
     const write = this.terminal.onWriteParsed(() => {
       var _a;
+      this.logicalLines.invalidate();
       this.revision++;
       if (this.hovered && ((_a = this.validations.get(this.hovered)) == null ? void 0 : _a()) === false) {
         this.hovered = null;
@@ -21004,6 +21123,7 @@ var TerminalLinks = class {
   }
   dispose() {
     if (this.disposed) return;
+    this.logicalLines.invalidate();
     this.disposed = true;
     this.capturedPrimaryPress = false;
     this.suppressClickActivation = false;
@@ -21155,7 +21275,7 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // manifest.json
-var version = "2.3.1";
+var version = "2.3.2";
 
 // src/editorServer.ts
 var fs2 = __toESM(require("fs"));
@@ -22866,6 +22986,8 @@ var OpencodeTerminalView = class _OpencodeTerminalView extends import_obsidian4.
     this.clipboardImageCounter = 0;
     this.clipboardImageCleanupTimers = [];
     this.copySelectionOnCtrlC = false;
+    this.maximizeOverlay = null;
+    this.maximizePlaceholder = null;
     this.ptySession = this.plugin.createPtySession();
     this.keyRouter = new TerminalKeyRouter();
   }
@@ -22911,8 +23033,41 @@ var OpencodeTerminalView = class _OpencodeTerminalView extends import_obsidian4.
     if (!(container == null ? void 0 : container.isConnected) || container.clientWidth === 0 || container.clientHeight === 0) return;
     (_a = this.terminal) == null ? void 0 : _a.focus();
   }
+  get isMaximized() {
+    return this.maximizeOverlay !== null;
+  }
+  toggleMaximize() {
+    if (this.closing || !this.containerEl.isConnected) return;
+    if (this.isMaximized) {
+      this.restoreMaximize();
+    } else {
+      const document2 = this.containerEl.ownerDocument;
+      const placeholder = document2.createComment("opencode-terminal-position");
+      this.containerEl.before(placeholder);
+      this.maximizePlaceholder = placeholder;
+      const overlay = document2.body.createDiv({ cls: "opencode-terminal-maximized workspace-leaf" });
+      this.maximizeOverlay = overlay;
+      const restoreButton = overlay.createEl("button", {
+        cls: "opencode-terminal-restore",
+        text: "Restore terminal"
+      });
+      restoreButton.addEventListener("click", () => this.toggleMaximize());
+      overlay.appendChild(this.containerEl);
+    }
+    this.app.workspace.setActiveLeaf(this.leaf, { focus: true });
+    this.focusTerminal();
+  }
+  restoreMaximize() {
+    var _a;
+    const placeholder = this.maximizePlaceholder;
+    if (placeholder == null ? void 0 : placeholder.parentNode) placeholder.replaceWith(this.containerEl);
+    this.maximizePlaceholder = null;
+    (_a = this.maximizeOverlay) == null ? void 0 : _a.remove();
+    this.maximizeOverlay = null;
+  }
   async onOpen() {
     var _a, _b;
+    this.register(() => this.restoreMaximize());
     const terminalCwd = this.plugin.sessionCwd || this.plugin.settings.defaultWorkingDirectory || this.plugin.vaultRoot;
     const terminalEnvironment = mergeEnvironmentVariables(
       process.env,
@@ -23467,6 +23622,7 @@ ${message}\r
   async onClose() {
     var _a;
     this.closing = true;
+    this.restoreMaximize();
     (_a = this.terminalLinks) == null ? void 0 : _a.dispose();
     this.terminalLinks = null;
     await this.lifecycle.enqueue(async () => {
@@ -24792,6 +24948,20 @@ var OpencodePlugin = class extends import_obsidian10.Plugin {
       name: "Open conversations",
       callback: () => {
         void this.activateConversationView();
+      }
+    });
+    this.addCommand({
+      id: "toggle-terminal-tab-maximize",
+      name: "Toggle terminal tab maximize",
+      checkCallback: (checking) => {
+        var _a, _b;
+        const views = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE).map((leaf) => leaf.view).filter((view2) => view2 instanceof OpencodeTerminalView);
+        const view = (_b = (_a = views.find((view2) => view2.isMaximized)) != null ? _a : this.app.workspace.getActiveViewOfType(OpencodeTerminalView)) != null ? _b : views[0];
+        if (!view) return false;
+        if (!checking) {
+          void this.app.workspace.revealLeaf(view.leaf).then(() => view.toggleMaximize());
+        }
+        return true;
       }
     });
     this.addCommand({

@@ -5,7 +5,9 @@ import * as path from "node:path";
 import type { ILink, Terminal } from "@xterm/xterm";
 import multicolumnTableNotes from "../../test/fixtures/multicolumn-table-notes";
 import sidebarTableHttp from "../../test/fixtures/sidebar-table-http";
+import sidebarOutputNotes from "../../test/fixtures/sidebar-output-notes";
 import tableHttpLinks from "../../test/fixtures/table-http-links";
+import userInputHttp, { resizedUserInputHttp, wrappedBlockUserInputHttp, sidebarUserInputHttp } from "../../test/fixtures/user-input-http";
 import { currentOsc8Link } from "./xtermOsc8";
 import { findTerminalLinks, resolveNoteTarget, safeWebUrl, TerminalLinks, TerminalLinkOptions } from "./terminalLinks";
 
@@ -19,18 +21,30 @@ function options(properties: Partial<TerminalLinkOptions> = {}) {
 		...properties,
 	};
 }
+const bufferEvents = new WeakMap<Terminal, Map<string, () => void>>();
+function bufferEvent(term: Terminal, name = "write"): void {
+	bufferEvents.get(term)?.get(name)?.();
+}
 // Real cell widths are separately covered by the app spec. This fake exercises the public provider contract.
 function terminal(lines: Array<{ chars: string[]; widths?: number[]; wrapped?: boolean }>): Terminal {
-	return {
-		buffer: { active: { length: lines.length, viewportY: 0, getLine: (row: number) => {
+	const events = new Map<string, () => void>();
+	const subscribe = (name: string) => (fn: () => void) => {
+		events.set(name, fn);
+		return { dispose: () => events.delete(name) };
+	};
+	const term = {
+		onWriteParsed: subscribe("write"), onResize: subscribe("resize"), onScroll: subscribe("scroll"),
+		buffer: { onBufferChange: subscribe("buffer"), active: { length: lines.length, viewportY: 0, getLine: (row: number) => {
 			const data = lines[row];
 			return data && { length: data.chars.length, isWrapped: data.wrapped ?? false, getCell: (col: number) => ({
 				getChars: () => data.chars[col], getWidth: () => data.widths?.[col] ?? 1,
 			}) };
 		} } },
-		cols: 24, rows: lines.length, hasSelection: () => false,
+		cols: Math.max(24, ...lines.map(line => line.chars.length)), rows: lines.length, hasSelection: () => false,
 		modes: { mouseTrackingMode: "none" }, options: {},
 	} as unknown as Terminal;
+	bufferEvents.set(term, events);
+	return term;
 }
 function links(provider: TerminalLinks, y = 1): ILink[] {
 	let result: ILink[] = [];
@@ -118,6 +132,143 @@ describe("terminal link parsing and containment", () => {
 });
 
 describe("public xterm provider and activation", () => {
+	it.each([false, true])("highlights complete output note paths beside the sidebar (wrapped=%s)", wrapped => {
+		const rows = sidebarOutputNotes.lines.map(text => ({ chars: Array.from(text.padEnd(96)), wrapped }));
+		if (wrapped) rows.push(...Array.from({ length: 8 }, () => ({ chars: Array.from(" ".repeat(96)), wrapped })));
+		const term = terminal(rows);
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options({ hasNote: value => sidebarOutputNotes.notes.includes(value) }));
+		for (let i = 0; i < 6; i++) {
+			const y = i + 4, found = links(provider, y);
+			expect(found.map(link => link.text)).toEqual([sidebarOutputNotes.notes[Math.floor(i / 2)]]);
+			expect(found[0].range.start).toEqual({ x: 37, y });
+			const fragment = sidebarOutputNotes.lines[y - 1].slice(36).replace(/ +█ *$/, "").trimEnd();
+			expect(found[0].range.end).toEqual({ x: 36 + fragment.length, y });
+		}
+	});
+	it.each([
+		{ ...userInputHttp, wrapped: false, expected: [[0], [0, 1], [1], [2], [2]] },
+		{ ...resizedUserInputHttp, wrapped: false, expected: [[0], [0, 1], [1, 2], [2]] },
+		{ ...wrappedBlockUserInputHttp, wrapped: true, expected: [[0, 1], [1, 2], [2]] },
+		{ ...sidebarUserInputHttp, wrapped: false, expected: [[0], [0, 1], [1, 2], [2]] },
+		{ ...sidebarUserInputHttp, wrapped: true, expected: [[0], [0, 1], [1, 2], [2]] },
+	])("reconstructs all three user-input URLs at $cols columns (#68)", userInputHttp => {
+		const rows = userInputHttp.lines.map(text => ({ chars: Array.from(text.padEnd(userInputHttp.cols)), wrapped: userInputHttp.wrapped }));
+		if (userInputHttp.wrapped) rows.push(...Array.from({ length: 12 }, () => ({ chars: Array.from("  ┃  ".padEnd(userInputHttp.cols)), wrapped: true })));
+		const term = terminal(rows);
+		Object.assign(term, { cols: userInputHttp.cols });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const config = options(), provider = new TerminalLinks(term, config);
+		const expected = userInputHttp.expected;
+		for (let row = 0; row < expected.length; row++) {
+			const found = links(provider, row + 1);
+			expect(found.map(link => link.text).sort()).toEqual(expected[row].map(index => userInputHttp.urls[index]).sort());
+			for (const link of found) {
+				const fragment = userInputHttp.lines[row].slice(link.range.start.x - 1, link.range.end.x);
+				expect(link.text).toContain(fragment);
+				expect(fragment).not.toMatch(/[, ]/);
+				link.activate(event({ ctrlKey: true }), link.text);
+			}
+		}
+		expect(vi.mocked(config.openExternal).mock.calls.map(call => call[0]).sort()).toEqual(expected.flatMap(indices => indices.map(index => userInputHttp.urls[index])).sort());
+	});
+	it.each([false, true])("aligns input borders by cells with changing Unicode sidebar text (shifted=%s)", shifted => {
+		const rows = sidebarUserInputHttp.lines.map((text, row) => {
+			const label = row % 2 ? "    中文 sidebar" : "    title";
+			const chars: string[] = [], widths: number[] = [];
+			for (const char of label) {
+				const width = /[\u2e80-\u9fff]/.test(char) ? 2 : 1;
+				chars.push(char); widths.push(width);
+				if (width === 2) { chars.push(""); widths.push(0); }
+			}
+			while (chars.length < 31 + (shifted && row === 1 ? 1 : 0)) { chars.push(" "); widths.push(1); }
+			for (const char of text.slice(31)) { chars.push(char); widths.push(1); }
+			return { chars, widths };
+		});
+		const term = terminal(rows);
+		Object.assign(term, { cols: sidebarUserInputHttp.cols });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options());
+		expect(links(provider, 1).some(link => link.text === sidebarUserInputHttp.urls[0])).toBe(!shifted);
+		if (!shifted) expect(links(provider, 2).find(link => link.text === sidebarUserInputHttp.urls[0])?.range).toEqual({ start: { x: 35, y: 2 }, end: { x: 57, y: 2 } });
+	});
+	it.each(["tail, following prose", "tail; following prose", "tail https://other.example"])("ends a wrapped URL before same-row text: %s (#68)", ending => {
+		const rows = ["    https://example.com/long/", `    ${ending}`, "    next/"].map(text => ({ chars: Array.from(text.padEnd(32)) }));
+		const term = terminal(rows);
+		Object.assign(term, { cols: 32 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const config = options(), provider = new TerminalLinks(term, config);
+		for (const y of [1, 2]) {
+			const link = links(provider, y).find(link => link.text === "https://example.com/long/tail");
+			expect(link).toBeDefined();
+			if (y === 2) expect(link!.range).toEqual({ start: { x: 5, y }, end: { x: 8, y } });
+		}
+		expect(links(provider, 3).some(link => link.text.startsWith("https://example.com/long/"))).toBe(false);
+		const stale = links(provider, 1)[0];
+		rows[1].chars = Array.from("    changed, following prose");
+		stale.activate(event({ ctrlKey: true }), stale.text);
+		expect(config.openExternal).not.toHaveBeenCalled();
+	});
+	it("bounds cell reads after ConPTY marks the entire 109 by 81 screen wrapped (#70)", () => {
+		const rows = Array.from({ length: 81 }, (_, row) => ({
+			chars: Array.from((row === 42 ? "    https://example.com/issue70 " : "    home screen ").padEnd(109)),
+			wrapped: row > 0,
+		}));
+		const term = terminal(rows);
+		Object.assign(term, { cols: 109 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const getLine = term.buffer.active.getLine.bind(term.buffer.active);
+		let cellReads = 0;
+		Object.assign(term.buffer.active, { getLine: (row: number) => {
+			const line = getLine(row);
+			if (!line) return undefined;
+			return { ...line, getCell: (col: number) => { cellReads++; return line.getCell(col); } };
+		} });
+		const provider = new TerminalLinks(term, options());
+		expect(links(provider, 43).map(link => link.text)).toEqual(["https://example.com/issue70"]);
+		// One cell-map build for the block, shared by every scanner and row.
+		expect(cellReads).toBeLessThan(2 * 109 * 81);
+		cellReads = 0;
+		for (const row of [36, 43, 60, 81]) links(provider, row);
+		expect(cellReads).toBe(0);
+		provider.dispose();
+	});
+	it.each(["write", "resize", "scroll", "buffer"])("invalidates logical cell maps after %s", cause => {
+		const rows = [{ chars: Array.from("https://example.com/old") }];
+		const term = terminal(rows), provider = new TerminalLinks(term, options());
+		expect(links(provider)[0].text).toBe("https://example.com/old");
+		rows[0].chars = Array.from("https://example.com/new");
+		bufferEvent(term, cause);
+		expect(links(provider)[0].text).toBe("https://example.com/new");
+		provider.dispose();
+	});
+	it("rebuilds cell maps when the active buffer changes before its event", () => {
+		const normal = terminal([{ chars: Array.from("https://normal.example") }]);
+		const alternate = terminal([{ chars: Array.from("https://alternate.example") }]);
+		Object.assign(normal, { cols: alternate.cols });
+		const provider = new TerminalLinks(normal, options());
+		const original = normal.buffer.active;
+		const stale = links(provider)[0];
+		Object.assign(normal.buffer, { active: alternate.buffer.active });
+		expect(links(provider)[0].text).toBe("https://alternate.example");
+		stale.activate(event(), stale.text);
+		Object.assign(normal.buffer, { active: original });
+		expect(links(provider)[0].text).toBe("https://normal.example");
+		provider.dispose();
+	});
+	it("preserves long native URLs but excludes oversized blocks from TUI reconstruction", () => {
+		const fragments = ["    https://example.com/" + "a".repeat(8), ...Array.from({ length: 7 }, () => "a".repeat(32)), "a".repeat(31) + "/"];
+		const url = fragments.join("").trimStart();
+		const rows = [...fragments.map((fragment, row) => ({ chars: Array.from(fragment), wrapped: row > 0 })),
+			{ chars: Array.from("    continuation"), wrapped: false }];
+		const term = terminal(rows);
+		Object.assign(term, { cols: 32 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options());
+		expect(links(provider, 9).map(link => link.text)).toEqual([url]);
+		expect(links(provider, 10)).toEqual([]);
+		provider.dispose();
+	});
 	it.each(tableHttpLinks)("opens the complete table HTTP URL $label from every row and confines the click cells", async ({ url }) => {
 		const fragments = url.match(/.{1,29}/g)!;
 		const rows = fragments.map((fragment, row) => ({ chars: Array.from(`     │ ${row === 0 ? "1" : " "} │ ${fragment.padEnd(29)} │ ${row === 0 ? "272" : "   "} │`) }));
@@ -173,6 +324,7 @@ describe("public xterm provider and activation", () => {
 		const provider = new TerminalLinks(term, config), stale = links(provider, 2)[0];
 		expect(stale.text).toBe(fixture.note);
 		rows[0].chars.unshift(" ");
+		bufferEvent(term);
 		expect(links(provider, 2)).toEqual([]);
 		stale.activate(event({ ctrlKey: true }), fixture.note);
 		expect(config.openNote).not.toHaveBeenCalled();
@@ -437,11 +589,42 @@ describe("public xterm provider and activation", () => {
 		expect(config.openExternal).toHaveBeenCalledTimes(rows.length);
 	});
 	it("does not join a short complete URL to prose or another URL", () => {
-		for (const url of ["https://example.com", "https://example.com/"]) for (const second of ["    following prose", "    anotherword", "    https://other.example", "  - Other.md", "     extraindent"]) {
+		for (const url of ["https://example.com", "https://example.com/", "https://example.com/posts/", "https://example.com/?path=/posts/", "https://example.com/#/posts/"]) for (const second of ["    following prose", "    anotherword", "    https://other.example", "  - Other.md", "     extraindent"]) {
 			const term = terminal([{ chars: Array.from(`    ${url}`.padEnd(68)) }, { chars: Array.from(second.padEnd(68)) }]);
 			Object.assign(term, { cols: 68 });
 			Object.assign(term.modes, { mouseTrackingMode: "any" });
 			expect(links(new TerminalLinks(term, options()))[0].text).toBe(url);
+		}
+	});
+	it.each(["    ", "  - ", "  ┃    "])("opens a short status ID continuation after a slash break (%s)", async prefix => {
+		const url = "https://x.com/taninon/status/2108092225381077459";
+		const fragments = ["https://x.com/taninon/status/", "2108092225381077459"];
+		const rows = fragments.map((fragment, row) => ({ chars: Array.from(`${row === 0 || prefix.includes("┃") ? prefix : " ".repeat(prefix.length)}${fragment}`.padEnd(80)) }));
+		const term = terminal(rows);
+		Object.assign(term, { cols: 80 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const config = options(), provider = new TerminalLinks(term, config);
+		for (const y of [1, 2]) {
+			const found = links(provider, y);
+			expect(found.map(link => link.text)).toEqual([url]);
+			expect(found[0].range).toEqual({ start: { x: prefix.length + 1, y }, end: { x: prefix.length + fragments[y - 1].length, y } });
+			found[0].activate(event({ ctrlKey: true }), url);
+			await vi.waitFor(() => expect(config.openExternal).toHaveBeenCalledTimes(y));
+		}
+		expect(config.openExternal).toHaveBeenLastCalledWith(url);
+		const stale = links(provider, 1)[0];
+		rows[1].chars = Array.from("    changed");
+		stale.activate(event({ ctrlKey: true }), url);
+		expect(config.openExternal).toHaveBeenCalledTimes(2);
+	});
+	it("keeps numeric paragraphs separate from root URLs and query/fragment slashes", () => {
+		for (const url of ["https://example.com/", "https://example.com/?path=/posts/", "https://example.com/#/posts/"]) {
+			const term = terminal([url, "2108092225381077459"].map(text => ({ chars: Array.from(`    ${text}`.padEnd(80)) })));
+			Object.assign(term, { cols: 80 });
+			Object.assign(term.modes, { mouseTrackingMode: "any" });
+			const provider = new TerminalLinks(term, options());
+			expect(links(provider, 1).map(link => link.text)).toEqual([url]);
+			expect(links(provider, 2)).toEqual([]);
 		}
 	});
 	it("keeps query strings, percent escapes and fragments across bullet/native wraps", () => {
@@ -458,10 +641,11 @@ describe("public xterm provider and activation", () => {
 	it("blocks partial first-row URLs when a recognized continuation exceeds either bound", () => {
 		for (const fragments of [
 			["https://example.com/", ...Array.from({ length: 32 }, () => "continued/")],
-			["https://example.com/", "x".repeat(4100)],
+			["https://example.com/", ...Array.from({ length: 21 }, () => "x".repeat(200))],
 		]) {
-			const term = terminal(fragments.map(fragment => ({ chars: Array.from(`    ${fragment}`.padEnd(25)) })));
-			Object.assign(term, { cols: 25 });
+			const cols = Math.max(25, ...fragments.map(fragment => fragment.length + 4));
+			const term = terminal(fragments.map(fragment => ({ chars: Array.from(`    ${fragment}`.padEnd(cols)) })));
+			Object.assign(term, { cols });
 			Object.assign(term.modes, { mouseTrackingMode: "any" });
 			expect(links(new TerminalLinks(term, options()), 1)).toEqual([]);
 		}
@@ -603,9 +787,10 @@ describe("public xterm provider and activation", () => {
 	});
 	it("never joins hard line breaks and resolves fresh contents after reset", () => {
 		const rows = [{ chars: Array.from("Notes/My ") }, { chars: Array.from("note.md") }];
-		const provider = new TerminalLinks(terminal(rows), options());
+		const term = terminal(rows), provider = new TerminalLinks(term, options());
 		expect(links(provider)).toEqual([]);
 		rows[0].chars = Array.from("Other.md");
+		bufferEvent(term);
 		expect(links(provider)[0].text).toBe("Other.md");
 		provider.dispose();
 		expect(links(provider)).toEqual([]);

@@ -5,8 +5,18 @@ on:
     tags:
       - '*'
 
+permissions:
+  contents: read
+
 jobs:
+  validate:
+    uses: ./.github/workflows/compatibility.yml
+    with:
+      commit: ${{ github.sha }}
+
   build:
+    needs: validate
+    if: ${{ needs.validate.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -14,6 +24,14 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify tagged commit
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: node -e "const cp=require('node:child_process'); if(cp.execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()!==process.env.EXPECTED_SHA)throw Error('Unexpected release checkout');"
 
       - name: Use Node.js
         uses: actions/setup-node@v4
