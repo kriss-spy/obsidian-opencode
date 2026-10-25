@@ -4,6 +4,37 @@ Unit tests cannot establish that an Obsidian plugin loads, registers commands, c
 
 It does not open, register, modify, or read any existing vault. `wdio-obsidian-service` stores downloaded Obsidian versions and temporary profiles under `.obsidian-cache/`.
 
+## Required CI and release checks
+
+`test.yml` and `release.yml` both call `compatibility.yml` from the same commit as their caller and pass an explicit commit SHA. Every platform checkout verifies that SHA. The shared workflow requires:
+
+- Source/manifest lint and the lint-report regression checks.
+- Linux, Windows, and macOS against Obsidian 1.12.7 and dynamically resolved latest stable, using the matching installer (and architecture selected by the runner).
+- Unit tests, typecheck/build, the complete isolated app suite, and a mandatory real OpenCode lifecycle on every matrix entry.
+- The real Windows #70 hover regression against pinned 1.14.5 and latest stable.
+
+The native OpenCode 2.1.4 package is extracted into a temporary directory and version-checked on each runner. The mandatory lifecycle uses a fresh standalone profile, opens the real home screen, moves focus away and reveals the terminal, types without submitting a model prompt, resizes the sidebar, closes the terminal, reopens it, and verifies that the captured PTY/OpenCode process trees exit. It is separate from the older opt-in real-CLI suites, which remain available for deeper platform-specific interaction checks.
+
+Run that same mandatory lifecycle locally with:
+
+```sh
+npm run ci:install-opencode
+# The installer prints the temporary executable path. It exports the path
+# automatically through GITHUB_ENV in CI; set OPENCODE_REAL_EXECUTABLE locally
+# if the pinned binary should be used instead of opencode from PATH.
+npm run test:obsidian:real
+```
+
+`wdio.real.conf.mts` selects only the mandatory spec and forbids pending/zero-test runs. The runner clears old completion evidence before starting, propagates app-run failures, then requires a fresh completion record for the actual OS and (in CI) expected commit with all six lifecycle checks. `npm run test:ci` tests missing/stale evidence, failed app runs, incorrect platform/commit, missing cleanup coverage, and successful completion. The dedicated Windows hover configuration also rejects skipped/zero-test runs.
+
+The shared final gate runs even after upstream failure and rejects failed, skipped, or cancelled jobs. PR CI exposes a stable **Required compatibility** check, including merge-queue events. After reviewing/pushing these local changes, repository branch protection must require that check and prevent bypass if merges should be blocked; workflow files alone do not configure GitHub branch protection. No repository settings were changed as part of this local preparation.
+
+On a release tag, the full shared workflow runs again on the tagged commit. The publishing job depends on its success, checks out that same SHA, verifies tag/version/asset identity, and only then builds and publishes. It does not accept a green result from a previous branch commit. Failed, cancelled, or skipped platform validation prevents publishing.
+
+For new features, keep shared behavior in the normal app suite so every OS matrix entry exercises it, adapting modifiers and paths to the platform. A Linux-only test does not establish Windows/macOS behavior. Add native-specific requirements to explicit CI jobs; an optional manual suite is additional evidence, not a substitute for mandatory release checks.
+
+macOS CI adds automated compatibility coverage while macOS support remains experimental. Native IME interaction, ARM64 variants not selected by the hosted runner, and a Windows 11 desktop still need targeted checks where relevant. Local Linux passes do not establish Windows/macOS passes.
+
 ## Run
 
 ```bash
@@ -25,6 +56,33 @@ npm run test:obsidian:windows-ui
 ```
 
 This suite requires `opencode` and Node.js on `PATH` and is not part of CI because it uses the developer's real OpenCode configuration.
+
+The separate #70 regression runs in the `windows-terminal-links` CI matrix with real OpenCode **2.1.4**, ConPTY, and both pinned Obsidian **1.14.5** and **latest stable**. The general Linux/Windows/macOS app suites run against both the established **1.12.7** baseline and **latest stable**. `latest` resolves the public app and its newest compatible installer on each run; the pinned regression remains useful when latest advances. It extracts the pinned official Windows binary into the runner's temporary directory and uses a fresh standalone OpenCode profile. To run it locally on Windows:
+
+```powershell
+$env:OBSIDIAN_VERSION = "1.14.5"
+$env:OBSIDIAN_INSTALLER_VERSION = "1.14.5"
+# Optional: absolute path to the real OpenCode binary; otherwise resolves opencode.
+$env:OPENCODE_WINDOWS_EXECUTABLE = "C:\path\to\opencode.exe"
+npm run test:obsidian:windows-links
+```
+
+It opens the real home screen, resizes ConPTY through several widths and back to 109 × 81, then sends trusted pointer moves across eight rows with a keyboard event in the same WebDriver action batch. It requires a native wrapped block of at least 64 rows at hover time; failure to reproduce that state fails the test explicitly rather than reporting an unexercised regression as green. The test never fabricates wrap flags, substitutes a fake provider, or submits a model request. Instrumentation wraps the production provider only to record timings.
+
+Assertions require provider calls on at least four distinct rows, each below 200 ms, renderer timer gaps below 500 ms, keyboard-to-render latency below one second, and the entire pointer/input sequence below three seconds. Timing and buffer JSON plus a screenshot are uploaded even on assertion failure. The buffer artifact includes wrap flags so failures can distinguish missing repro conditions from slow hover processing. GitHub's Windows runner supplies native ConPTY, but is not the reporter's Windows 11 desktop; a local Windows 11 run remains useful. This test has been added locally but has not yet been executed on Windows.
+
+### Early-access testing on a Catalyst machine
+
+Use an already downloaded early-access app bundle in a new isolated test profile. No Catalyst password or account session needs to be copied into CI. On Windows, set the exact app version and path before running the same real ConPTY regression:
+
+```powershell
+$env:OBSIDIAN_VERSION = "1.15.0"
+$env:OBSIDIAN_INSTALLER_VERSION = "latest"
+$env:OBSIDIAN_APP_PATH = "$env:APPDATA\obsidian\obsidian-1.15.0.asar"
+npm run test:obsidian:windows-links
+```
+
+If using a custom executable, set `OBSIDIAN_BINARY_PATH` to it and `OBSIDIAN_INSTALLER_VERSION` to its actual installer version so the launcher selects the matching ChromeDriver. The app version and installer version can differ after Obsidian auto-updates. The runner copies the test vault and launches a separate profile; it does not install the candidate in your working vault or alter the running app. On Linux/macOS the local early-access bundle can run the link app suite (`npm run test:obsidian -- --spec ./test/specs/terminal-links.e2e.ts`) and real CLI compatibility tests, but cannot establish a native Windows/ConPTY pass.
 
 On WSL2 with X410 running, use the dedicated suite:
 
@@ -315,3 +373,22 @@ Updated artifact hash: `main.js` SHA-256 `1b0d4ef361b55ec904a918dee0c39e7c9cb9ca
 ## 2.3.1 preparation (2026-10-06)
 
 The Linux app suite passed 62 cases across eight spec files on isolated Obsidian 1.12.7 with real OpenCode 2.0.22. A new focused case additionally exercises the production lazy Electron loader and correct shell receiver, intercepting only the external browser side effect. Unit coverage includes C0/DEL rejection and timer ownership across windows. See [the 2.3.1 checklist](releases/2.3.1-checks.md) for exact checks, security resolutions, and platform limitations; no release or user-vault installation occurred.
+
+## #70 version coverage follow-up (2026-10-25)
+
+- CI now keeps the established Obsidian 1.12.7 app baseline and adds dynamically resolved latest stable on Linux, Windows, and macOS. The real Windows ConPTY regression runs against both pinned 1.14.5 and latest stable, with the newest compatible installer for each entry.
+- Local early-access compatibility passed 32 app tests on Obsidian 1.15.0 with installer 1.14.5 (Electron 43.8.3), on Linux: all 31 terminal-link cases and the installed real OpenCode 2.0.26 input/focus/Ctrl+Z responsiveness case. The app bundle came from this machine's existing Catalyst installation and was loaded in a separate runner profile with a copied test vault. No account credentials were copied and the working app/vault were not modified.
+- The same 32 focused app tests also passed with `OBSIDIAN_VERSION=latest` and `OBSIDIAN_INSTALLER_VERSION=latest`, resolving to app/installer 1.14.5. Both version runs were serialized under `/tmp/obsidian-opencode-real-app.lock`, with fresh test profiles and standalone CLI data.
+- This is focused Linux compatibility coverage. The Windows hover regression still needs a native ConPTY run after booting the dual-boot machine into Windows; the Linux result does not establish that result.
+
+## CI hardening local verification (2026-10-25)
+
+- Actionlint 1.7.12 accepts all three workflow files, including the reusable workflow's inputs and release dependency. Typecheck and production build pass; source/manifest review reports zero errors or warnings, and its report regression checks pass.
+- Unit suite: 349 passed, 5 platform-only skipped. All six CI-runner contract tests passed, exercising stale/missing evidence, a failing app run despite a completion file, incorrect platform/commit, incomplete lifecycle coverage, and successful completion.
+- With the pinned real OpenCode 2.1.4 native binary, the mandatory lifecycle passed on Linux with Obsidian/installer 1.12.7 and latest stable (resolved to 1.14.5). A further run with an exact expected commit SHA and a deliberately nonmatching `OBSIDIAN_TEST_GREP` also passed: the dedicated mandatory configuration ignores the optional suite filter and checks fresh commit-bound completion evidence.
+- Full latest-stable Linux app suite: 63 passed, 12 expected platform-specific/legacy opt-in skips across ten spec files. Those optional skips do not replace the separate mandatory real-CLI run, which passed with no skips. All GUI runs were serialized under the shared lock and used isolated vaults/profiles.
+- Windows/macOS jobs and the GitHub-hosted release dependency have not been executed locally. No push, workflow dispatch, tag, publication, or branch-protection change was performed. The prepared workflow blocks publication until those platform jobs actually pass on the tagged commit.
+
+## 2.3.2-beta.1 candidate scope
+
+The prerelease candidate is assembled in an isolated checkout from a5e889b. It includes #70 and CI hardening, while excluding the pre-existing terminal-maximize and numeric URL continuation work in the shared working tree. Its local unit count is therefore 345 passing (5 platform-only skipped); all six runner checks, build/typecheck, workflow lint, and review-script regression checks pass. The initial shared-working-tree counts above include those separate pending changes. The prerelease manifest exception is explicit, matches the exact tag, and leaves default stable/public manifest validation strict. Publication still requires the full cross-platform tagged-commit gate.

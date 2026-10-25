@@ -76,8 +76,17 @@ fi
 
 # ── version rules ─────────────────────────────────────────────────────
 version=$(jq -r '.version // ""' "$MANIFEST")
-if [ -n "$version" ] && ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  emit "Error" "version" "version: must match x.y.z (semver, no prefix, no pre-release tags)"
+valid_version=0
+if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  valid_version=1
+elif [ "$version" = "${PLUGIN_REVIEW_PRERELEASE_VERSION:-}" ] && \
+     [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*$ ]]; then
+  # Explicit private/BRAT prereleases may use a suffix matching their tag.
+  # The public submission check remains strict by default.
+  valid_version=1
+fi
+if [ -n "$version" ] && [ "$valid_version" -ne 1 ]; then
+  emit "Error" "version" "version: must match x.y.z, or an explicitly matching prerelease tag"
   errors=$((errors + 1))
 fi
 

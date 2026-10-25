@@ -20457,6 +20457,45 @@ function logicalLine(terminal, y) {
   }
   return result;
 }
+var LogicalLineCache = class {
+  constructor(terminal) {
+    this.terminal = terminal;
+    this.firstRows = /* @__PURE__ */ new Map();
+    this.lastRows = /* @__PURE__ */ new Map();
+    this.lines = /* @__PURE__ */ new Map();
+  }
+  invalidate() {
+    this.buffer = this.terminal.buffer.active;
+    this.firstRows.clear();
+    this.lastRows.clear();
+    this.lines.clear();
+  }
+  read(y, maxRows = 129) {
+    var _a, _b, _c, _d, _e;
+    if (this.buffer !== this.terminal.buffer.active) this.invalidate();
+    const buffer = this.terminal.buffer.active, row = y - 1;
+    if (!buffer.getLine(row)) return null;
+    let first = this.firstRows.get(row);
+    if (first === void 0) {
+      first = row;
+      while (first > 0 && ((_a = buffer.getLine(first)) == null ? void 0 : _a.isWrapped)) {
+        const known = this.firstRows.get(first);
+        if (known !== void 0) {
+          first = known;
+          break;
+        }
+        first--;
+      }
+      let last = (_b = this.lastRows.get(first)) != null ? _b : first;
+      while (last + 1 < buffer.length && ((_c = buffer.getLine(last + 1)) == null ? void 0 : _c.isWrapped)) last++;
+      for (let index = first; index <= last; index++) this.firstRows.set(index, first);
+      this.lastRows.set(first, last);
+    }
+    if (((_d = this.lastRows.get(first)) != null ? _d : first) - first + 1 > maxRows) return null;
+    if (!this.lines.has(first)) this.lines.set(first, logicalLine(this.terminal, first + 1));
+    return (_e = this.lines.get(first)) != null ? _e : null;
+  }
+};
 function appendNoteFragments(candidates, fragment) {
   return candidates.flatMap((candidate) => (/[\\/]$/.test(candidate.text) ? [""] : [" ", ""]).map((separator) => ({
     text: candidate.text + separator + fragment.text,
@@ -20488,11 +20527,11 @@ function tableRow(line) {
     rightEdges: borders.slice(1).map((index) => line.starts[index].x)
   };
 }
-function tableRecordEvidence(terminal, first, table, limit) {
+function tableRecordEvidence(first, table, limit, read) {
   var _a, _b;
   const evidence = [];
   for (let row = first - 1; row >= Math.max(1, first - limit); row--) {
-    const line = logicalLine(terminal, row);
+    const line = read(row);
     if (!line || ((_a = line.starts[0]) == null ? void 0 : _a.y) !== row) return null;
     evidence.push({ y: row, text: line.text });
     const start = line.starts.findIndex((cell) => cell.x === table.leftEdge);
@@ -20513,23 +20552,23 @@ function tableRecordEvidence(terminal, first, table, limit) {
 function peerRecordBoundary(next, column, separated) {
   return next.cells.some((peer, index) => index !== column && Boolean(peer.text) && (!separated || index < column && /^\d+$/.test(peer.text)));
 }
-function wrappedTableWebLinks(terminal, y) {
+function wrappedTableWebLinks(terminal, y, read) {
   var _a, _b, _c;
   if (terminal.modes.mouseTrackingMode === "none") return [];
   const result = [];
   for (let first = Math.max(1, y - 31); first <= y; first++) {
-    const initial = logicalLine(terminal, first);
+    const initial = read(first);
     const table = initial && tableRow(initial);
     if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first || !table) continue;
     for (let column = 0; column < table.cells.length; column++) {
       let line = table.cells[column];
       if (!/^https?:\/\/[^\s<>"'`]*$/i.test(line.text) || line.text.length > 4096) continue;
-      const separated = tableRecordEvidence(terminal, first, table, 32);
+      const separated = tableRecordEvidence(first, table, 32, read);
       const sources = [{ y: first, text: initial.text }];
       const ranges = [{ start: line.starts[0], end: line.ends[line.ends.length - 1] }];
       let bounded = true, row = first + 1;
       for (; row <= terminal.buffer.active.length; row++) {
-        const next = logicalLine(terminal, row);
+        const next = read(row);
         const nextTable = next && tableRow(next);
         if (!next || ((_b = next.starts[0]) == null ? void 0 : _b.y) !== row || !nextTable || nextTable.borders !== table.borders || peerRecordBoundary(nextTable, column, Boolean(separated))) break;
         const fragment = nextTable.cells[column];
@@ -20546,7 +20585,7 @@ function wrappedTableWebLinks(terminal, y) {
         sources.push({ y: row, text: next.text });
       }
       if (line.ends[line.ends.length - 1].y < y || bounded && !safeWebUrl(line.text)) continue;
-      const following = (_c = logicalLine(terminal, row)) == null ? void 0 : _c.text;
+      const following = (_c = read(row)) == null ? void 0 : _c.text;
       result.push({
         line,
         exactWeb: true,
@@ -20557,29 +20596,29 @@ function wrappedTableWebLinks(terminal, y) {
           var _a2;
           return (!separated || separated.every((source) => {
             var _a3;
-            return ((_a3 = logicalLine(terminal, source.y)) == null ? void 0 : _a3.text) === source.text;
+            return ((_a3 = read(source.y)) == null ? void 0 : _a3.text) === source.text;
           })) && sources.every((source) => {
             var _a3;
-            return ((_a3 = logicalLine(terminal, source.y)) == null ? void 0 : _a3.text) === source.text;
-          }) && ((_a2 = logicalLine(terminal, row)) == null ? void 0 : _a2.text) === following;
+            return ((_a3 = read(source.y)) == null ? void 0 : _a3.text) === source.text;
+          }) && ((_a2 = read(row)) == null ? void 0 : _a2.text) === following;
         }
       });
     }
   }
   return result;
 }
-function wrappedTableNotes(terminal, y) {
+function wrappedTableNotes(terminal, y, read) {
   var _a, _b;
   if (terminal.modes.mouseTrackingMode === "none") return [];
   const result = [];
   for (let first = Math.max(1, y - 7); first <= y; first++) {
-    const initial = logicalLine(terminal, first);
+    const initial = read(first);
     const table = initial && tableRow(initial);
     if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first || !table) continue;
     for (let column = 0; column < table.cells.length; column++) {
       const cell = table.cells[column];
       if (!cell.text || cell.text.length > 4096) continue;
-      const separated = tableRecordEvidence(terminal, first, table, 8);
+      const separated = tableRecordEvidence(first, table, 8, read);
       const ranges = [{ start: cell.starts[0], end: cell.ends[cell.ends.length - 1] }];
       result.push({
         line: cell,
@@ -20587,13 +20626,13 @@ function wrappedTableNotes(terminal, y) {
         suffixes: ranges.slice(),
         current: () => {
           var _a2;
-          return ((_a2 = logicalLine(terminal, first)) == null ? void 0 : _a2.text) === initial.text;
+          return ((_a2 = read(first)) == null ? void 0 : _a2.text) === initial.text;
         }
       });
       let candidates = [cell];
       const sources = [{ y: first, text: initial.text }];
       for (let row = first + 1; row < first + 8; row++) {
-        const next = logicalLine(terminal, row);
+        const next = read(row);
         const nextTable = next && tableRow(next);
         if (!next || ((_b = next.starts[0]) == null ? void 0 : _b.y) !== row || !nextTable || nextTable.borders !== table.borders || peerRecordBoundary(nextTable, column, Boolean(separated)) || !nextTable.cells[column].text) break;
         if (candidates.every((candidate) => /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?[`"')\]]+$/i.test(candidate.text))) break;
@@ -20612,10 +20651,10 @@ function wrappedTableNotes(terminal, y) {
           suffixes: ranges.slice(),
           current: () => (!separated || separated.every((source) => {
             var _a2;
-            return ((_a2 = logicalLine(terminal, source.y)) == null ? void 0 : _a2.text) === source.text;
+            return ((_a2 = read(source.y)) == null ? void 0 : _a2.text) === source.text;
           })) && snapshot.every((source) => {
             var _a2;
-            return ((_a2 = logicalLine(terminal, source.y)) == null ? void 0 : _a2.text) === source.text;
+            return ((_a2 = read(source.y)) == null ? void 0 : _a2.text) === source.text;
           })
         });
       }
@@ -20623,13 +20662,13 @@ function wrappedTableNotes(terminal, y) {
   }
   return result;
 }
-function wrappedWebLines(terminal, y) {
+function wrappedWebLines(terminal, y, read) {
   var _a, _b, _c, _d, _e;
   if (terminal.modes.mouseTrackingMode === "none") return [];
   const result = [];
   const content = (text) => text.replace(/ +[█▄▀▐▌┃│] *$/, "").trimEnd();
   for (let first = Math.max(1, y - 31); first <= y; first++) {
-    const initial = logicalLine(terminal, first);
+    const initial = read(first);
     if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first || tableRow(initial)) continue;
     const indent = (_b = /^(?: +[┃│] {2,}| {2,}(?:[-*•] )?)/.exec(initial.text)) == null ? void 0 : _b[0];
     if (!indent) continue;
@@ -20642,7 +20681,7 @@ function wrappedWebLines(terminal, y) {
     while (row <= terminal.buffer.active.length) {
       const end = line.ends[line.ends.length - 1];
       if (terminal.cols - end.x > 6 && !/[/.%?=&_-]$/.test(line.text)) break;
-      const next = logicalLine(terminal, row);
+      const next = read(row);
       if (!next || ((_c = next.starts[0]) == null ? void 0 : _c.y) !== row) break;
       const prefix = indent.includes("\u2503") || indent.includes("\u2502") ? indent : " ".repeat(indent.length);
       const text = content(next.text);
@@ -20663,7 +20702,7 @@ function wrappedWebLines(terminal, y) {
       row = next.ends[next.ends.length - 1].y + 1;
     }
     if (bounded && (sources.length < 2 || line.ends[line.ends.length - 1].y < y || !safeWebUrl(line.text))) continue;
-    const following = (_e = logicalLine(terminal, row)) == null ? void 0 : _e.text;
+    const following = (_e = read(row)) == null ? void 0 : _e.text;
     result.push({
       line,
       continuation: "web",
@@ -20673,25 +20712,25 @@ function wrappedWebLines(terminal, y) {
         var _a2;
         return sources.every((source) => {
           var _a3;
-          return ((_a3 = logicalLine(terminal, source.y)) == null ? void 0 : _a3.text) === source.text;
-        }) && ((_a2 = logicalLine(terminal, row)) == null ? void 0 : _a2.text) === following;
+          return ((_a3 = read(source.y)) == null ? void 0 : _a3.text) === source.text;
+        }) && ((_a2 = read(row)) == null ? void 0 : _a2.text) === following;
       }
     });
   }
   return result;
 }
-function linkLines(terminal, y) {
+function linkLines(terminal, y, read, ordinaryRead) {
   var _a, _b, _c, _d;
-  const normal = logicalLine(terminal, y);
+  const normal = ordinaryRead(y);
   if (!normal) return [];
   const ordinary = { line: normal, current: () => {
     var _a2;
-    return ((_a2 = logicalLine(terminal, y)) == null ? void 0 : _a2.text) === normal.text;
+    return ((_a2 = ordinaryRead(y)) == null ? void 0 : _a2.text) === normal.text;
   } };
   const result = [];
   if (terminal.modes.mouseTrackingMode === "none") return [ordinary];
   for (let first = Math.max(1, y - 7); first <= y; first++) {
-    const initial = logicalLine(terminal, first);
+    const initial = read(first);
     if (!initial || ((_a = initial.starts[0]) == null ? void 0 : _a.y) !== first) continue;
     const indent = (_b = /^ {2,}(?:[-*•] )?/.exec(initial.text)) == null ? void 0 : _b[0].length;
     if (!indent) continue;
@@ -20704,7 +20743,7 @@ function linkLines(terminal, y) {
     const pathPrefix = /[\\/]/.test(candidates[0].text) && !/\.md(?:[:\s`"')]|$)/i.test(candidates[0].text);
     let continuationStart;
     for (let row = initial.ends[initial.ends.length - 1].y + 1; row < first + 8; ) {
-      const next = logicalLine(terminal, row);
+      const next = read(row);
       if (!next || ((_c = next.starts[0]) == null ? void 0 : _c.y) !== row || !next.text.startsWith(" ".repeat(indent)) || /\s/.test((_d = next.text[indent]) != null ? _d : " ")) break;
       const end = next.text.trimEnd().length;
       const fragment = { text: next.text.slice(indent, end), starts: next.starts.slice(indent, end), ends: next.ends.slice(indent, end) };
@@ -20718,7 +20757,7 @@ function linkLines(terminal, y) {
       const snapshot = sources.slice();
       const current = () => snapshot.every((source) => {
         var _a2;
-        return ((_a2 = logicalLine(terminal, source.y)) == null ? void 0 : _a2.text) === source.text;
+        return ((_a2 = read(source.y)) == null ? void 0 : _a2.text) === source.text;
       });
       for (const candidate of candidates) {
         const noteEnd = pathPrefix ? /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/i.exec(candidate.text) : null;
@@ -20742,6 +20781,15 @@ var TerminalLinks = class {
     this.pressed = null;
     this.cleanups = [];
     this.underlines = [];
+    this.logicalLines = new LogicalLineCache(terminal);
+    const invalidate = () => this.logicalLines.invalidate();
+    const subscriptions = [
+      terminal.onWriteParsed(invalidate),
+      terminal.onResize(invalidate),
+      terminal.onScroll(invalidate),
+      terminal.buffer.onBufferChange(invalidate)
+    ];
+    this.cleanups.push(() => subscriptions.forEach((subscription) => subscription.dispose()));
   }
   clearUnderlines() {
     for (const element of this.underlines) element.remove();
@@ -20772,7 +20820,13 @@ var TerminalLinks = class {
     }
     const seen = /* @__PURE__ */ new Set();
     const noteCache = /* @__PURE__ */ new Map();
-    const lines = [...wrappedTableWebLinks(this.terminal, y), ...wrappedWebLines(this.terminal, y), ...wrappedTableNotes(this.terminal, y), ...linkLines(this.terminal, y)];
+    const read = (row) => this.logicalLines.read(row, 8);
+    const lines = [
+      ...wrappedTableWebLinks(this.terminal, y, read),
+      ...wrappedWebLines(this.terminal, y, read),
+      ...wrappedTableNotes(this.terminal, y, read),
+      ...linkLines(this.terminal, y, read, (row) => this.logicalLines.read(row))
+    ];
     const suffixes = lines.flatMap((line) => {
       var _a;
       if (line.exactNote && !line.continuation && !indexedNote(line.line.text, this.options, noteCache)) return [];
@@ -20811,7 +20865,10 @@ var TerminalLinks = class {
         const cols = this.terminal.cols;
         const viewportY = this.terminal.buffer.active.viewportY;
         const buffer = this.terminal.buffer.active;
-        const valid = () => !released && !this.disposed && this.terminal.cols === cols && this.terminal.buffer.active === buffer && buffer.viewportY === viewportY && current();
+        const valid = () => {
+          this.logicalLines.invalidate();
+          return !released && !this.disposed && this.terminal.cols === cols && this.terminal.buffer.active === buffer && buffer.viewportY === viewportY && current();
+        };
         const link = {
           text: match.text,
           range,
@@ -20858,7 +20915,7 @@ var TerminalLinks = class {
     if (this.terminal.modes.mouseTrackingMode !== "none" && !this.options.isModEvent(event)) return;
     const revision = this.revision;
     const hoveredRow = ((_b = this.hovered) == null ? void 0 : _b.text) === text ? this.hovered.range.start.y : void 0;
-    const snapshot = hoveredRow ? (_c = logicalLine(this.terminal, hoveredRow)) == null ? void 0 : _c.text : void 0;
+    const snapshot = hoveredRow ? (_c = this.logicalLines.read(hoveredRow)) == null ? void 0 : _c.text : void 0;
     try {
       const url = safeWebUrl(text);
       if (url) {
@@ -20873,7 +20930,8 @@ var TerminalLinks = class {
         realpath(this.options.vaultRoot),
         realpath(api.join(this.options.vaultRoot, note.path))
       ]);
-      if (this.disposed || revision !== this.revision || hoveredRow && snapshot !== ((_e = logicalLine(this.terminal, hoveredRow)) == null ? void 0 : _e.text) || !containedRelative(root, file) || !this.options.hasNote(note.path)) return;
+      this.logicalLines.invalidate();
+      if (this.disposed || revision !== this.revision || hoveredRow && snapshot !== ((_e = this.logicalLines.read(hoveredRow)) == null ? void 0 : _e.text) || !containedRelative(root, file) || !this.options.hasNote(note.path)) return;
       await this.options.openNote(note, event);
     } catch (error) {
       if (!this.disposed) this.options.onError(error);
@@ -20971,6 +21029,7 @@ var TerminalLinks = class {
       if (pressed.modified) this.pressed = null;
     };
     const clear = () => {
+      this.logicalLines.invalidate();
       this.revision++;
       this.hovered = null;
       this.pressed = null;
@@ -20985,6 +21044,7 @@ var TerminalLinks = class {
     const scroll = this.terminal.onScroll(clear);
     const write = this.terminal.onWriteParsed(() => {
       var _a;
+      this.logicalLines.invalidate();
       this.revision++;
       if (this.hovered && ((_a = this.validations.get(this.hovered)) == null ? void 0 : _a()) === false) {
         this.hovered = null;
@@ -21004,6 +21064,7 @@ var TerminalLinks = class {
   }
   dispose() {
     if (this.disposed) return;
+    this.logicalLines.invalidate();
     this.disposed = true;
     this.capturedPrimaryPress = false;
     this.suppressClickActivation = false;
@@ -21155,7 +21216,7 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // manifest.json
-var version = "2.3.1";
+var version = "2.3.2-beta.1";
 
 // src/editorServer.ts
 var fs2 = __toESM(require("fs"));

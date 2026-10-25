@@ -181,6 +181,49 @@ function logicalLine(terminal: Terminal, y: number): LogicalLine | null {
 	return result;
 }
 
+type LineReader = (y: number) => LogicalLine | null;
+
+/** Cell maps belong to one buffer snapshot, shared by all hover scanners. */
+class LogicalLineCache {
+	private buffer: Terminal["buffer"]["active"] | undefined;
+	private firstRows = new Map<number, number>();
+	private lastRows = new Map<number, number>();
+	private lines = new Map<number, LogicalLine | null>();
+
+	constructor(private terminal: Terminal) {}
+
+	invalidate(): void {
+		this.buffer = this.terminal.buffer.active;
+		this.firstRows.clear();
+		this.lastRows.clear();
+		this.lines.clear();
+	}
+
+	read(y: number, maxRows = 129): LogicalLine | null {
+		if (this.buffer !== this.terminal.buffer.active) this.invalidate();
+		const buffer = this.terminal.buffer.active, row = y - 1;
+		if (!buffer.getLine(row)) return null;
+		let first = this.firstRows.get(row);
+		if (first === undefined) {
+			first = row;
+			while (first > 0 && buffer.getLine(first)?.isWrapped) {
+				const known = this.firstRows.get(first);
+				if (known !== undefined) { first = known; break; }
+				first--;
+			}
+			let last = this.lastRows.get(first) ?? first;
+			while (last + 1 < buffer.length && buffer.getLine(last + 1)?.isWrapped) last++;
+			for (let index = first; index <= last; index++) this.firstRows.set(index, first);
+			this.lastRows.set(first, last);
+		}
+		// Reject oversized TUI candidates before allocating per-character maps.
+		// Ordinary native wraps retain the existing 129-row/16 KiB limits.
+		if ((this.lastRows.get(first) ?? first) - first + 1 > maxRows) return null;
+		if (!this.lines.has(first)) this.lines.set(first, logicalLine(this.terminal, first + 1));
+		return this.lines.get(first) ?? null;
+	}
+}
+
 interface LinkLine {
 	line: LogicalLine;
 	current: () => boolean;
@@ -225,10 +268,10 @@ function tableRow(line: LogicalLine): TableRow | null {
 }
 
 /** A physical separator defines a record even when all its columns wrap. */
-function tableRecordEvidence(terminal: Terminal, first: number, table: TableRow, limit: number): Array<{ y: number; text: string }> | null {
+function tableRecordEvidence(first: number, table: TableRow, limit: number, read: LineReader): Array<{ y: number; text: string }> | null {
 	const evidence: Array<{ y: number; text: string }> = [];
 	for (let row = first - 1; row >= Math.max(1, first - limit); row--) {
-		const line = logicalLine(terminal, row);
+		const line = read(row);
 		if (!line || line.starts[0]?.y !== row) return null;
 		evidence.push({ y: row, text: line.text });
 		const start = line.starts.findIndex(cell => cell.x === table.leftEdge);
@@ -251,22 +294,22 @@ function peerRecordBoundary(next: TableRow, column: number, separated: boolean):
 }
 
 /** Join URL tokens within the same bordered cell, keeping every URL byte. */
-function wrappedTableWebLinks(terminal: Terminal, y: number): LinkLine[] {
+function wrappedTableWebLinks(terminal: Terminal, y: number, read: LineReader): LinkLine[] {
 	if (terminal.modes.mouseTrackingMode === "none") return [];
 	const result: LinkLine[] = [];
 	for (let first = Math.max(1, y - 31); first <= y; first++) {
-		const initial = logicalLine(terminal, first);
+		const initial = read(first);
 		const table = initial && tableRow(initial);
 		if (!initial || initial.starts[0]?.y !== first || !table) continue;
 		for (let column = 0; column < table.cells.length; column++) {
 			let line = table.cells[column];
 			if (!/^https?:\/\/[^\s<>"'`]*$/i.test(line.text) || line.text.length > 4096) continue;
-			const separated = tableRecordEvidence(terminal, first, table, 32);
+			const separated = tableRecordEvidence(first, table, 32, read);
 			const sources = [{ y: first, text: initial.text }];
 			const ranges = [{ start: line.starts[0], end: line.ends[line.ends.length - 1] }];
 			let bounded = true, row = first + 1;
 			for (; row <= terminal.buffer.active.length; row++) {
-				const next = logicalLine(terminal, row);
+				const next = read(row);
 				const nextTable = next && tableRow(next);
 				if (!next || next.starts[0]?.y !== row || !nextTable || nextTable.borders !== table.borders ||
 					peerRecordBoundary(nextTable, column, Boolean(separated))) break;
@@ -282,35 +325,35 @@ function wrappedTableWebLinks(terminal: Terminal, y: number): LinkLine[] {
 				sources.push({ y: row, text: next.text });
 			}
 			if (line.ends[line.ends.length - 1].y < y || (bounded && !safeWebUrl(line.text))) continue;
-			const following = logicalLine(terminal, row)?.text;
+			const following = read(row)?.text;
 			result.push({ line, exactWeb: true, continuation: sources.length > 1 || !bounded ? "web" : undefined,
 				blocked: !bounded, suffixes: ranges,
-				current: () => (!separated || separated.every(source => logicalLine(terminal, source.y)?.text === source.text)) &&
-					sources.every(source => logicalLine(terminal, source.y)?.text === source.text) && logicalLine(terminal, row)?.text === following });
+				current: () => (!separated || separated.every(source => read(source.y)?.text === source.text)) &&
+					sources.every(source => read(source.y)?.text === source.text) && read(row)?.text === following });
 		}
 	}
 	return result;
 }
 
 /** Reconnect one bordered cell, never across record or column boundaries. */
-function wrappedTableNotes(terminal: Terminal, y: number): LinkLine[] {
+function wrappedTableNotes(terminal: Terminal, y: number, read: LineReader): LinkLine[] {
 	if (terminal.modes.mouseTrackingMode === "none") return [];
 	const result: LinkLine[] = [];
 	for (let first = Math.max(1, y - 7); first <= y; first++) {
-		const initial = logicalLine(terminal, first);
+		const initial = read(first);
 		const table = initial && tableRow(initial);
 		if (!initial || initial.starts[0]?.y !== first || !table) continue;
 		for (let column = 0; column < table.cells.length; column++) {
 			const cell = table.cells[column];
 			if (!cell.text || cell.text.length > 4096) continue;
-			const separated = tableRecordEvidence(terminal, first, table, 8);
+			const separated = tableRecordEvidence(first, table, 8, read);
 			const ranges = [{ start: cell.starts[0], end: cell.ends[cell.ends.length - 1] }];
 			result.push({ line: cell, exactNote: true, suffixes: ranges.slice(),
-				current: () => logicalLine(terminal, first)?.text === initial.text });
+				current: () => read(first)?.text === initial.text });
 			let candidates = [cell];
 			const sources = [{ y: first, text: initial.text }];
 			for (let row = first + 1; row < first + 8; row++) {
-				const next = logicalLine(terminal, row);
+				const next = read(row);
 				const nextTable = next && tableRow(next);
 				if (!next || next.starts[0]?.y !== row || !nextTable || nextTable.borders !== table.borders ||
 					peerRecordBoundary(nextTable, column, Boolean(separated)) || !nextTable.cells[column].text) break;
@@ -326,8 +369,8 @@ function wrappedTableNotes(terminal: Terminal, y: number): LinkLine[] {
 				const snapshot = sources.slice();
 				for (const candidate of candidates) result.push({ line: candidate, continuation: "note", exactNote: true,
 					suffixes: ranges.slice(),
-					current: () => (!separated || separated.every(source => logicalLine(terminal, source.y)?.text === source.text)) &&
-						snapshot.every(source => logicalLine(terminal, source.y)?.text === source.text) });
+					current: () => (!separated || separated.every(source => read(source.y)?.text === source.text)) &&
+						snapshot.every(source => read(source.y)?.text === source.text) });
 			}
 		}
 	}
@@ -335,12 +378,12 @@ function wrappedTableNotes(terminal: Terminal, y: number): LinkLine[] {
 }
 
 /** Join URL tokens only within a bounded, consistently indented TUI wrap. */
-function wrappedWebLines(terminal: Terminal, y: number): LinkLine[] {
+function wrappedWebLines(terminal: Terminal, y: number, read: LineReader): LinkLine[] {
 	if (terminal.modes.mouseTrackingMode === "none") return [];
 	const result: LinkLine[] = [];
 	const content = (text: string) => text.replace(/ +[█▄▀▐▌┃│] *$/, "").trimEnd();
 	for (let first = Math.max(1, y - 31); first <= y; first++) {
-		const initial = logicalLine(terminal, first);
+		const initial = read(first);
 		if (!initial || initial.starts[0]?.y !== first || tableRow(initial)) continue;
 		const indent = /^(?: +[┃│] {2,}| {2,}(?:[-*•] )?)/.exec(initial.text)?.[0];
 		if (!indent) continue;
@@ -355,7 +398,7 @@ function wrappedWebLines(terminal: Terminal, y: number): LinkLine[] {
 			// OpenCode leaves a small right margin or wraps at URL separators.
 			// A short completed URL must not consume a following paragraph.
 			if (terminal.cols - end.x > 6 && !/[/.%?=&_-]$/.test(line.text)) break;
-			const next = logicalLine(terminal, row);
+			const next = read(row);
 			if (!next || next.starts[0]?.y !== row) break;
 			const prefix = indent.includes("┃") || indent.includes("│") ? indent : " ".repeat(indent.length);
 			const text = content(next.text);
@@ -372,25 +415,25 @@ function wrappedWebLines(terminal: Terminal, y: number): LinkLine[] {
 			row = next.ends[next.ends.length - 1].y + 1;
 		}
 		if (bounded && (sources.length < 2 || line.ends[line.ends.length - 1].y < y || !safeWebUrl(line.text))) continue;
-		const following = logicalLine(terminal, row)?.text;
+		const following = read(row)?.text;
 		result.push({ line, continuation: "web", blocked: !bounded, suffix: { start: line.starts[0], end: line.ends[line.ends.length - 1] },
-			current: () => sources.every(source => logicalLine(terminal, source.y)?.text === source.text) && logicalLine(terminal, row)?.text === following });
+			current: () => sources.every(source => read(source.y)?.text === source.text) && read(row)?.text === following });
 	}
 	return result;
 }
 
 /** OpenCode lays out indented paragraphs itself, without xterm's wrap flag. */
-function linkLines(terminal: Terminal, y: number): LinkLine[] {
-	const normal = logicalLine(terminal, y);
+function linkLines(terminal: Terminal, y: number, read: LineReader, ordinaryRead: LineReader): LinkLine[] {
+	const normal = ordinaryRead(y);
 	if (!normal) return [];
-	const ordinary: LinkLine = { line: normal, current: () => logicalLine(terminal, y)?.text === normal.text };
+	const ordinary: LinkLine = { line: normal, current: () => ordinaryRead(y)?.text === normal.text };
 	const result: LinkLine[] = [];
 	if (terminal.modes.mouseTrackingMode === "none") return [ordinary];
 	// Only consider a short, consistently indented TUI paragraph. Real newlines
 	// in ordinary terminal output remain separate; lookup still requires an
 	// exact existing Markdown path and never salvages an outside-vault suffix.
 	for (let first = Math.max(1, y - 7); first <= y; first++) {
-		const initial = logicalLine(terminal, first);
+		const initial = read(first);
 		if (!initial || initial.starts[0]?.y !== first) continue;
 		const indent = /^ {2,}(?:[-*•] )?/.exec(initial.text)?.[0].length;
 		if (!indent) continue;
@@ -403,7 +446,7 @@ function linkLines(terminal: Terminal, y: number): LinkLine[] {
 		const pathPrefix = /[\\/]/.test(candidates[0].text) && !/\.md(?:[:\s`"')]|$)/i.test(candidates[0].text);
 		let continuationStart: IBufferCellPosition | undefined;
 		for (let row = initial.ends[initial.ends.length - 1].y + 1; row < first + 8;) {
-			const next = logicalLine(terminal, row);
+			const next = read(row);
 			if (!next || next.starts[0]?.y !== row ||
 				!next.text.startsWith(" ".repeat(indent)) || /\s/.test(next.text[indent] ?? " ")) break;
 			const end = next.text.trimEnd().length;
@@ -419,7 +462,7 @@ function linkLines(terminal: Terminal, y: number): LinkLine[] {
 			row = last + 1;
 			if (last < y) continue;
 			const snapshot = sources.slice();
-			const current = () => snapshot.every(source => logicalLine(terminal, source.y)?.text === source.text);
+			const current = () => snapshot.every(source => read(source.y)?.text === source.text);
 			for (const candidate of candidates) {
 				const noteEnd = pathPrefix ? /\.md(?::[1-9]\d*(?::[1-9]\d*)?)?(?=$|[\s`"'<>\])},;.!?])/i.exec(candidate.text) : null;
 				// Do not offer the root basename from a continuation of a longer
@@ -443,7 +486,15 @@ export class TerminalLinks implements ILinkProvider {
 	private cleanups: Array<() => void> = [];
 	private underlines: HTMLElement[] = [];
 
-	constructor(private terminal: Terminal, private options: TerminalLinkOptions) {}
+	private logicalLines: LogicalLineCache;
+
+	constructor(private terminal: Terminal, private options: TerminalLinkOptions) {
+		this.logicalLines = new LogicalLineCache(terminal);
+		const invalidate = () => this.logicalLines.invalidate();
+		const subscriptions = [terminal.onWriteParsed(invalidate), terminal.onResize(invalidate), terminal.onScroll(invalidate),
+			terminal.buffer.onBufferChange(invalidate)];
+		this.cleanups.push(() => subscriptions.forEach(subscription => subscription.dispose()));
+	}
 
 	private clearUnderlines(): void {
 		for (const element of this.underlines) element.remove();
@@ -474,7 +525,9 @@ export class TerminalLinks implements ILinkProvider {
 		// Repeated suffixes across boundary combinations share one indexed
 		// lookup. The cache lives only for this buffer snapshot.
 		const noteCache = new Map<string, NoteTarget | null>();
-		const lines = [...wrappedTableWebLinks(this.terminal, y), ...wrappedWebLines(this.terminal, y), ...wrappedTableNotes(this.terminal, y), ...linkLines(this.terminal, y)];
+		const read: LineReader = row => this.logicalLines.read(row, 8);
+		const lines = [...wrappedTableWebLinks(this.terminal, y, read), ...wrappedWebLines(this.terminal, y, read),
+			...wrappedTableNotes(this.terminal, y, read), ...linkLines(this.terminal, y, read, row => this.logicalLines.read(row))];
 		const suffixes = lines.flatMap(line => {
 			// A prose or quoted cell can still use the ordinary parser. Only an
 			// exact complete path or a reconstructed continuation owns its cells.
@@ -517,9 +570,14 @@ export class TerminalLinks implements ILinkProvider {
 				const cols = this.terminal.cols;
 				const viewportY = this.terminal.buffer.active.viewportY;
 				const buffer = this.terminal.buffer.active;
-				const valid = () => !released && !this.disposed && this.terminal.cols === cols &&
-					this.terminal.buffer.active === buffer && buffer.viewportY === viewportY &&
-					current();
+				const valid = () => {
+					// Writes can precede onWriteParsed (including xterm write callbacks).
+					// Never compare a candidate against its own cached snapshot.
+					this.logicalLines.invalidate();
+					return !released && !this.disposed && this.terminal.cols === cols &&
+						this.terminal.buffer.active === buffer && buffer.viewportY === viewportY &&
+						current();
+				};
 				const link: ILink = {
 					text: match.text,
 					range,
@@ -552,7 +610,7 @@ export class TerminalLinks implements ILinkProvider {
 		if (this.terminal.modes.mouseTrackingMode !== "none" && !this.options.isModEvent(event)) return;
 		const revision = this.revision;
 		const hoveredRow = this.hovered?.text === text ? this.hovered.range.start.y : undefined;
-		const snapshot = hoveredRow ? logicalLine(this.terminal, hoveredRow)?.text : undefined;
+		const snapshot = hoveredRow ? this.logicalLines.read(hoveredRow)?.text : undefined;
 		try {
 			const url = safeWebUrl(text);
 			if (url) { await this.options.openExternal(url); return; }
@@ -564,7 +622,8 @@ export class TerminalLinks implements ILinkProvider {
 				realpath(this.options.vaultRoot),
 				realpath(api.join(this.options.vaultRoot, note.path)),
 			]);
-			if (this.disposed || revision !== this.revision || (hoveredRow && snapshot !== logicalLine(this.terminal, hoveredRow)?.text) || !containedRelative(root, file) || !this.options.hasNote(note.path)) return;
+			this.logicalLines.invalidate();
+			if (this.disposed || revision !== this.revision || (hoveredRow && snapshot !== this.logicalLines.read(hoveredRow)?.text) || !containedRelative(root, file) || !this.options.hasNote(note.path)) return;
 			await this.options.openNote(note, event);
 		} catch (error) {
 			if (!this.disposed) this.options.onError(error);
@@ -661,7 +720,7 @@ export class TerminalLinks implements ILinkProvider {
 			}
 			if (pressed.modified) this.pressed = null;
 		};
-		const clear = () => { this.revision++; this.hovered = null; this.pressed = null; this.clearUnderlines(); };
+		const clear = () => { this.logicalLines.invalidate(); this.revision++; this.hovered = null; this.pressed = null; this.clearUnderlines(); };
 		container.addEventListener("mousedown", down, true);
 		container.addEventListener("mousemove", move, true);
 		const ownerDocument = container.ownerDocument;
@@ -673,6 +732,7 @@ export class TerminalLinks implements ILinkProvider {
 			// A write callback can run before onWriteParsed. xterm may already have
 			// cached the links from that frame: retain unchanged hovered content.
 			// Pending async filesystem work is still cancelled when another frame arrives.
+			this.logicalLines.invalidate();
 			this.revision++;
 			if (this.hovered && this.validations.get(this.hovered)?.() === false) {
 				this.hovered = null;
@@ -691,6 +751,7 @@ export class TerminalLinks implements ILinkProvider {
 
 	dispose(): void {
 		if (this.disposed) return;
+		this.logicalLines.invalidate();
 		this.disposed = true;
 		this.capturedPrimaryPress = false;
 		this.suppressClickActivation = false;

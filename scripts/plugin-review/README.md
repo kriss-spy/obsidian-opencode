@@ -13,3 +13,5 @@ The source scan includes production and mocked unit tests. Only `obsidianmd/no-g
 This is a public-rule approximation, not an exact dashboard mirror. Capability notices describe intentional filesystem, shell, and clipboard access. Release inspection only looks for companion attestation assets; it does not validate GitHub's attestation API, and an unpublished candidate has no release result. It cannot reproduce private malware scanning or dashboard scoring.
 
 The review tool has its own lockfile and Moment override because its Obsidian type dependency also pins the vulnerable Moment version. Audit both dependency trees. No runtime plugin dependency is added by this tool.
+
+Private/BRAT prereleases can set `PLUGIN_REVIEW_PRERELEASE_VERSION` to the exact prerelease version being reviewed. Only a matching suffixed manifest is accepted; public submission validation stays `x.y.z` by default. Release CI sets this from the tag ref, and still checks the tag against every version file before publishing.

@@ -19,10 +19,20 @@ function options(properties: Partial<TerminalLinkOptions> = {}) {
 		...properties,
 	};
 }
+const bufferEvents = new WeakMap<Terminal, Map<string, () => void>>();
+function bufferEvent(term: Terminal, name = "write"): void {
+	bufferEvents.get(term)?.get(name)?.();
+}
 // Real cell widths are separately covered by the app spec. This fake exercises the public provider contract.
 function terminal(lines: Array<{ chars: string[]; widths?: number[]; wrapped?: boolean }>): Terminal {
-	return {
-		buffer: { active: { length: lines.length, viewportY: 0, getLine: (row: number) => {
+	const events = new Map<string, () => void>();
+	const subscribe = (name: string) => (fn: () => void) => {
+		events.set(name, fn);
+		return { dispose: () => events.delete(name) };
+	};
+	const term = {
+		onWriteParsed: subscribe("write"), onResize: subscribe("resize"), onScroll: subscribe("scroll"),
+		buffer: { onBufferChange: subscribe("buffer"), active: { length: lines.length, viewportY: 0, getLine: (row: number) => {
 			const data = lines[row];
 			return data && { length: data.chars.length, isWrapped: data.wrapped ?? false, getCell: (col: number) => ({
 				getChars: () => data.chars[col], getWidth: () => data.widths?.[col] ?? 1,
@@ -31,6 +41,8 @@ function terminal(lines: Array<{ chars: string[]; widths?: number[]; wrapped?: b
 		cols: 24, rows: lines.length, hasSelection: () => false,
 		modes: { mouseTrackingMode: "none" }, options: {},
 	} as unknown as Terminal;
+	bufferEvents.set(term, events);
+	return term;
 }
 function links(provider: TerminalLinks, y = 1): ILink[] {
 	let result: ILink[] = [];
@@ -118,6 +130,65 @@ describe("terminal link parsing and containment", () => {
 });
 
 describe("public xterm provider and activation", () => {
+	it("bounds cell reads after ConPTY marks the entire 109 by 81 screen wrapped (#70)", () => {
+		const rows = Array.from({ length: 81 }, (_, row) => ({
+			chars: Array.from((row === 42 ? "    https://example.com/issue70 " : "    home screen ").padEnd(109)),
+			wrapped: row > 0,
+		}));
+		const term = terminal(rows);
+		Object.assign(term, { cols: 109 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const getLine = term.buffer.active.getLine.bind(term.buffer.active);
+		let cellReads = 0;
+		Object.assign(term.buffer.active, { getLine: (row: number) => {
+			const line = getLine(row);
+			if (!line) return undefined;
+			return { ...line, getCell: (col: number) => { cellReads++; return line.getCell(col); } };
+		} });
+		const provider = new TerminalLinks(term, options());
+		expect(links(provider, 43).map(link => link.text)).toEqual(["https://example.com/issue70"]);
+		// One cell-map build for the block, shared by every scanner and row.
+		expect(cellReads).toBeLessThan(2 * 109 * 81);
+		cellReads = 0;
+		for (const row of [36, 43, 60, 81]) links(provider, row);
+		expect(cellReads).toBe(0);
+		provider.dispose();
+	});
+	it.each(["write", "resize", "scroll", "buffer"])("invalidates logical cell maps after %s", cause => {
+		const rows = [{ chars: Array.from("https://example.com/old") }];
+		const term = terminal(rows), provider = new TerminalLinks(term, options());
+		expect(links(provider)[0].text).toBe("https://example.com/old");
+		rows[0].chars = Array.from("https://example.com/new");
+		bufferEvent(term, cause);
+		expect(links(provider)[0].text).toBe("https://example.com/new");
+		provider.dispose();
+	});
+	it("rebuilds cell maps when the active buffer changes before its event", () => {
+		const normal = terminal([{ chars: Array.from("https://normal.example") }]);
+		const alternate = terminal([{ chars: Array.from("https://alternate.example") }]);
+		const provider = new TerminalLinks(normal, options());
+		const original = normal.buffer.active;
+		const stale = links(provider)[0];
+		Object.assign(normal.buffer, { active: alternate.buffer.active });
+		expect(links(provider)[0].text).toBe("https://alternate.example");
+		stale.activate(event(), stale.text);
+		Object.assign(normal.buffer, { active: original });
+		expect(links(provider)[0].text).toBe("https://normal.example");
+		provider.dispose();
+	});
+	it("preserves long native URLs but excludes oversized blocks from TUI reconstruction", () => {
+		const fragments = ["    https://example.com/" + "a".repeat(9), ...Array.from({ length: 7 }, () => "a".repeat(32)), "a".repeat(31) + "/"];
+		const url = fragments.join("").trimStart();
+		const rows = [...fragments.map((fragment, row) => ({ chars: Array.from(fragment), wrapped: row > 0 })),
+			{ chars: Array.from("    continuation"), wrapped: false }];
+		const term = terminal(rows);
+		Object.assign(term, { cols: 32 });
+		Object.assign(term.modes, { mouseTrackingMode: "any" });
+		const provider = new TerminalLinks(term, options());
+		expect(links(provider, 9).map(link => link.text)).toEqual([url]);
+		expect(links(provider, 10)).toEqual([]);
+		provider.dispose();
+	});
 	it.each(tableHttpLinks)("opens the complete table HTTP URL $label from every row and confines the click cells", async ({ url }) => {
 		const fragments = url.match(/.{1,29}/g)!;
 		const rows = fragments.map((fragment, row) => ({ chars: Array.from(`     │ ${row === 0 ? "1" : " "} │ ${fragment.padEnd(29)} │ ${row === 0 ? "272" : "   "} │`) }));
@@ -173,6 +244,7 @@ describe("public xterm provider and activation", () => {
 		const provider = new TerminalLinks(term, config), stale = links(provider, 2)[0];
 		expect(stale.text).toBe(fixture.note);
 		rows[0].chars.unshift(" ");
+		bufferEvent(term);
 		expect(links(provider, 2)).toEqual([]);
 		stale.activate(event({ ctrlKey: true }), fixture.note);
 		expect(config.openNote).not.toHaveBeenCalled();
@@ -603,9 +675,10 @@ describe("public xterm provider and activation", () => {
 	});
 	it("never joins hard line breaks and resolves fresh contents after reset", () => {
 		const rows = [{ chars: Array.from("Notes/My ") }, { chars: Array.from("note.md") }];
-		const provider = new TerminalLinks(terminal(rows), options());
+		const term = terminal(rows), provider = new TerminalLinks(term, options());
 		expect(links(provider)).toEqual([]);
 		rows[0].chars = Array.from("Other.md");
+		bufferEvent(term);
 		expect(links(provider)[0].text).toBe("Other.md");
 		provider.dispose();
 		expect(links(provider)).toEqual([]);
