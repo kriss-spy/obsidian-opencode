@@ -252,16 +252,21 @@ describe("TerminalKeyRouter", () => {
 		router.dispose();
 	});
 
-	it("leaves a shortcut with OpenCode when OpenCode owns it", () => {
-		const commandId = "darlal-switcher-plus:switcher-plus:open-commands";
-		const { dispatchContainerEvent, pushScope, router } = registerRouter({
-			[commandId]: [{ modifiers: ["Mod"], key: "P" }],
-		}, new Set(["ctrl+p"]));
+	it.each(["linux", "darwin", "win32"] as const)("leaves a platform Mod shortcut with OpenCode when it owns it (%s)", platform => {
+		const platformSpy = vi.spyOn(process, "platform", "get").mockReturnValue(platform);
+		try {
+			const commandId = "darlal-switcher-plus:switcher-plus:open-commands";
+			const { dispatchContainerEvent, pushScope, router } = registerRouter({
+				[commandId]: [{ modifiers: ["Mod"], key: "P" }],
+			}, new Set([platform === "darwin" ? "meta+p" : "ctrl+p"]));
 
-		dispatchContainerEvent("focusin");
-		const scope = pushScope.mock.calls[0][0] as Scope & { handlers: Array<{ key: string | null }> };
-		expect(scope.handlers.some(({ key }) => key === "P")).toBe(false);
-		router.dispose();
+			dispatchContainerEvent("focusin");
+			const scope = pushScope.mock.calls[0][0] as Scope & { handlers: Array<{ key: string | null }> };
+			expect(scope.handlers.some(({ key }) => key === "P")).toBe(false);
+			router.dispose();
+		} finally {
+			platformSpy.mockRestore();
+		}
 	});
 
 	it("ignores stale hotkeys for commands that are no longer registered", () => {

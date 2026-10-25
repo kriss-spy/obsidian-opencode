@@ -64,7 +64,10 @@ async function roots(): Promise<number[]> {
 }
 async function closeTerminal(): Promise<void> {
 	await browser.execute(async () => {
-		await (window as any).app.plugins.plugins.opencode.viewCoordinator.closeTerminal();
+		const app = (window as any).app;
+		const views = app.workspace.getLeavesOfType("opencode-terminal").map((leaf: any) => leaf.view);
+		await app.plugins.plugins.opencode.viewCoordinator.closeTerminal();
+		await Promise.all(views.map((view: any) => view.lifecycle.enqueue(() => {})));
 	});
 }
 
@@ -192,7 +195,7 @@ describe("Mandatory real OpenCode compatibility", function () {
 					plugin.settings = settings;
 					await plugin.saveSettings();
 				}, previous);
-				rmSync(profile, { recursive: true, force: true });
+				rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 			}
 		}
 	});

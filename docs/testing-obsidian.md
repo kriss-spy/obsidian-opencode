@@ -392,3 +392,7 @@ The Linux app suite passed 62 cases across eight spec files on isolated Obsidian
 ## 2.3.2-beta.1 candidate scope
 
 The prerelease candidate is assembled in an isolated checkout from a5e889b. It includes #70 and CI hardening, while excluding the pre-existing terminal-maximize and numeric URL continuation work in the shared working tree. Its local unit count is therefore 345 passing (5 platform-only skipped); all six runner checks, build/typecheck, workflow lint, and review-script regression checks pass. The initial shared-working-tree counts above include those separate pending changes. The prerelease manifest exception is explicit, matches the exact tag, and leaves default stable/public manifest validation strict. Publication still requires the full cross-platform tagged-commit gate.
+
+### First prerelease gate findings (2026-10-25)
+
+The unpublished `2.3.2-beta.1` candidate passed Linux and Windows app and real OpenCode lifecycle checks on both Obsidian versions. Its Windows hover regression reproduced an 81-row wrapped block: the slowest provider call was 5.1 ms and input echo took about 113 ms. Publication was blocked by macOS's platform-dependent shortcut fixture, a prerelease review self-test inheriting its tag override, and Windows profile deletion racing asynchronous terminal teardown. The beta.2 candidate corrects these test fixtures and waits for teardown before deleting isolated profiles; all release gates remain mandatory.

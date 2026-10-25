@@ -31,7 +31,7 @@ echo 'Review report regression checks passed'
 cat > "$fixture/manifest.json" <<'MANIFEST'
 {"id":"ci-test","name":"CI Test","version":"2.3.2-beta.1","minAppVersion":"1.7.2","description":"Test the release checker.","author":"Tester","isDesktopOnly":true}
 MANIFEST
-if "$scripts/lib/manifest-check.sh" "$fixture" > "$fixture/manifest-findings"; then
+if PLUGIN_REVIEW_PRERELEASE_VERSION= "$scripts/lib/manifest-check.sh" "$fixture" > "$fixture/manifest-findings"; then
   echo 'Manifest checker accepted a prerelease without an explicit tag' >&2; exit 1
 fi
 grep -q $'Error\tversion\t' "$fixture/manifest-findings"
