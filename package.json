@@ -1,6 +1,6 @@
 {
   "name": "obsidian-opencode",
-  "version": "2.3.2-beta.3",
+  "version": "2.3.1",
   "description": "OpenCode CLI wrapper for Obsidian",
   "main": "main.js",
   "scripts": {

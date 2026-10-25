@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix Obsidian freezing when hovering the terminal after a resize on Windows (#70).
+- Recognize running and touched-note status when macOS resolves the vault through a filesystem alias.
+
+### Changed
+
+- Require Linux, Windows, and macOS Obsidian app and real OpenCode tests, plus native Windows hover regressions, before publishing a tagged release.
+
 ## [2.3.2-beta.3] - 2026-10-25
 
 ### Fixed
