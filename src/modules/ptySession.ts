@@ -1,5 +1,6 @@
 import { Terminal } from "@xterm/xterm";
 import { spawn, ChildProcess, execFileSync } from "child_process";
+import { randomBytes } from "crypto";
 import { Notice } from "obsidian";
 import * as fs from "fs";
 import * as os from "os";
@@ -311,7 +312,7 @@ export class PtySession {
 		// Unique per-session token embedded in the host wrapper's command line;
 		// lets the proxy tear the host process down when the plugin kills the
 		// PTY (no signal path exists across the flatpak portal boundary).
-		const killToken = `opencode-pty-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+		const killToken = `opencode-pty-${randomBytes(16).toString("hex")}`;
 		if (isFlatpak) {
 			const hostEnvironment = {
 				...(options.environmentVariables ?? {}),
