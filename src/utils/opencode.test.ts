@@ -365,6 +365,18 @@ describe('OpencodeClient listSessions', () => {
 		});
 	}
 
+	it('requires the linked session and matching directory before resuming', async () => {
+		mockApi({ '/api/session/ses_link': { data: {
+			id: 'ses_link', location: { directory: '/vault' }, time: { created: 1, updated: 2 },
+		} } });
+		await expect(new OpencodeClient('opencode', '/vault').requireSession('ses_link', 'v2')).resolves.toBeUndefined();
+		await expect(new OpencodeClient('opencode', '/elsewhere').requireSession('ses_link', 'v2')).rejects.toThrow('differs from the link');
+		mockApi({ '/api/session/ses_link': { data: {
+			id: 'ses_unrelated', location: { directory: '/vault' }, time: { created: 1, updated: 2 },
+		} } });
+		await expect(new OpencodeClient('opencode', '/vault').requireSession('ses_link', 'v2')).rejects.toThrow('unavailable');
+	});
+
 	it('retains a completed tool edit warning when the real V2 message shape has an empty diff (#21)', async () => {
 		vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
 		let active = [{ id: 'ses_1', directory: '/vault' }];

@@ -24,12 +24,12 @@ if (args[0] === "--help") {
 		process.exit(1);
 	}
 	console.log(JSON.stringify(process.env.OBSIDIAN_OPENCODE_EMPTY_SESSIONS ? [] : [{
-		id: "fixture-session",
+		id: process.env.OBSIDIAN_OPENCODE_SESSION_LINKS ? "ses_fixture" : "fixture-session",
 		title: "Fixture session",
 		directory: process.cwd(),
 		updated: 1_700_000_000_000,
 	}]));
-} else if ((args[0] === "export" && args[1] === "fixture-session")
+} else if ((args[0] === "export" && ["fixture-session", "ses_fixture"].includes(args[1]))
 	|| (args.slice(0, 2).join(" ") === "session export" && args[2] === "fixture-v2-session")) {
 	console.log(JSON.stringify({
 		info: {
