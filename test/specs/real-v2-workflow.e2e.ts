@@ -7,7 +7,7 @@ import { resolveOpencodeExecutable } from "../../src/utils/opencodeExecutable";
 describe("Installed OpenCode V2 in an isolated vault", function () {
 	it("[real V2] focuses a revealed terminal and remains responsive after Ctrl+Z", async function () {
 		if (process.platform !== "linux" || process.env.OPENCODE_REAL_E2E !== "1") this.skip();
-		const executable = resolveOpencodeExecutable("opencode");
+		const executable = resolveOpencodeExecutable(process.env.OPENCODE_REAL_EXECUTABLE ?? "opencode");
 		const previous = await browser.execute(() => {
 			const settings = (window as any).app.plugins.plugins.opencode.settings;
 			return { ...settings, environmentVariables: { ...settings.environmentVariables } };

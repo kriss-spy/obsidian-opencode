@@ -1,10 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
+import { assets, verifyArtifact } from "./release-artifact.mjs";
 
 const proof = path.resolve("test-results/obsidian/real-opencode/passed.json");
 // A previous local run must never make an empty/skipped invocation pass.
 rmSync(proof, { force: true });
+const artifact = process.env.OPENCODE_TEST_PLUGIN_DIR
+	? verifyArtifact(process.env.OPENCODE_TEST_PLUGIN_DIR, process.env.CI_EXPECTED_SHA) : undefined;
 const result = spawnSync(process.execPath, ["./node_modules/@wdio/cli/bin/wdio.js", "run", "./wdio.real.conf.mts"], {
 	stdio: "inherit", env: process.env,
 });
@@ -17,5 +20,12 @@ if (evidence.platform !== process.platform || evidence.status !== "passed" ||
 }
 for (const check of ["launch", "input", "resize", "close", "reopen", "cleanup"]) {
 	if (!evidence.checks.includes(check)) throw new Error(`Missing mandatory real OpenCode check: ${check}`);
+}
+if (artifact) {
+	for (const name of assets) {
+		if (evidence.artifactSha256?.[name] !== artifact.sha256[name]) {
+			throw new Error(`Installed release artifact was not verified: ${name}`);
+		}
+	}
 }
 console.log(`Mandatory real OpenCode checks completed: ${evidence.platform}, Obsidian ${evidence.appVersion}, ${evidence.cliVersion}`);

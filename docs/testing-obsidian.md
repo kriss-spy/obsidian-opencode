@@ -10,10 +10,11 @@ It does not open, register, modify, or read any existing vault. `wdio-obsidian-s
 
 - Source/manifest lint and the lint-report regression checks.
 - Linux, Windows, and macOS against Obsidian 1.12.7 and dynamically resolved latest stable, using the matching installer (and architecture selected by the runner).
-- Unit tests, typecheck/build, the complete isolated app suite, and a mandatory real OpenCode lifecycle on every matrix entry.
+- Unit tests, typecheck/build, the complete isolated app suite, and a mandatory real OpenCode lifecycle on every matrix entry, installed from one packaged release artifact.
+- The two isolated Linux real V2 focus/Ctrl+Z and folder-drop cases on both app versions, with pending/empty runs rejected.
 - The real Windows #70 hover regression against pinned 1.14.5 and latest stable.
 
-The native OpenCode 2.1.4 package is extracted into a temporary directory and version-checked on each runner. The mandatory lifecycle uses a fresh standalone profile, opens the real home screen, moves focus away and reveals the terminal, types without submitting a model prompt, resizes the sidebar, closes the terminal, reopens it, and verifies that the captured PTY/OpenCode process trees exit. It is separate from the older opt-in real-CLI suites, which remain available for deeper platform-specific interaction checks.
+The native OpenCode 2.1.4 package is extracted into a temporary directory and version-checked on each runner. The mandatory lifecycle uses a fresh standalone profile, opens the real home screen, moves focus away and reveals the terminal, types without submitting a model prompt, resizes the sidebar, closes the terminal, reopens it, and verifies that the captured PTY/OpenCode process trees exit. Linux also runs `npm run test:obsidian:real-workflows` with that pinned binary and isolated profiles. The older Windows real-CLI cases remain manual; their legacy CLI/configuration assumptions are documented in the [coverage inventory](manual-verification.md).
 
 Run that same mandatory lifecycle locally with:
 
@@ -29,7 +30,9 @@ npm run test:obsidian:real
 
 The shared final gate runs even after upstream failure and rejects failed, skipped, or cancelled jobs. PR CI exposes a stable **Required compatibility** check, including merge-queue events. After reviewing/pushing these local changes, repository branch protection must require that check and prevent bypass if merges should be blocked; workflow files alone do not configure GitHub branch protection. No repository settings were changed as part of this local preparation.
 
-On a release tag, the full shared workflow runs again on the tagged commit. The publishing job depends on its success, checks out that same SHA, verifies tag/version/asset identity, and only then builds and publishes. It does not accept a green result from a previous branch commit. Failed, cancelled, or skipped platform validation prevents publishing.
+The shared workflow builds and packages `main.js`, `manifest.json` and `styles.css` once. Its `release-artifact` includes the exact commit and SHA-256 values in `artifact.json`. Every app job downloads and selects that directory with `OPENCODE_TEST_PLUGIN_DIR`; the mandatory lifecycle compares the files installed in its copied vault against those hashes. Its runner requires matching installed-asset evidence. See [verification commands](agents/verification.md) to reproduce this locally.
+
+On a release tag, the full shared workflow runs again on the tagged commit. The publishing job depends on its success, checks out that same SHA, downloads and verifies the tested artifact, checks tag/version/asset identity, and publishes those exact files without rebuilding. Failed, cancelled, or skipped platform validation prevents publishing. Use the [release checklist template](releases/TEMPLATE-checks.md) and [manual evidence template](manual-verification.md) to record desktop sign-off before tagging; the automatic workflow does not enforce that human decision.
 
 For new features, keep shared behavior in the normal app suite so every OS matrix entry exercises it, adapting modifiers and paths to the platform. A Linux-only test does not establish Windows/macOS behavior. Add native-specific requirements to explicit CI jobs; an optional manual suite is additional evidence, not a substitute for mandatory release checks.
 
@@ -55,7 +58,7 @@ On Windows, an additional suite exercises the installed OpenCode CLI, ConPTY ren
 npm run test:obsidian:windows-ui
 ```
 
-This suite requires `opencode` and Node.js on `PATH` and is not part of CI because it uses the developer's real OpenCode configuration.
+This legacy suite requires `opencode` and Node.js on `PATH` and is manual because its assertions depend on older CLI screens, shell behavior and a locally configured model. It reads local OpenCode configuration; use a disposable OS account/profile with test configuration. Each case and its limitation is listed in the [manual coverage inventory](manual-verification.md). Required CI uses isolated pinned V2 lifecycle and hover suites instead.
 
 The separate #70 regression runs in the `windows-terminal-links` CI matrix with real OpenCode **2.1.4**, ConPTY, and both pinned Obsidian **1.14.5** and **latest stable**. The general Linux/Windows/macOS app suites run against both the established **1.12.7** baseline and **latest stable**. `latest` resolves the public app and its newest compatible installer on each run; the pinned regression remains useful when latest advances. It extracts the pinned official Windows binary into the runner's temporary directory and uses a fresh standalone OpenCode profile. To run it locally on Windows:
 

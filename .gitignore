@@ -156,3 +156,4 @@ obsidian-plugin-review-reports/
 # Real-Obsidian test evidence
 test-results/
 .obsidian-cache/
+release-artifact/
