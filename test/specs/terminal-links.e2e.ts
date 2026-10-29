@@ -1,4 +1,6 @@
 import * as path from "node:path";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { browser, expect } from "@wdio/globals";
 import { Key } from "webdriverio";
 import multicolumnTableNotes from "../fixtures/multicolumn-table-notes";
@@ -412,7 +414,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		}
 	});
 
-	it("guards OSC 8 schemes and never provides outside-vault or unsupported-scheme file links", async function () {
+	it("guards OSC 8 schemes and never provides relative traversal or unsupported-scheme file links", async function () {
 		const before = (await externalCalls()).length;
 		await render("\x1b]8;;https://github.com\x07safe label\x1b]8;;\x07");
 		// OSC 8 comes from xterm's built-in provider, not our textual provider.
@@ -435,7 +437,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 		const labelPoint = await linkPoint("https://github.com");
 		await browser.action("pointer").move({ x: labelPoint.x, y: labelPoint.y, origin: "viewport" }).down({ button: 0 }).up({ button: 0 }).perform();
 		expect((await externalCalls()).length).toBe(before + 2);
-		await render(`/outside/${notePath}\r\n../../${notePath}\r\nfile:///outside/${notePath}`);
+		await render(`../../${notePath}\r\nfile:///outside/${notePath}`);
 		const found = await browser.execute(() => {
 			const view = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view;
 			const found: string[] = [];
@@ -443,6 +445,51 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 			return found;
 		});
 		expect(found).toEqual([]);
+	});
+	it("[issue #66] offers external Markdown paths only on supported Obsidian versions", async function () {
+		const file = path.join(path.parse(stub).root, "outside", "README.md");
+		await render(`Read \`${file}\``);
+		const state = await browser.execute(() => {
+			const provider = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminalLinks;
+			let found: string[] = [];
+			provider.provideLinks(1, (links: any[]) => { found = (links ?? []).map(link => link.text); });
+			return { enabled: provider.options.allowExternalNotes, found };
+		});
+		expect(state.found).toEqual(state.enabled ? [file] : []);
+	});
+	it("[issue #66] opens an external Markdown file inside Obsidian with locations and modifier tabs", async function () {
+		const supported = await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminalLinks.options.allowExternalNotes);
+		if (!supported) this.skip();
+		const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "opencode-external-note-")));
+		const file = path.join(directory, "中文 My #note.md");
+		writeFileSync(file, "first\nsecond\nthird line for cursor\nfourth\n");
+		try {
+			const before = (await externalCalls()).length;
+			const text = `${file}:3:5`;
+			await render(`Read \`${text}\``, false, true);
+			await clickLink(text, false, true);
+			await waitActivation(() => browser.execute((file: string) => {
+				const app = (window as any).app;
+				return app.workspace.getActiveFile() === app.vault.getFileByPath(`file:${file}`);
+			}, file));
+			expect(await browser.execute(() => (window as any).app.workspace.activeLeaf.view.editor.getCursor())).toEqual({ line: 2, ch: 4 });
+			const tabs = Number(await browser.execute(() => (window as any).app.workspace.getLeavesOfType("markdown").length));
+			await render(`Read \`${text}\``, true);
+			await clickLink(text, true);
+			await waitActivation(() => browser.execute((tabs: number) => (window as any).app.workspace.getLeavesOfType("markdown").length > tabs, tabs));
+			expect((await externalCalls()).length).toBe(before);
+			expect(await browser.execute(() => {
+				const app = (window as any).app;
+				return { cursor: app.workspace.activeLeaf.view.editor.getCursor(),
+					samePid: app.workspace.getLeavesOfType("opencode-terminal")[0].view.ptySession.ptyProcess?.pid === (window as any).__terminalLinkPid };
+			})).toEqual({ cursor: { line: 2, ch: 4 }, samePid: true });
+		} finally {
+			await browser.execute((file: string) => {
+				const app = (window as any).app, target = app.vault.getFileByPath(`file:${file}`);
+				app.workspace.getLeavesOfType("markdown").filter((leaf: any) => leaf.view.file === target).forEach((leaf: any) => leaf.detach());
+			}, file);
+			rmSync(directory, { recursive: true, force: true });
+		}
 	});
 	it("opens note paths wrapped by OpenCode into indented hard rows", async function () {
 		const text = `${notePath}:3:5`;
