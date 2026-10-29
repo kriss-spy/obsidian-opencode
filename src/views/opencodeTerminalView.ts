@@ -7,7 +7,7 @@ import { CanvasAddon } from "@xterm/addon-canvas";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { ImageAddon } from "@xterm/addon-image";
 import { release, tmpdir } from "node:os";
-import { mkdtempSync, readdirSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { absoluteLineReference, deliverLineReference, FileLineReference, ReferenceDelivery } from "../modules/activeLineReference";
 import type OpencodePlugin from "../main";
@@ -32,6 +32,8 @@ import { loadOpenCodeHotkeys, loadOpenCodeManualCopy, loadOpenCodeSuspendHotkeys
 import { mergeEnvironmentVariables } from "../utils/environment";
 import { OpencodeClient, OpencodeError } from "../utils/opencode";
 import { createWslWindowsClipboard } from "../modules/wslWindowsClipboard";
+import { CurrentSessionBridge } from "../modules/currentSessionBridge";
+import type { SessionLink } from "../modules/sessionLinks";
 import {
 	isOpenCodeThemePicker,
 	terminalColorQueryResponse,
@@ -63,6 +65,20 @@ export class OpencodeTerminalView extends ItemView {
 	private copySelectionOnCtrlC = false;
 	private maximizeOverlay: HTMLElement | null = null;
 	private maximizePlaceholder: Comment | null = null;
+	private currentSessionBridge: CurrentSessionBridge | null = null;
+	private sessionTrackingStopped = false;
+
+	async stopSessionTracking(): Promise<void> {
+		this.sessionTrackingStopped = true;
+		await this.currentSessionBridge?.stop();
+		this.currentSessionBridge = null;
+	}
+
+	async getCurrentSession(): Promise<SessionLink | null> {
+		const stdin = this.ptySession.getStdin();
+		if (this.closing || !stdin?.writable || stdin.destroyed) return null;
+		return this.currentSessionBridge?.read() ?? null;
+	}
 
 	constructor(leaf: WorkspaceLeaf, private plugin: OpencodePlugin) {
 		super(leaf);
@@ -156,6 +172,7 @@ export class OpencodeTerminalView extends ItemView {
 
 	async onOpen() {
 		this.register(() => this.restoreMaximize());
+		this.register(() => { void this.currentSessionBridge?.stop(); });
 		const terminalCwd = this.plugin.sessionCwd
 			|| this.plugin.settings.defaultWorkingDirectory
 			|| this.plugin.vaultRoot;
@@ -692,6 +709,8 @@ export class OpencodeTerminalView extends ItemView {
 	async restartPty(): Promise<void> {
 		await this.lifecycle.enqueue(async () => {
 			if (this.closing) return;
+			await this.currentSessionBridge?.stop();
+			this.currentSessionBridge = null;
 			await this.ptySession.kill();
 			if (this.terminal && !this.closing) {
 				this.terminal.reset();
@@ -711,6 +730,7 @@ export class OpencodeTerminalView extends ItemView {
 		const cwd = this.plugin.sessionCwd || defaultCwd;
 		const configuredPath = this.plugin.settings.opencodePath || "opencode";
 		let opencodePath: string;
+		const environmentVariables = { ...this.plugin.settings.environmentVariables };
 		try {
 			const compatibility = await new OpencodeClient(
 				configuredPath,
@@ -723,6 +743,21 @@ export class OpencodeTerminalView extends ItemView {
 				this.plugin.settings.environmentVariables,
 			);
 			this.copySelectionOnCtrlC = loadOpenCodeManualCopy(cwd, terminalEnvironment, compatibility.generation);
+			if (compatibility.generation === "v2" && !this.sessionTrackingStopped) {
+				// Flatpak's /tmp is private; the installed plugin directory is visible
+				// at the same path to both Obsidian and host-side OpenCode.
+				const bridge = new CurrentSessionBridge(existsSync("/.flatpak-info") || process.env.FLATPAK_ID
+					? join(this.plugin.vaultRoot, this.plugin.vaultConfigDir, "plugins", this.plugin.manifest.id) : undefined);
+				this.currentSessionBridge = bridge;
+				try {
+					environmentVariables.OPENCODE_CLI_CONFIG_CONTENT = await bridge.start(terminalEnvironment);
+					if (this.sessionTrackingStopped) await bridge.stop();
+				} catch (error) {
+					console.debug("Current OpenCode session bridge is unavailable", error);
+					await bridge.stop();
+					this.currentSessionBridge = null;
+				}
+			}
 		} catch (error) {
 			const message = error instanceof OpencodeError
 				? error.message
@@ -730,7 +765,11 @@ export class OpencodeTerminalView extends ItemView {
 			terminal.writeln(`\r\n${message}\r\n`);
 			return;
 		}
-		if (this.closing) return;
+		if (this.closing) {
+			await this.currentSessionBridge?.stop();
+			this.currentSessionBridge = null;
+			return;
+		}
 
 		let args: string[] = [];
 		if (this.plugin.sessionArgs) {
@@ -755,7 +794,7 @@ export class OpencodeTerminalView extends ItemView {
 			opencodePath,
 			cwd,
 			args,
-			environmentVariables: this.plugin.settings.environmentVariables,
+			environmentVariables,
 			editorPort: this.editorPort,
 		});
 	}
@@ -766,6 +805,8 @@ export class OpencodeTerminalView extends ItemView {
 		this.terminalLinks?.dispose();
 		this.terminalLinks = null;
 		await this.lifecycle.enqueue(async () => {
+			await this.currentSessionBridge?.stop();
+			this.currentSessionBridge = null;
 			if (this.editorServer) {
 				await this.editorServer.stop();
 				this.editorServer = null;

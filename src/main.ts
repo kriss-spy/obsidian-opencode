@@ -1,5 +1,6 @@
 import { Plugin, FileSystemAdapter, Notice, Platform, addIcon, setIcon, TFile } from "obsidian";
 import * as path from "node:path";
+import { promises as fs } from "node:fs";
 import { OpencodePluginSettings, DEFAULT_SETTINGS } from "./settings";
 import { OpencodeSettingTab } from "./settingsTab";
 import { OpencodeTerminalView, OPENCODE_TERMINAL_VIEW_TYPE } from "./views/opencodeTerminalView";
@@ -13,6 +14,7 @@ import { OpencodeActivitySource, OpencodeStatus, OpencodeStatusTracker } from ".
 import { OpencodeClient } from "./utils/opencode";
 import { activeLineReferenceCommand } from "./modules/activeLineReference";
 import { OPENCODE_ICON_ID, OPENCODE_ICON_SVG } from "./icons";
+import { copySessionUrl, parseSessionParams, SessionLink } from "./modules/sessionLinks";
 
 export default class OpencodePlugin extends Plugin {
 	settings: OpencodePluginSettings;
@@ -130,6 +132,16 @@ export default class OpencodePlugin extends Plugin {
 		});
 
 		this.addCommand({
+			id: "copy-session-link",
+			name: "Copy session link",
+			callback: () => { void this.copyCurrentSessionLink(); },
+		});
+		this.registerObsidianProtocolHandler("opencode", (params) => {
+			// Cold protocol launches can arrive before the workspace layout is ready.
+			this.app.workspace.onLayoutReady(() => { void this.openSessionLink(params); });
+		});
+
+		this.addCommand({
 			id: "continue-last-session",
 			name: "Continue last session",
 			callback: () => { void this.continueLastSession(); },
@@ -197,6 +209,9 @@ export default class OpencodePlugin extends Plugin {
 
 	onunload(): void {
 		this.unloading = true;
+		for (const leaf of this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)) {
+			if (leaf.view instanceof OpencodeTerminalView) void leaf.view.stopSessionTracking();
+		}
 		void this.ptySessions.closeAll().catch((error) => {
 			console.error("Unable to stop every OpenCode PTY during plugin unload", error);
 		});
@@ -297,6 +312,38 @@ export default class OpencodePlugin extends Plugin {
 	async openTerminalWithSession(sessionId: string, directory: string) {
 		this.sessionState.setOpenSession(sessionId, directory);
 		await this.openOrRestartTerminal();
+	}
+
+	async copySessionLink(session: SessionLink): Promise<void> {
+		await copySessionUrl(this.app.vault.getName(), session,
+			(url) => navigator.clipboard.writeText(url), (message) => { new Notice(message); });
+	}
+
+	async copyCurrentSessionLink(): Promise<void> {
+		const views = this.app.workspace.getLeavesOfType(OPENCODE_TERMINAL_VIEW_TYPE)
+			.map((leaf) => leaf.view).filter((view): view is OpencodeTerminalView => view instanceof OpencodeTerminalView);
+		const view = this.app.workspace.getActiveViewOfType(OpencodeTerminalView)
+			?? (views.length === 1 ? views[0] : null);
+		const session = await view?.getCurrentSession();
+		if (!session) {
+			new Notice("No opened session could be identified. Open a session in an OpenCode V2 terminal, or select it in conversations and use Copy session link.");
+			return;
+		}
+		await this.copySessionLink(session);
+	}
+
+	async openSessionLink(params: Record<string, string>): Promise<void> {
+		try {
+			const session = parseSessionParams(params, this.app.vault.getName());
+			const directory = await fs.stat(session.directory).catch(() => null);
+			if (!directory?.isDirectory()) throw new Error("The session's working directory is unavailable on this machine.");
+			const client = new OpencodeClient(this.settings.opencodePath, session.directory, this.settings.environmentVariables);
+			const compatibility = await client.checkCompatibility();
+			await client.requireSession(session.id, compatibility.generation);
+			if (!this.unloading) await this.openTerminalWithSession(session.id, session.directory);
+		} catch (error) {
+			new Notice(`Unable to open session link: ${error instanceof Error ? error.message : "session unavailable"}`);
+		}
 	}
 
 	private async openOrRestartTerminal() {

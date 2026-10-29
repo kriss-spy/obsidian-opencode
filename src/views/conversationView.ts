@@ -207,6 +207,9 @@ export class OpencodeConversationView extends ItemView {
 			void this.exportSessionToNote(session);
 		});
 
+		const copyLinkBtn = actions.createEl("button", { text: "Copy session link", attr: { type: "button", "aria-label": "Copy session link" } });
+		copyLinkBtn.addEventListener("click", () => { void this.plugin.copySessionLink(session); });
+
 		const deleteBtn = actions.createEl("button", { text: "Delete", cls: "mod-warning" });
 		deleteBtn.addEventListener("click", () => {
 			new ConfirmDeleteModal(this.app, session.title, async () => {
