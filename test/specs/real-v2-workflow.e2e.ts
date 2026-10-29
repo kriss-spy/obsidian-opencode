@@ -81,8 +81,11 @@ describe("Installed OpenCode V2 in an isolated vault", function () {
 				const trace = await browser.execute(() => ({ input: (window as any).__suspendInput }));
 				throw new Error(`${String(error)}\n${JSON.stringify(trace)}\n${await buffer()}`);
 			}
-			const input = await browser.execute(() => (window as any).__suspendInput.join(""));
-			expect(input).toBe("-ok");
+			const input: string = await browser.execute(() => (window as any).__suspendInput.join(""));
+			// OpenCode enables xterm focus reporting; trusted WebDriver keys can
+			// refocus the textarea. Only those reports may accompany the typed bytes.
+			const typed = input.split("\x1b[I").join("").split("\x1b[O").join("");
+			expect(typed).toBe("-ok");
 			await expect(browser.$(".opencode-terminal-container .xterm")).toExist();
 			mkdirSync(path.resolve("test-results/obsidian"), { recursive: true });
 			await browser.saveScreenshot(path.resolve("test-results/obsidian/real-v2-workflow.png"));
