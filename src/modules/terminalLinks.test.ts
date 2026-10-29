@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { ILink, Terminal } from "@xterm/xterm";
@@ -9,7 +9,7 @@ import sidebarOutputNotes from "../../test/fixtures/sidebar-output-notes";
 import tableHttpLinks from "../../test/fixtures/table-http-links";
 import userInputHttp, { resizedUserInputHttp, wrappedBlockUserInputHttp, sidebarUserInputHttp } from "../../test/fixtures/user-input-http";
 import { currentOsc8Link } from "./xtermOsc8";
-import { findTerminalLinks, resolveNoteTarget, safeWebUrl, TerminalLinks, TerminalLinkOptions } from "./terminalLinks";
+import { findTerminalLinks, resolveExternalNoteTarget, resolveNoteTarget, safeWebUrl, TerminalLinks, TerminalLinkOptions } from "./terminalLinks";
 
 const event = (properties: Partial<MouseEvent> = {}): MouseEvent => ({ button: 0, ctrlKey: false, metaKey: false, ...properties } as MouseEvent);
 function options(properties: Partial<TerminalLinkOptions> = {}) {
@@ -843,6 +843,55 @@ describe("public xterm provider and activation", () => {
 const temporary: string[] = [];
 afterEach(() => temporary.splice(0).forEach(directory => rmSync(directory, { recursive: true, force: true })));
 describe("actual filesystem boundary checks", () => {
+	it("recognizes explicit external paths only when enabled, preserving native paths and locations", () => {
+		for (const [text, root, expected, distro] of [
+			["/outside/中文 My #note.md:3:5", "/vault", "/outside/中文 My #note.md"],
+			["D:\\Other\\My note.md:3:5", "C:\\Vault", "D:\\Other\\My note.md"],
+			["\\\\server\\share\\My note.md:3:5", "C:\\Vault", "\\\\server\\share\\My note.md"],
+			["/mnt/d/Other/My note.md:3:5", "C:\\Vault", "d:\\Other\\My note.md"],
+			["C:\\Other\\My note.md:3:5", "/mnt/c/Vault", "/mnt/c/Other/My note.md"],
+			["\\\\wsl.localhost\\Ubuntu\\tmp\\My note.md:3:5", "/home/me/vault", "/tmp/My note.md", "Ubuntu"],
+		]) {
+			expect(resolveExternalNoteTarget(text, root, distro)).toEqual({ path: expected, line: 3, column: 5, external: true });
+			const config = options({ vaultRoot: root, wslDistro: distro, allowExternalNotes: true });
+			expect(findTerminalLinks(`Read \`${text}\``, config).map(link => link.text)).toEqual([text]);
+			expect(findTerminalLinks(`Read \`${text}\``, { ...config, allowExternalNotes: false })).toEqual([]);
+		}
+	});
+	it.each(["../../Other.md", "Other.md", "/vault/Other.md", "file:///outside/Other.md", "javascript:Other.md", "C:Other.md", "/outside/Other.txt", "/outside/Other.md:0", "/outside/Other.md:99999999999999999999", "/outside/a\nb.md", "\\\\wsl.localhost\\Other\\tmp\\Note.md"])("does not treat %s as an external Markdown path", text => {
+		expect(resolveExternalNoteTarget(text, "/vault", "Ubuntu")).toBeNull();
+	});
+	it("uses the final Markdown extension in external filenames", () => {
+		const config = options({ allowExternalNotes: true });
+		expect(findTerminalLinks("Read `/outside/AGENTS.md.md:3`.", config).map(link => link.text)).toEqual(["/outside/AGENTS.md.md:3"]);
+		expect(findTerminalLinks("/outside/AGENTS.md.backup", config)).toEqual([]);
+	});
+	it("opens a real external Markdown file with its location and rejects missing files and directories", async () => {
+		const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "external-terminal-links-"))); temporary.push(directory);
+		const file = path.join(directory, "中文 My #note.md"); writeFileSync(file, "first\nsecond\nthird");
+		const folder = path.join(directory, "folder.md"); mkdirSync(folder);
+		const config = options({ vaultRoot: path.join(directory, "vault"), allowExternalNotes: true, realpath: undefined });
+		const provider = new TerminalLinks(terminal([]), config);
+		const click = event({ ctrlKey: true });
+		await provider.activate(`${file}:3:5`, click);
+		await provider.activate(folder, click);
+		await provider.activate(path.join(directory, "Missing.md"), click);
+		expect(config.openNote).toHaveBeenCalledExactlyOnceWith({ path: file, external: true, line: 3, column: 5 }, click);
+		expect(config.openExternal).not.toHaveBeenCalled();
+		expect(config.onError).toHaveBeenCalledOnce();
+	});
+	it("keeps external hover free of filesystem lookups and ignores a lookup completed after close", async () => {
+		let finish!: (value: string) => void;
+		const config = options({ allowExternalNotes: true, realpath: vi.fn(() => new Promise<string>(resolve => { finish = resolve; })) });
+		const provider = new TerminalLinks(terminal([{ chars: Array.from("/outside/My note.md:3") }]), config);
+		expect(links(provider)[0].text).toBe("/outside/My note.md:3");
+		expect(config.realpath).not.toHaveBeenCalled();
+		const directory = mkdtempSync(path.join(tmpdir(), "external-terminal-links-")); temporary.push(directory);
+		const file = path.join(directory, "Note.md"); writeFileSync(file, "test");
+		const pending = provider.activate("/outside/My note.md:3", event());
+		provider.dispose(); finish(file); await pending;
+		expect(config.openNote).not.toHaveBeenCalled();
+	});
 	it("allows an inside note and rejects a symlink escaping the vault", async () => {
 		const directory = mkdtempSync(path.join(tmpdir(), "terminal-links-")); temporary.push(directory);
 		const root = path.join(directory, "vault"); mkdirSync(root);

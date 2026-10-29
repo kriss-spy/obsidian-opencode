@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { ItemView, Keymap, MarkdownView, Notice, WorkspaceLeaf } from "obsidian";
+import { ItemView, Keymap, MarkdownView, Notice, requireApiVersion, WorkspaceLeaf } from "obsidian";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { TerminalLinks } from "../modules/terminalLinks";
@@ -236,6 +236,7 @@ export class OpencodeTerminalView extends ItemView {
 		const terminalLinks = new TerminalLinks(terminal, {
 			vaultRoot: this.plugin.vaultRoot,
 			wslDistro: terminalEnvironment.WSL_DISTRO_NAME,
+			allowExternalNotes: requireApiVersion("1.14.2"),
 			hasNote: path => Boolean(this.app.vault.getFileByPath(path)?.extension.toLowerCase() === "md"),
 			isModEvent: event => Boolean(Keymap.isModEvent(event)),
 			openExternal: url => {
@@ -243,8 +244,13 @@ export class OpencodeTerminalView extends ItemView {
 				return electron.shell.openExternal(url);
 			},
 			openNote: async (target, event) => {
-				const file = this.app.vault.getFileByPath(target.path);
-				if (!file) return;
+				// Obsidian 1.14.2's native external-file lookup uses a literal file:
+				// prefix, not a URL (spaces and # must remain unescaped).
+				const file = this.app.vault.getFileByPath(target.external ? `file:${target.path}` : target.path);
+				if (!file) {
+					if (target.external) throw new Error("External Markdown file is unavailable");
+					return;
+				}
 				const leaf = this.app.workspace.getLeaf(Keymap.isModEvent(event));
 				await leaf.openFile(file, { active: true, state: target.line ? { mode: "source" } : undefined });
 				if (target.line && leaf.view instanceof MarkdownView) {

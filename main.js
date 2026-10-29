@@ -20357,7 +20357,7 @@ function containedRelative(root, target) {
   const relative3 = api.relative(api.resolve(root), api.resolve(target));
   return relative3 && relative3 !== ".." && !relative3.startsWith(`..${api.sep}`) && !api.isAbsolute(relative3) ? relative3.split(api.sep).join("/") : null;
 }
-function resolveNoteTarget(text, root, distro) {
+function parseNoteTarget(text, root, distro) {
   if (hasControlCharacter(text) || /^[a-z][a-z\d+.-]*:\/\//i.test(text)) return null;
   const match = /^(.*\.md)(?::([1-9]\d*))?(?::([1-9]\d*))?$/i.exec(text);
   if (!match) return null;
@@ -20366,18 +20366,31 @@ function resolveNoteTarget(text, root, distro) {
   if (!native) return null;
   const api = pathApi(root);
   if (api === path2.win32 && (/^[a-z]:[^\\]/i.test(native) || /^\\(?!\\)/.test(native))) return null;
-  const relative3 = containedRelative(root, api.resolve(root, native));
-  if (!relative3) return null;
   const line = match[2] ? Number(match[2]) : void 0;
   const column = match[3] ? Number(match[3]) : void 0;
   if (line !== void 0 && !Number.isSafeInteger(line) || column !== void 0 && !Number.isSafeInteger(column)) return null;
-  return { path: relative3, line, column };
+  return { path: native, line, column };
 }
-function indexedNote(text, options, cache) {
+function resolveNoteTarget(text, root, distro) {
+  const target = parseNoteTarget(text, root, distro);
+  if (!target) return null;
+  const api = pathApi(root);
+  const relative3 = containedRelative(root, api.resolve(root, target.path));
+  return relative3 ? { ...target, path: relative3 } : null;
+}
+function resolveExternalNoteTarget(text, root, distro) {
+  if (!/^(?:\/(?!\/)|[a-z]:[\\/]|\\\\)/i.test(text)) return null;
+  const target = parseNoteTarget(text, root, distro);
+  if (!target) return null;
+  const api = pathApi(root);
+  if (!api.isAbsolute(target.path) || containedRelative(root, target.path)) return null;
+  return { ...target, path: api.normalize(target.path), external: true };
+}
+function matchingNote(text, options, cache) {
   const cached = cache == null ? void 0 : cache.get(text);
   if (cached !== void 0) return cached;
   const target = resolveNoteTarget(text, options.vaultRoot, options.wslDistro);
-  const note = target && options.hasNote(target.path) ? target : null;
+  const note = target && options.hasNote(target.path) ? target : options.allowExternalNotes ? resolveExternalNoteTarget(text, options.vaultRoot, options.wslDistro) : null;
   cache == null ? void 0 : cache.set(text, note);
   return note;
 }
@@ -20400,6 +20413,7 @@ function findTerminalLinks(text, options, noteStartLimit = text.length, noteCach
   let previousEnd = 0;
   while (match = ends.exec(text)) {
     const end = match.index + match[0].length;
+    if (options.allowExternalNotes && /^\.[^\s`"'<>()[\]{},;.!?|│┃]/.test(text.slice(end))) continue;
     let phraseStart = match.index;
     while (phraseStart > previousEnd && !/[\n\r\t`"'<>|│┃]/.test(text[phraseStart - 1])) phraseStart--;
     previousEnd = end;
@@ -20410,7 +20424,7 @@ function findTerminalLinks(text, options, noteStartLimit = text.length, noteCach
       const value = text.slice(start, end);
       const explicit = /^(?:[a-z]:[\\/]|[\\/]|\.\.[\\/]|[a-z][a-z\d+.-]*:\/\/)/i.test(value);
       if (links.some((link) => start < link.end && end > link.start)) break;
-      const note = indexedNote(value, options, noteCache);
+      const note = matchingNote(value, options, noteCache);
       if (note) {
         links.push({ start, end, text: value, note });
         break;
@@ -20888,7 +20902,7 @@ var TerminalLinks = class {
     ];
     const suffixes = lines.flatMap((line) => {
       var _a;
-      if (line.exactNote && !line.continuation && !indexedNote(line.line.text, this.options, noteCache)) return [];
+      if (line.exactNote && !line.continuation && !matchingNote(line.line.text, this.options, noteCache)) return [];
       return ((_a = line.suffixes) != null ? _a : line.suffix ? [line.suffix] : []).map((range) => ({
         range,
         noteOnly: line.exactNote || line.continuation === "note",
@@ -20897,7 +20911,7 @@ var TerminalLinks = class {
     });
     const before = (a, b) => a.y < b.y || a.y === b.y && a.x <= b.x;
     const links = lines.flatMap(({ line, current, continuation, blocked, noteStartLimit, exactNote, exactWeb }) => {
-      const note = exactNote ? indexedNote(line.text, this.options, noteCache) : null;
+      const note = exactNote ? matchingNote(line.text, this.options, noteCache) : null;
       const matches = exactNote ? note ? [{ start: 0, end: line.text.length, text: line.text, note }] : [] : exactWeb ? [{ start: 0, end: line.text.length, text: line.text }] : findTerminalLinks(line.text, this.options, noteStartLimit, noteCache);
       return blocked ? [] : matches.flatMap((match) => {
         const wholeRange = { start: line.starts[match.start], end: line.ends[match.end - 1] };
@@ -20963,7 +20977,7 @@ var TerminalLinks = class {
     callback(links.length ? links : void 0);
   }
   async activate(text, event) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f, _g;
     if (this.disposed || event.button !== 0 || this.suppressClickActivation || this.terminal.hasSelection()) return;
     const cell = this.cellAt(event);
     if (cell) {
@@ -20981,16 +20995,25 @@ var TerminalLinks = class {
         await this.options.openExternal(url);
         return;
       }
+      const external = this.options.allowExternalNotes ? resolveExternalNoteTarget(text, this.options.vaultRoot, this.options.wslDistro) : null;
+      if (external) {
+        const file2 = await ((_d = this.options.realpath) != null ? _d : import_node_fs.promises.realpath)(external.path);
+        if (!/\.md$/i.test(file2) || !(await import_node_fs.promises.stat(file2)).isFile()) return;
+        this.logicalLines.invalidate();
+        if (this.disposed || revision !== this.revision || hoveredRow && snapshot !== ((_e = this.logicalLines.read(hoveredRow)) == null ? void 0 : _e.text)) return;
+        await this.options.openNote({ ...external, path: file2 }, event);
+        return;
+      }
       const note = resolveNoteTarget(text, this.options.vaultRoot, this.options.wslDistro);
       if (!note || !this.options.hasNote(note.path)) return;
-      const realpath = (_d = this.options.realpath) != null ? _d : import_node_fs.promises.realpath;
+      const realpath = (_f = this.options.realpath) != null ? _f : import_node_fs.promises.realpath;
       const api = pathApi(this.options.vaultRoot);
       const [root, file] = await Promise.all([
         realpath(this.options.vaultRoot),
         realpath(api.join(this.options.vaultRoot, note.path))
       ]);
       this.logicalLines.invalidate();
-      if (this.disposed || revision !== this.revision || hoveredRow && snapshot !== ((_e = this.logicalLines.read(hoveredRow)) == null ? void 0 : _e.text) || !containedRelative(root, file) || !this.options.hasNote(note.path)) return;
+      if (this.disposed || revision !== this.revision || hoveredRow && snapshot !== ((_g = this.logicalLines.read(hoveredRow)) == null ? void 0 : _g.text) || !containedRelative(root, file) || !this.options.hasNote(note.path)) return;
       await this.options.openNote(note, event);
     } catch (error) {
       if (!this.disposed) this.options.onError(error);
@@ -23132,6 +23155,7 @@ var OpencodeTerminalView = class _OpencodeTerminalView extends import_obsidian4.
     const terminalLinks = new TerminalLinks(terminal, {
       vaultRoot: this.plugin.vaultRoot,
       wslDistro: terminalEnvironment.WSL_DISTRO_NAME,
+      allowExternalNotes: (0, import_obsidian4.requireApiVersion)("1.14.2"),
       hasNote: (path11) => {
         var _a2;
         return Boolean(((_a2 = this.app.vault.getFileByPath(path11)) == null ? void 0 : _a2.extension.toLowerCase()) === "md");
@@ -23143,8 +23167,11 @@ var OpencodeTerminalView = class _OpencodeTerminalView extends import_obsidian4.
       },
       openNote: async (target, event) => {
         var _a2;
-        const file = this.app.vault.getFileByPath(target.path);
-        if (!file) return;
+        const file = this.app.vault.getFileByPath(target.external ? `file:${target.path}` : target.path);
+        if (!file) {
+          if (target.external) throw new Error("External Markdown file is unavailable");
+          return;
+        }
         const leaf = this.app.workspace.getLeaf(import_obsidian4.Keymap.isModEvent(event));
         await leaf.openFile(file, { active: true, state: target.line ? { mode: "source" } : void 0 });
         if (target.line && leaf.view instanceof import_obsidian4.MarkdownView) {
