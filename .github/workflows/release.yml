@@ -39,11 +39,12 @@ jobs:
           node-version: '24'
           cache: npm
 
-      - name: Build
-        run: |
-          npm ci
-          npm test
-          npm run build
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-artifact
+          path: release-artifact
+      - name: Verify the tested candidate
+        run: node scripts/release-artifact.mjs verify release-artifact "${{ github.sha }}"
 
       - name: Validate release identity and assets
         env:
@@ -53,12 +54,12 @@ jobs:
           const fs = require('node:fs');
           const read = name => JSON.parse(fs.readFileSync(name, 'utf8'));
           const version = process.env.RELEASE_VERSION;
-          const manifest = read('manifest.json');
+          const manifest = read('release-artifact/manifest.json');
           const lock = read('package-lock.json');
           const versions = [manifest.version, read('package.json').version, lock.version, lock.packages[''].version];
           if (versions.some(value => value !== version)) throw new Error('Tag and package versions must match');
           if (read('versions.json')[version] !== manifest.minAppVersion) throw new Error('Compatibility mapping must match');
-          for (const name of ['main.js', 'manifest.json', 'styles.css', `docs/releases/${version}.md`]) {
+          for (const name of ['release-artifact/main.js', 'release-artifact/manifest.json', 'release-artifact/styles.css', `docs/releases/${version}.md`]) {
             if (!fs.statSync(name).size) throw new Error(`Empty release asset: ${name}`);
           }
           JS
@@ -69,9 +70,9 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
-            main.js
-            manifest.json
-            styles.css
+            release-artifact/main.js
+            release-artifact/manifest.json
+            release-artifact/styles.css
           body_path: docs/releases/${{ github.ref_name }}.md
           generate_release_notes: false
         env:
@@ -80,9 +81,9 @@ jobs:
       - name: Attest main.js
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: main.js
+          subject-path: release-artifact/main.js
 
       - name: Attest styles.css
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: styles.css
+          subject-path: release-artifact/styles.css

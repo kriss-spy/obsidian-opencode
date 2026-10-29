@@ -1,5 +1,9 @@
 ## Agent skills
 
+### Verification
+
+Before changing CI or preparing a release, read `docs/agents/verification.md` for the authoritative commands, artifact checks, and manual evidence requirements.
+
 ### Issue tracker
 
 Issues are tracked on GitHub. See `docs/agents/issue-tracker.md`.

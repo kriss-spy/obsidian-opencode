@@ -14,7 +14,7 @@ export const config: WebdriverIO.Config = {
 			// Reuse an installed early-access bundle without account credentials.
 			...(process.env.OBSIDIAN_APP_PATH ? { appPath: process.env.OBSIDIAN_APP_PATH } : {}),
 			...(process.env.OBSIDIAN_BINARY_PATH ? { binaryPath: process.env.OBSIDIAN_BINARY_PATH } : {}),
-			plugins: ["."],
+			plugins: [process.env.OPENCODE_TEST_PLUGIN_DIR ?? "."],
 			vault: "test/vault",
 		},
 	}],

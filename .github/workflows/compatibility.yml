@@ -12,6 +12,28 @@ permissions:
   contents: read
 
 jobs:
+  release-artifact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Package the candidate once
+        run: node scripts/release-artifact.mjs stage release-artifact "${{ inputs.commit }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-artifact
+          path: release-artifact/
+          if-no-files-found: error
+
   source-review:
     env:
       # A prerelease manifest is allowed only when it matches the pushed tag.
@@ -39,6 +61,7 @@ jobs:
           if-no-files-found: warn
 
   platforms:
+    needs: release-artifact
     name: ${{ matrix.runner }} / Obsidian ${{ matrix.obsidian }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
@@ -51,6 +74,7 @@ jobs:
       CI_EXPECTED_SHA: ${{ inputs.commit }}
       OBSIDIAN_VERSION: ${{ matrix.obsidian }}
       OBSIDIAN_INSTALLER_VERSION: ${{ matrix.obsidian }}
+      OPENCODE_TEST_PLUGIN_DIR: release-artifact
       DISPLAY: ':99'
     steps:
       - uses: actions/checkout@v4
@@ -68,6 +92,11 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-artifact
+          path: release-artifact
+      - run: node scripts/release-artifact.mjs verify release-artifact "${{ inputs.commit }}"
       - run: npm test
       - run: npm run test:ci
       - run: npm run ci:install-opencode
@@ -93,6 +122,9 @@ jobs:
         run: npm run test:obsidian
       - name: Mandatory real OpenCode lifecycle
         run: npm run test:obsidian:real
+      - name: Isolated real OpenCode focus, Ctrl+Z and folder-drop workflows
+        if: runner.os == 'Linux'
+        run: npm run test:obsidian:real-workflows
 
       - name: Upload platform evidence
         if: always()
@@ -103,6 +135,7 @@ jobs:
           if-no-files-found: warn
 
   windows-terminal-links:
+    needs: release-artifact
     runs-on: windows-latest
     timeout-minutes: 15
     strategy:
@@ -113,6 +146,7 @@ jobs:
       CI_EXPECTED_SHA: ${{ inputs.commit }}
       OBSIDIAN_VERSION: ${{ matrix.obsidian }}
       OBSIDIAN_INSTALLER_VERSION: ${{ matrix.obsidian }}
+      OPENCODE_TEST_PLUGIN_DIR: release-artifact
     steps:
       - uses: actions/checkout@v4
         with:
@@ -125,6 +159,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-artifact
+          path: release-artifact
+      - run: node scripts/release-artifact.mjs verify release-artifact "${{ inputs.commit }}"
       - run: npm run ci:install-opencode
       - run: npm run test:obsidian:windows-links
       - name: Upload hover evidence
@@ -138,7 +177,7 @@ jobs:
   gate:
     name: All platforms passed
     if: always()
-    needs: [source-review, platforms, windows-terminal-links]
+    needs: [release-artifact, source-review, platforms, windows-terminal-links]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

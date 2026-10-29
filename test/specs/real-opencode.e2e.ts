@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { browser, expect } from "@wdio/globals";
 import { resolveOpencodeExecutable } from "../../src/utils/opencodeExecutable";
+import { inspectArtifact, verifyArtifact } from "../../scripts/release-artifact.mjs";
 
 type ProcessRow = { pid: number; parent: number; name: string; state?: string };
 function processes(): ProcessRow[] {
@@ -83,6 +84,16 @@ describe("Mandatory real OpenCode compatibility", function () {
 		const environment = await browser.executeObsidian(({ obsidian }) => ({
 			appVersion: obsidian.apiVersion, userAgent: navigator.userAgent,
 		}));
+		let artifactSha256: Record<string, string> | undefined;
+		if (process.env.OPENCODE_TEST_PLUGIN_DIR) {
+			const candidate = verifyArtifact(process.env.OPENCODE_TEST_PLUGIN_DIR, process.env.CI_EXPECTED_SHA);
+			const installed = await browser.execute(() => {
+				const app = (window as any).app;
+				return { vault: app.vault.adapter.basePath, directory: app.plugins.plugins.opencode.manifest.dir };
+			});
+			artifactSha256 = inspectArtifact(path.resolve(installed.vault, installed.directory));
+			expect(artifactSha256).toEqual(candidate.sha256);
+		}
 		const profile = mkdtempSync(path.join(tmpdir(), "obsidian-real-compatibility-"));
 		const artifacts = path.resolve("test-results/obsidian/real-opencode");
 		mkdirSync(artifacts, { recursive: true });
@@ -183,7 +194,7 @@ describe("Mandatory real OpenCode compatibility", function () {
 			writeFileSync(path.join(artifacts, "passed.json"), JSON.stringify({
 				status: "passed", platform: process.platform, arch: process.arch,
 				commit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
-				...environment, cliVersion, checks, processes: owned,
+				...environment, cliVersion, checks, processes: owned, artifactSha256,
 			}, null, 2));
 		} finally {
 			try {

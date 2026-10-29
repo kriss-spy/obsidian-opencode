@@ -12,6 +12,7 @@
     "test:obsidian": "npm run build && wdio run ./wdio.conf.mts",
     "ci:install-opencode": "node scripts/install-ci-opencode.mjs",
     "test:obsidian:real": "npm run build && node scripts/run-real-opencode-tests.mjs",
+    "test:obsidian:real-workflows": "npm run build && cross-env OPENCODE_REAL_E2E=1 wdio run ./wdio.real-workflows.conf.mts",
     "test:obsidian:smoke": "npm run build && cross-env OBSIDIAN_TEST_GREP='\\[smoke\\]' wdio run ./wdio.conf.mts",
     "test:obsidian:macos-ime": "npm run build && cross-env OBSIDIAN_TEST_GREP='#26' wdio run ./wdio.conf.mts",
     "test:obsidian:windows-links": "npm run build && cross-env OPENCODE_WINDOWS_REGRESSION=1 wdio run ./wdio.windows-links.conf.mts",

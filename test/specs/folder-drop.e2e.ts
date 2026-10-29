@@ -142,7 +142,7 @@ describe("folder drag and drop in an isolated vault", function () {
 describe("folder drag and drop with installed OpenCode", function () {
 	it("[real V2] shows plain explorer folder paths beside file line mentions", async function () {
 		if (process.platform !== "linux" || process.env.OPENCODE_REAL_E2E !== "1") this.skip();
-		const executable = resolveOpencodeExecutable("opencode");
+		const executable = resolveOpencodeExecutable(process.env.OPENCODE_REAL_EXECUTABLE ?? "opencode");
 		const profile = mkdtempSync(path.join(tmpdir(), "obsidian-opencode-folder-real-"));
 		const directory = "Drop 笔记";
 		const previous = await browser.execute(() => {
