@@ -8,6 +8,7 @@ import sidebarTableHttp from "../../test/fixtures/sidebar-table-http";
 import sidebarOutputNotes from "../../test/fixtures/sidebar-output-notes";
 import tableHttpLinks from "../../test/fixtures/table-http-links";
 import userInputHttp, { resizedUserInputHttp, wrappedBlockUserInputHttp, sidebarUserInputHttp } from "../../test/fixtures/user-input-http";
+import * as terminalBufferExample from "../../test/fixtures/terminal-buffer-example.json";
 import { currentOsc8Link } from "./xtermOsc8";
 import { findTerminalLinks, resolveExternalNoteTarget, resolveNoteTarget, safeWebUrl, TerminalLinks, TerminalLinkOptions } from "./terminalLinks";
 
@@ -132,6 +133,20 @@ describe("terminal link parsing and containment", () => {
 });
 
 describe("public xterm provider and activation", () => {
+	it("replays saved buffer cells and dimensions through the link provider", () => {
+		const fixture = terminalBufferExample;
+		const term = terminal(fixture.lines.map(line => ({
+			chars: line.cells.map(cell => cell[0] as string),
+			widths: line.cells.map(cell => cell[1] as number), wrapped: line.isWrapped,
+		})));
+		Object.assign(term, { cols: fixture.cols, rows: fixture.rows });
+		Object.assign(term.buffer.active, { viewportY: fixture.viewportY });
+		Object.assign(term.modes, { mouseTrackingMode: fixture.mouseTrackingMode });
+		const provider = new TerminalLinks(term, options());
+		expect(links(provider, 2).map(link => link.text)).toEqual(userInputHttp.urls.slice(0, 2));
+		expect(links(provider, 5).map(link => link.text)).toEqual([userInputHttp.urls[2]]);
+		provider.dispose();
+	});
 	it.each([false, true])("highlights complete output note paths beside the sidebar (wrapped=%s)", wrapped => {
 		const rows = sidebarOutputNotes.lines.map(text => ({ chars: Array.from(text.padEnd(96)), wrapped }));
 		if (wrapped) rows.push(...Array.from({ length: 8 }, () => ({ chars: Array.from(" ".repeat(96)), wrapped })));
