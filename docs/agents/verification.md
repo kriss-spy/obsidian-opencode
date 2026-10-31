@@ -2,8 +2,22 @@
 
 Run from the repository root. Use Node.js 24 and `npm ci`; the plugin-review tooling has its own lockfile and needs `npm ci --prefix scripts/plugin-review/lib`.
 
+## Inner-loop checks
+
+Run `npm run verify` for every change. It fails fast in this order: source and test typecheck, Vitest, CI script contracts, review-runner regression checks, and source/manifest review.
+The existing `tsconfig.json` includes source, unit tests, app specs, and test helpers. Vitest alone does not typecheck them.
+Run the relevant WDIO specs separately when the environment allows, for example:
+
+```sh
+npm run test:obsidian -- --spec test/specs/terminal-links.e2e.ts
+```
+
+For terminal UI or link bugs, follow [buffer capture instructions](../../test/fixtures/README.md) before fixing code.
+Report unverified platforms and manual checks explicitly. A passing synthetic fixture does not confirm the original report.
+
 | Check | Command | Passing result |
 | --- | --- | --- |
+| Source and test typecheck | `npm run typecheck` | TypeScript exits successfully |
 | Production typecheck and bundle | `npm run build` | TypeScript and esbuild exit successfully |
 | Unit and integration contracts | `npm test` | No failures; native platform skips are reported |
 | CI runner and artifact contracts | `npm run test:ci` | Missing/stale evidence and altered artifact cases are rejected |
@@ -31,3 +45,19 @@ Set `OPENCODE_TEST_PLUGIN_DIR=release-artifact` for every app test against that 
 `compatibility.yml` packages once, downloads the artifact on every platform, and gates all validation. `release.yml` downloads and verifies that same artifact after validation, checks tag/package/manifest/lockfile/compatibility-map identity and release notes, and publishes those exact assets. A source rebuild after verification cannot change the published bundle.
 
 For a release candidate, copy [the release checklist template](../releases/TEMPLATE-checks.md) to a versioned checklist, fill its evidence links, and follow [the manual verification matrix](../manual-verification.md). Keep human platform sign-off distinct from automated success. The full review tool's release inspection is useful after publication; it is not the required source gate and cannot verify an unpublished release.
+
+## Install a development build into a vault
+
+Run `npm run build` before every installation. The installer requires a prior build; it does not rebuild or detect stale bundles.
+The usual target is `~/obsidian/cloudnotes`. Use an isolated temporary vault for script tests.
+No vault is selected by default. The destination vault directory must already exist.
+
+```sh
+npm run build
+npm run install:vault -- --vault ~/obsidian/cloudnotes
+```
+
+The installer reads the plugin id from `manifest.json`. It backs up the whole existing plugin directory under `<vault>/.obsidian/plugin-backups/` with a timestamp and unique suffix.
+It copies `main.js`, `manifest.json`, and `styles.css`, then checks each SHA-256 hash. Existing settings and other files remain in place.
+The command prints the backup path and installed hashes. It does not reload the running plugin.
+If copying fails, keep the printed backup for recovery; installation is not atomic.
