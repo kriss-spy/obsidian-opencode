@@ -11,7 +11,7 @@ Run from the repository root. Use Node.js 24 and `npm ci`; the plugin-review too
 | Required source/manifest review | `scripts/plugin-review/review.sh --skip-release --skip-behavior --fail-on error --report-dir test-results/review` | Zero errors |
 | Isolated Obsidian app suite | `npm run test:obsidian` | All applicable specs pass in a copied test vault |
 | Native OpenCode lifecycle | `npm run ci:install-opencode`, then `npm run test:obsidian:real` | Fresh completion evidence includes launch, input, resize, close, reopen, cleanup |
-| Linux real focus, Ctrl+Z, file/folder mentions | `npm run test:obsidian:real-workflows` | Both real V2 cases pass; pending/empty runs fail |
+| Linux real focus, Ctrl+Z, file/folder mentions, session links | `npm run test:obsidian:real-workflows` | All three real V2 cases pass; pending/empty runs fail |
 | Windows ConPTY hover regression | `npm run test:obsidian:windows-links` | Required native wrapped-block repro and responsiveness assertions pass |
 
 The CLI installer exports the pinned binary through `GITHUB_ENV` in CI. Locally, set `OPENCODE_REAL_EXECUTABLE` (and `OPENCODE_WINDOWS_EXECUTABLE` for the hover suite) to the path it prints. GUI runs use separate profiles; serialize local runs under `/tmp/obsidian-opencode-real-app.lock` on Linux. See [testing details](../testing-obsidian.md) for app/installer overrides and platform requirements.

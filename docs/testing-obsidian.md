@@ -11,7 +11,7 @@ It does not open, register, modify, or read any existing vault. `wdio-obsidian-s
 - Source/manifest lint and the lint-report regression checks.
 - Linux, Windows, and macOS against Obsidian 1.12.7 and dynamically resolved latest stable, using the matching installer (and architecture selected by the runner).
 - Unit tests, typecheck/build, the complete isolated app suite, and a mandatory real OpenCode lifecycle on every matrix entry, installed from one packaged release artifact.
-- The two isolated Linux real V2 focus/Ctrl+Z and folder-drop cases on both app versions, with pending/empty runs rejected.
+- The three isolated Linux real V2 focus/Ctrl+Z, folder-drop and session-link cases on both app versions, with pending/empty runs rejected. Session links cover live terminal switching, panel copying without restoring, and resuming with the terminal closed, another session active, or the target already open. Protocol tests use the parameters Obsidian delivers after consuming `vault` for routing.
 - The real Windows #70 hover regression against pinned 1.14.5 and latest stable.
 
 The native OpenCode 2.1.4 package is extracted into a temporary directory and version-checked on each runner. The mandatory lifecycle uses a fresh standalone profile, opens the real home screen, moves focus away and reveals the terminal, types without submitting a model prompt, resizes the sidebar, closes the terminal, reopens it, and verifies that the captured PTY/OpenCode process trees exit. Linux also runs `npm run test:obsidian:real-workflows` with that pinned binary and isolated profiles. The older Windows real-CLI cases remain manual; their legacy CLI/configuration assumptions are documented in the [coverage inventory](manual-verification.md).
