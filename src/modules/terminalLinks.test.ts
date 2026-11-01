@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, mkdirSync, realpathSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import type { ILink, Terminal } from "@xterm/xterm";
@@ -891,7 +892,8 @@ describe("actual filesystem boundary checks", () => {
 		await provider.activate(`${file}:3:5`, click);
 		await provider.activate(folder, click);
 		await provider.activate(path.join(directory, "Missing.md"), click);
-		expect(config.openNote).toHaveBeenCalledExactlyOnceWith({ path: file, external: true, line: 3, column: 5 }, click);
+		// Windows async realpath expands 8.3 aliases that realpathSync can retain.
+		expect(config.openNote).toHaveBeenCalledExactlyOnceWith({ path: await realpath(file), external: true, line: 3, column: 5 }, click);
 		expect(config.openExternal).not.toHaveBeenCalled();
 		expect(config.onError).toHaveBeenCalledOnce();
 	});
