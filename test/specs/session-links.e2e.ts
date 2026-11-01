@@ -117,10 +117,25 @@ describe("[issue #69] session links", function () {
 			await browser.waitUntil(async () => (await current())?.id === first.id, { timeout: 30_000, timeoutMsg: "Real OpenCode did not report its displayed session" });
 			await browser.executeObsidianCommand("opencode:copy-session-link");
 			await browser.waitUntil(() => browser.execute(() => (window as any).__sessionLinkWrites.length === 1));
+			const terminalText = () => browser.execute(() => {
+				const terminal = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+				return Array.from({ length: terminal.buffer.active.length }, (_, row) => terminal.buffer.active.getLine(row)?.translateToString(true) ?? "").join("\n");
+			});
+			await browser.executeObsidianCommand("opencode:open-terminal");
+			await browser.waitUntil(() => browser.execute(() => {
+				return (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal.textarea === document.activeElement;
+			}));
 			await browser.keys(["Control", "x"]); await browser.keys("NULL"); await browser.keys("l");
-			await browser.keys("Issue69 second");
-			await browser.keys("Enter");
-			await browser.waitUntil(async () => (await current())?.id === second.id, { timeout: 15_000, timeoutMsg: "Terminal-side session switch did not reach the bridge" });
+			try {
+				await browser.waitUntil(async () => (await terminalText()).includes("Sessions"), { timeoutMsg: "Session picker did not open" });
+				await browser.keys("Issue69 second");
+				// The query and its matching row must both reach the rendered picker.
+				await browser.waitUntil(async () => (await terminalText()).split("Issue69 second").length >= 3, { timeoutMsg: "Session picker did not render the filtered result" });
+				await browser.keys("Enter");
+				await browser.waitUntil(async () => (await current())?.id === second.id, { timeout: 15_000, timeoutMsg: "Terminal-side session switch did not reach the bridge" });
+			} catch (error) {
+				throw new Error(`${String(error)}\nSession picker buffer:\n${await terminalText()}`);
+			}
 			await browser.executeObsidianCommand("opencode:copy-session-link");
 			await browser.waitUntil(() => browser.execute(() => (window as any).__sessionLinkWrites.length === 2));
 			const urls: string[] = await browser.execute(() => (window as any).__sessionLinkWrites);
