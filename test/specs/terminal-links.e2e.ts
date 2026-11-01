@@ -1,5 +1,6 @@
 import * as path from "node:path";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { browser, expect } from "@wdio/globals";
 import { Key } from "webdriverio";
@@ -460,7 +461,7 @@ describe("[issue #62] real xterm terminal links in an isolated vault", function 
 	it("[issue #66] opens an external Markdown file inside Obsidian with locations and modifier tabs", async function () {
 		const supported = await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminalLinks.options.allowExternalNotes);
 		if (!supported) this.skip();
-		const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "opencode-external-note-")));
+		const directory = await realpath(mkdtempSync(path.join(tmpdir(), "opencode-external-note-")));
 		const file = path.join(directory, "中文 My #note.md");
 		writeFileSync(file, "first\nsecond\nthird line for cursor\nfourth\n");
 		try {
