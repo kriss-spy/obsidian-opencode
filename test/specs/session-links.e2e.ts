@@ -40,12 +40,16 @@ describe("[issue #69] session links", function () {
 				expect(await browser.execute(() => (window as any).app.workspace.getLeavesOfType("opencode-terminal").length)).toBe(0);
 			}
 			await browser.execute(async () => {
-				const app = (window as any).app;
 				const params = Object.fromEntries(new URL((window as any).__sessionLinkWrites[0]).searchParams);
 				delete params.vault; // Consumed by Obsidian's desktop URI routing.
-				app.workspace.protocolHandler.dispatch({ action: "opencode", ...params });
+				(window as any).OBS_ACT({ action: "opencode", ...params });
 			});
-			await browser.waitUntil(() => browser.execute(() => !!(window as any).app.workspace.getLeavesOfType("opencode-terminal")[0]?.view.ptySession.getStdin()));
+			try {
+				await browser.waitUntil(() => browser.execute(() => !!(window as any).app.workspace.getLeavesOfType("opencode-terminal")[0]?.view.ptySession.getStdin()));
+			} catch (error) {
+				const notices = await browser.execute(() => Array.from(document.querySelectorAll(".notice"), (notice) => notice.textContent));
+				throw new Error(`${String(error)}\nSession-link notices: ${JSON.stringify(notices)}`);
+			}
 			await browser.execute(async () => {
 				const app = (window as any).app, plugin = app.plugins.plugins.opencode;
 				const view = app.workspace.getLeavesOfType("opencode-terminal")[0].view;
@@ -137,12 +141,11 @@ describe("[issue #69] session links", function () {
 			expect((await current())?.id).toBe(second.id);
 			expect(await browser.execute(() => (window as any).__sessionLinkWrites[2])).toBe(urls[0]);
 			await browser.execute(async (url: string) => {
-				const app = (window as any).app;
-				const plugin = app.plugins.plugins.opencode;
+				const plugin = (window as any).app.plugins.plugins.opencode;
 				await plugin.viewCoordinator.closeTerminal();
 				const params = Object.fromEntries(new URL(url).searchParams);
 				delete params.vault;
-				app.workspace.protocolHandler.dispatch({ action: "opencode", ...params });
+				(window as any).OBS_ACT({ action: "opencode", ...params });
 			}, urls[0]);
 			try {
 				await browser.waitUntil(async () => (await current())?.id === first.id, { timeout: 30_000, timeoutMsg: "Session link did not resume its session" });

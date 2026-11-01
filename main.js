@@ -22682,9 +22682,12 @@ ${result.stderr}`;
     if (!SAFE_ID_RE.test(sessionId)) throw new Error("Invalid session ID");
     const session = generation === "v2" ? parseV2Session(JSON.parse(await this.commandRunner()(["api", "get", `/api/session/${sessionId}`])).data) : (await this.listSessions(generation)).find((entry) => entry.id === sessionId);
     if (!session || session.id !== sessionId) throw new Error("The referenced OpenCode session is unavailable on this machine.");
-    if (path7.resolve(session.directory) !== path7.resolve(this.cwd)) {
-      throw new Error("The session's working directory differs from the link. Copy a new session link.");
+    if (path7.resolve(session.directory) === path7.resolve(this.cwd)) return;
+    try {
+      if (fs5.realpathSync(session.directory) === fs5.realpathSync(this.cwd)) return;
+    } catch (e) {
     }
+    throw new Error("The session's working directory differs from the link. Copy a new session link.");
   }
   async listActiveSessions() {
     const run = this.commandRunner();
