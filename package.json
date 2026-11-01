@@ -1,6 +1,6 @@
 {
   "name": "obsidian-opencode",
-  "version": "2.3.2",
+  "version": "2.4.0",
   "description": "OpenCode CLI wrapper for Obsidian",
   "main": "main.js",
   "scripts": {
@@ -19,7 +19,10 @@
     "test:obsidian:windows-ui": "npm run build && cross-env OPENCODE_REAL_E2E=1 OBSIDIAN_TEST_GREP=\"real OpenCode\" wdio run ./wdio.conf.mts",
     "test:obsidian:wsl-x410": "npm run build && node scripts/run-wsl-x410-tests.mjs",
     "embed:windows-pty": "node embed-windows-pty-binary.mjs && node embed-windows-pty-binary.mjs node_modules/zigpty/prebuilds/zigpty.win32-arm64.node src/pty/windowsPtyNativeArm64.ts WINDOWS_PTY_NATIVE_ARM64_BASE64",
-    "embed:windows-job-host": "node embed-windows-job-host-binary.mjs"
+    "embed:windows-job-host": "node embed-windows-job-host-binary.mjs",
+    "install:vault": "node scripts/install-vault.mjs",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm test && npm run test:ci && bash scripts/plugin-review/self-test.sh && bash scripts/plugin-review/review.sh --skip-release --skip-behavior --fail-on error --report-dir test-results/review"
   },
   "keywords": [
     "obsidian",

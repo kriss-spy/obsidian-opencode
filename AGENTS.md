@@ -2,7 +2,17 @@
 
 ### Verification
 
-Before changing CI or preparing a release, read `docs/agents/verification.md` for the authoritative commands, artifact checks, and manual evidence requirements.
+Before any change, read `docs/agents/verification.md` for the authoritative commands, artifact checks, and manual evidence requirements.
+
+### Definition of done
+
+- Run `npm run verify` and the WDIO specs relevant to the change when the environment allows. Follow the verification guide above.
+- In the final report, list passed checks and checks not run, including applicable Windows/macOS, real-vault, and manual UI checks.
+- Never close or mark an issue completed until the user confirms the fix or a test reproducing the original report passes.
+
+### Terminal regressions
+
+For terminal UI or link-detection bugs, first capture a real buffer fixture and write a failing test from it, then fix the bug. See `test/fixtures/README.md` for capture and replay instructions.
 
 ### Issue tracker
 
