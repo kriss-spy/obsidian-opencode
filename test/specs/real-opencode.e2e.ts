@@ -5,16 +5,18 @@ import * as path from "node:path";
 import { browser, expect } from "@wdio/globals";
 import { resolveOpencodeExecutable } from "../../src/utils/opencodeExecutable";
 import { inspectArtifact, verifyArtifact } from "../../scripts/release-artifact.mjs";
+import { descendantProcesses, ProcessRow, survivingProcesses } from "../helpers/processTree";
 
-type ProcessRow = { pid: number; parent: number; name: string; state?: string };
 function processes(): ProcessRow[] {
 	if (process.platform === "win32") {
 		const rows = JSON.parse(execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
-			"@(Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name) | ConvertTo-Json -Compress"],
+			"@(Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,@{Name='Created';Expression={$_.CreationDate.ToUniversalTime().ToString('o')}}) | ConvertTo-Json -Compress"],
 		{ encoding: "utf8", timeout: 15_000 }));
-		return rows.map((row: { ProcessId: number; ParentProcessId: number; Name: string }) => ({
-			pid: row.ProcessId, parent: row.ParentProcessId, name: row.Name,
-		}));
+		return rows.map((row: { ProcessId: number; ParentProcessId: number; Name: string; Created: string }) => {
+			const created = Date.parse(row.Created);
+			if (!Number.isFinite(created)) throw new Error(`Missing process creation time for ${row.ProcessId}`);
+			return { pid: row.ProcessId, parent: row.ParentProcessId, name: row.Name, created };
+		});
 	}
 	return execFileSync("ps", ["-axo", "pid=,ppid=,stat=,comm="], { encoding: "utf8" }).trim().split("\n").map(line => {
 		const match = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
@@ -23,20 +25,13 @@ function processes(): ProcessRow[] {
 	});
 }
 function tree(roots: number[]): ProcessRow[] {
-	const rows = processes(), owned = new Set(roots);
-	let previousSize = -1;
-	while (previousSize !== owned.size) {
-		previousSize = owned.size;
-		for (const row of rows) if (owned.has(row.parent)) owned.add(row.pid);
-	}
-	const result = rows.filter(row => owned.has(row.pid));
+	const result = descendantProcesses(processes(), roots);
 	if (!result.some(row => /opencode/i.test(row.name))) throw new Error("PTY did not own a real OpenCode process");
 	return result;
 }
 async function waitForExit(owned: ProcessRow[]): Promise<void> {
 	await browser.waitUntil(() => {
-		const running = new Set(processes().filter(row => !row.state?.startsWith("Z")).map(row => row.pid));
-		return owned.every(row => !running.has(row.pid));
+		return survivingProcesses(owned, processes()).length === 0;
 	}, { timeout: 15_000, interval: 250, timeoutMsg: `OpenCode processes survived terminal close: ${JSON.stringify(owned)}` });
 }
 async function bufferText(): Promise<string> {
