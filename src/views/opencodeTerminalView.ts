@@ -454,7 +454,7 @@ export class OpencodeTerminalView extends ItemView {
 		this.register(() => renderDisposable.dispose());
 
 		const handleMessageWheel = (event: WheelEvent) => {
-			if (process.platform !== "win32" || event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+			if (process.platform !== "win32" || event.ctrlKey || terminal.modes.mouseTrackingMode !== "none" || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
 			event.preventDefault();
 			event.stopImmediatePropagation();
 			terminal.input(event.deltaY < 0 ? SCROLL_PAGE_UP : SCROLL_PAGE_DOWN, true);
@@ -463,7 +463,7 @@ export class OpencodeTerminalView extends ItemView {
 		this.register(() => termContainer.removeEventListener("wheel", handleMessageWheel, true));
 
 		const handleScrollbarMouse = (event: MouseEvent) => {
-			if (process.platform !== "win32" || event.button !== 0) return;
+			if (process.platform !== "win32" || event.button !== 0 || terminal.modes.mouseTrackingMode !== "none") return;
 			if ((event.target as Element).closest(".opencode-terminal-scrollbar")) return;
 			const cell = terminalCellAt(event);
 			const thumb = findOpenCodeScrollbarThumb(terminal.buffer.active, terminal.rows);
@@ -547,7 +547,7 @@ export class OpencodeTerminalView extends ItemView {
 			return process.platform === "win32" && isOpenCodePicker(terminal.buffer.active);
 		};
 		const moveCursorOnMouseDown = (event: MouseEvent) => {
-			if (process.platform !== "win32" || event.button !== 0 || isMouseClickableTui()) return;
+			if (process.platform !== "win32" || event.button !== 0 || terminal.modes.mouseTrackingMode !== "none" || isMouseClickableTui()) return;
 			const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
 			if (!screen) return;
 			const rect = screen.getBoundingClientRect();
@@ -566,7 +566,7 @@ export class OpencodeTerminalView extends ItemView {
 		this.register(() => termContainer.removeEventListener("mousedown", moveCursorOnMouseDown));
 
 		const handlePickerMouse = (event: MouseEvent) => {
-			if (process.platform !== "win32" || event.button !== 0 || !isMouseClickableTui()) return;
+			if (process.platform !== "win32" || event.button !== 0 || terminal.modes.mouseTrackingMode !== "none" || !isMouseClickableTui()) return;
 			const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
 			if (!screen) return;
 			const rect = screen.getBoundingClientRect();

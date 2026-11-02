@@ -18,7 +18,7 @@
     "test:obsidian:windows-links": "npm run build && cross-env OPENCODE_WINDOWS_REGRESSION=1 wdio run ./wdio.windows-links.conf.mts",
     "test:obsidian:windows-ui": "npm run build && cross-env OPENCODE_REAL_E2E=1 OBSIDIAN_TEST_GREP=\"real OpenCode\" wdio run ./wdio.conf.mts",
     "test:obsidian:wsl-x410": "npm run build && node scripts/run-wsl-x410-tests.mjs",
-    "embed:windows-pty": "node embed-windows-pty-binary.mjs && node embed-windows-pty-binary.mjs node_modules/zigpty/prebuilds/zigpty.win32-arm64.node src/pty/windowsPtyNativeArm64.ts WINDOWS_PTY_NATIVE_ARM64_BASE64",
+    "embed:windows-pty": "node embed-windows-node-pty.mjs",
     "embed:windows-job-host": "node embed-windows-job-host-binary.mjs",
     "install:vault": "node scripts/install-vault.mjs",
     "typecheck": "tsc --noEmit",
@@ -44,12 +44,12 @@
     "cross-env": "^7.0.3",
     "esbuild": "^0.28.2",
     "mocha": "^12.0.1",
+    "node-pty": "1.1.0",
     "obsidian": "^1.13.1",
     "typescript": "4.7.4",
     "vitest": "^4.1.12",
     "wdio-obsidian-reporter": "^3.2.0",
-    "wdio-obsidian-service": "^3.2.0",
-    "zigpty": "^0.2.1"
+    "wdio-obsidian-service": "^3.2.0"
   },
   "dependencies": {
     "@xterm/addon-canvas": "0.7.0",
