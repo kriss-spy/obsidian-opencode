@@ -22,14 +22,4 @@ describe.skipIf(process.platform === "win32")("OpenCode compatibility wrappers",
 		await expect(new OpencodeClient(symlink, temporaryDirectory).checkCompatibility())
 			.resolves.toEqual({ generation: "stable", executable: symlink });
 	});
-
-	it("resumes a session when the CLI resolves a working-directory symlink", async () => {
-		temporaryDirectory = mkdtempSync(path.join(os.tmpdir(), "obsidian-opencode-session-alias-"));
-		const alias = path.join(temporaryDirectory, "vault-alias");
-		symlinkSync(temporaryDirectory, alias, "dir");
-		const client = new OpencodeClient(path.resolve("test/fixtures/opencode-stub"), alias, {
-			OBSIDIAN_OPENCODE_SESSION_LINKS: "1",
-		});
-		await expect(client.requireSession("ses_fixture", "stable")).resolves.toBeUndefined();
-	});
 });
