@@ -19,4 +19,4 @@ Do not trim spaces, infer wrapping from text, or truncate rows to `cols`: resize
 This format captures text layout, not colors, images, or a screenshot. Keep screenshots for visual claims that require them.
 
 `terminal-buffer-example.json` is a format example transcribed from the existing issue #68 screenshot fixture (`user-input-http.ts`).
-It is not a live buffer capture or proof that the original report is fixed. Its test demonstrates replay through the link provider.
+It is not a live buffer capture or proof that the original report is fixed. The provider replay test remains on `dev`; stable main retains the published source tests. CI script contracts test capture and normalization.

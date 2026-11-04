@@ -4,6 +4,10 @@
 
 Before any change, read `docs/agents/verification.md` for the authoritative commands, artifact checks, and manual evidence requirements.
 
+### Release branches
+
+Before preparing a release or targeting `main`, read `docs/agents/releases.md`. Develop unpublished versions on `dev`; keep default branch `main` aligned with public release content.
+
 ### Definition of done
 
 - Run `npm run verify` and the WDIO specs relevant to the change when the environment allows. Follow the verification guide above.
