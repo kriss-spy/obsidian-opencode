@@ -3,7 +3,7 @@ name: Test
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, dev]
   merge_group:
   workflow_dispatch:
 
@@ -11,6 +11,24 @@ permissions:
   contents: read
 
 jobs:
+  published-stable-release:
+    name: Published stable release
+    if: >-
+      (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+      (github.event_name == 'merge_group' && github.event.merge_group.base_ref == 'refs/heads/main') ||
+      ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node scripts/check-published-release.mjs "$GITHUB_REPOSITORY"
+
   validate:
     uses: ./.github/workflows/compatibility.yml
     with:
