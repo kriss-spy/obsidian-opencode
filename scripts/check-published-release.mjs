@@ -7,12 +7,11 @@ import { fileURLToPath } from "node:url";
 const assetNames = ["main.js", "manifest.json", "styles.css"];
 const readJson = file => JSON.parse(readFileSync(file, "utf8"));
 
-async function getPublic(url, fetchImpl) {
+async function getPublic(url, fetchImpl, headers) {
 	let response;
 	for (let attempt = 0; attempt < 3; attempt++) {
 		try {
-			// Deliberately omit credentials: a maintainer can see an unpublished draft.
-			response = await fetchImpl(url, { signal: AbortSignal.timeout(30_000) });
+			response = await fetchImpl(url, { signal: AbortSignal.timeout(30_000), ...(headers ? { headers } : {}) });
 			if (response.status !== 429 && response.status < 500) break;
 		} catch (error) {
 			if (attempt === 2) throw error;
@@ -22,7 +21,7 @@ async function getPublic(url, fetchImpl) {
 	return response;
 }
 
-export async function checkPublishedRelease({ root = process.cwd(), repository, fetchImpl = fetch } = {}) {
+export async function checkPublishedRelease({ root = process.cwd(), repository, fetchImpl = fetch, apiToken } = {}) {
 	if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? "")) throw new Error("A GitHub owner/repository is required");
 	const manifest = readJson(path.join(root, "manifest.json"));
 	const version = manifest.version;
@@ -35,7 +34,10 @@ export async function checkPublishedRelease({ root = process.cwd(), repository, 
 	if (readJson(path.join(root, "versions.json"))[version] !== manifest.minAppVersion) {
 		throw new Error("Stable compatibility mapping differs from the manifest");
 	}
-	const release = await (await getPublic(`https://api.github.com/repos/${repository}/releases/tags/${version}`, fetchImpl)).json();
+	// Authenticated metadata avoids shared-runner anonymous API limits. Draft flags
+	// remain mandatory, and all asset downloads below deliberately omit credentials.
+	const apiHeaders = apiToken ? { Authorization: `Bearer ${apiToken}` } : undefined;
+	const release = await (await getPublic(`https://api.github.com/repos/${repository}/releases/tags/${version}`, fetchImpl, apiHeaders)).json();
 	if (release.draft !== false || release.prerelease !== false || !release.published_at || release.tag_name !== version) {
 		throw new Error(`Main must reference a published stable release: ${version}`);
 	}
@@ -62,5 +64,6 @@ export async function checkPublishedRelease({ root = process.cwd(), repository, 
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-	console.log(JSON.stringify(await checkPublishedRelease({ repository: process.argv[2] ?? process.env.GITHUB_REPOSITORY }), null, 2));
+	console.log(JSON.stringify(await checkPublishedRelease({ repository: process.argv[2] ?? process.env.GITHUB_REPOSITORY,
+		apiToken: process.env.GITHUB_TOKEN }), null, 2));
 }
