@@ -29,6 +29,8 @@ jobs:
         with:
           node-version: 24
       - run: node scripts/check-published-release.mjs "$GITHUB_REPOSITORY"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
   validate:
     uses: ./.github/workflows/compatibility.yml

@@ -47,6 +47,28 @@ test("stable guard rejects an unavailable public release even if a draft exists 
 	finally { f.close(); }
 });
 
+test("metadata can use the workflow token while public asset downloads remain anonymous", async () => {
+	const f = fixture();
+	try {
+		await f.check({ apiToken: "fixture-token" });
+		assert.equal(f.requests[0].options.headers.Authorization, "Bearer fixture-token");
+		for (const request of f.requests.slice(1)) assert.equal(request.options.headers, undefined);
+		f.release.draft = true;
+		await assert.rejects(f.check({ apiToken: "fixture-token" }), /published stable release/);
+	} finally { f.close(); }
+});
+
+test("authenticated metadata cannot substitute for publicly downloadable assets", async () => {
+	const f = fixture();
+	try {
+		await assert.rejects(f.check({ apiToken: "fixture-token", fetchImpl: async (url, options) => {
+			if (url.includes("api.github.com")) return new Response(JSON.stringify(f.release));
+			assert.equal(options.headers, undefined);
+			return new Response("Private asset", { status: 404 });
+		} }), /Public release request failed \(404\)/);
+	} finally { f.close(); }
+});
+
 for (const [label, patch] of [["draft", { draft: true }], ["prerelease", { prerelease: true }], ["unpublished", { published_at: null }], ["wrong tag", { tag_name: "2.4.0" }]]) {
 	test(`stable guard rejects ${label} metadata`, async () => {
 		const f = fixture();

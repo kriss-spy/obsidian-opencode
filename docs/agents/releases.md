@@ -6,7 +6,8 @@ Develop features and prepare unpublished versions on `dev` or branches based on 
 
 `Published stable release` checks PRs targeting `main`, main pushes, and main merge groups.
 It checks version metadata, public release state, asset bytes and digests, and runtime source against the release tag.
-The check uses public requests without credentials, so maintainer access to a draft cannot satisfy it.
+Metadata requests use the read-only workflow token to avoid anonymous API limits on shared runners.
+The check rejects draft/prerelease metadata explicitly and downloads assets without credentials. Maintainer access to a private asset cannot satisfy it.
 `dev` receives the full compatibility suite without requiring its candidate version to be public.
 
 ## Release sequence
