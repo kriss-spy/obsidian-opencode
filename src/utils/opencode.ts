@@ -472,6 +472,20 @@ export class OpencodeClient {
 		}
 	}
 
+	async requireSession(sessionId: string, generation: OpenCodeCliGeneration): Promise<void> {
+		if (!SAFE_ID_RE.test(sessionId)) throw new Error("Invalid session ID");
+		const session = generation === "v2"
+			? parseV2Session((JSON.parse(await this.commandRunner()(["api", "get", `/api/session/${sessionId}`])) as { data: unknown }).data)
+			: (await this.listSessions(generation)).find((entry) => entry.id === sessionId);
+		if (!session || session.id !== sessionId) throw new Error("The referenced OpenCode session is unavailable on this machine.");
+		if (path.resolve(session.directory) === path.resolve(this.cwd)) return;
+		try {
+			// macOS can expose the same temporary directory under /var and /private/var.
+			if (fs.realpathSync(session.directory) === fs.realpathSync(this.cwd)) return;
+		} catch { /* Unavailable paths must not match an unrelated directory. */ }
+		throw new Error("The session's working directory differs from the link. Copy a new session link.");
+	}
+
 	async listActiveSessions(): Promise<OpencodeActiveSession[]> {
 		const run = this.commandRunner();
 		try {

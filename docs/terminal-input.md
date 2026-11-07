@@ -50,7 +50,7 @@ The browser-side input path is shared across operating systems. Only the PTY tra
 
 | Platform | PTY backend | Input handling difference |
 | --- | --- | --- |
-| Windows 10 1809+ | Node helper -> embedded zigpty native module -> ConPTY | None before `PtySession`; the helper writes UTF-8 strings to zigpty. xterm's `windowsPty` option affects terminal rendering/reflow, not key ownership. |
+| Windows 10 1903+ (build 18362+) | Node helper -> embedded node-pty -> packaged ConPTY | None before `PtySession`; the helper writes UTF-8 strings to node-pty. xterm's `windowsPty` option affects terminal rendering/reflow, not key ownership. |
 | WSL2 + X410 | Unix PTY plus Windows PowerShell clipboard bridge | OpenCode's OSC 52 copy-on-select output, `Ctrl+V`, and rendered-image context-menu copy cross the Windows clipboard boundary as Base64. In V2 `terminal.copy: "manual"` mode from `cli.json`/`tui.json`, or with the legacy disable-copy environment flag, `Ctrl+C` copies an active xterm selection; without a selection it remains owned by OpenCode. |
 | Linux and macOS | Node child -> Python proxy -> `pty.fork()` | None before `PtySession`; the proxy forwards stdin bytes to the pseudoterminal. |
 
@@ -80,6 +80,19 @@ Representative traces and required invariant:
 The automated Obsidian test covers the Korean commit-plus-Space ordering with xterm's real `CompositionHelper`. Unit tests cover focused-scope arbitration, custom hotkeys, composition suppression, focus lifetime, and paste routing.
 
 ## Native IME smoke test
+
+Issue #86's native Fedora/Fcitx5 captures are preserved in
+`test/fixtures/issue-86-fedora-ime`. The WDIO plugin suite replays the Chinese
+and Japanese event traces through the installed plugin and real xterm textarea.
+Both traces duplicated preedit on the unmodified development base. xterm 5.5
+finalizes composition on Meta keydown, before Fcitx's switch commits the text.
+The plugin's public xterm key handler now returns false for Meta keydown while
+`isComposing` is true. It does not prevent the native shortcut or write text;
+xterm still handles the subsequent composition commit. This guard remains
+active when Shift+Enter customization is disabled.
+
+Passing trace replay does not establish a native Fedora fix. Repeat the original
+native Super+Space scenarios against the patched build before claiming that.
 
 Synthetic browser events cannot validate an operating system's candidate window or every native event sequence. Before changing the router or xterm version, run this short native check on each available platform:
 

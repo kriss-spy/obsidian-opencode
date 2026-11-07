@@ -4,8 +4,7 @@ import { Notice } from "obsidian";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { WINDOWS_PTY_NATIVE_X64_BASE64 } from "../pty/windowsPtyNativeX64";
-import { WINDOWS_PTY_NATIVE_ARM64_BASE64 } from "../pty/windowsPtyNativeArm64";
+import { materializeWindowsNodePty } from "../pty/windowsNodePty";
 import { WINDOWS_PTY_JOB_HOST_BASE64 } from "../pty/windowsPtyJobHost";
 import { createChildEnvironment, EnvironmentVariables, flatpakEnvironmentArgs } from "../utils/environment";
 import { resolveOpencodeExecutable } from "../utils/opencodeExecutable";
@@ -151,31 +150,30 @@ if __name__ == "__main__":
 
 const WINDOWS_PTY_HOST_JS = String.raw`
 const fs = require("fs");
-const [nativePath, colsText, rowsText, file, ...args] = process.argv.slice(1);
-const native = require(nativePath);
-const env = Object.entries(process.env).filter(([, value]) => value !== undefined).map(([key, value]) => key + "=" + value);
+const [ptyPath, colsText, rowsText, file, ...args] = process.argv.slice(1);
+const pty = require(ptyPath);
 let handle;
 let ready = false;
 let pendingResize;
 let pendingWrites = [];
 function start() {
-  const result = native.spawn(file, args, env, process.cwd(), Number(colsText), Number(rowsText),
-    (data) => {
+  handle = pty.spawn(file, args, { env: process.env, cwd: process.cwd(),
+    cols: Number(colsText), rows: Number(rowsText), useConpty: true, useConptyDll: true });
+  handle.onData((data) => {
       if (!ready) {
         ready = true;
-        if (pendingResize) native.resize(handle, pendingResize.cols, pendingResize.rows);
+        if (pendingResize) handle.resize(pendingResize.cols, pendingResize.rows);
         pendingResize = undefined;
-        for (const pendingWrite of pendingWrites) native.write(handle, pendingWrite);
+        for (const pendingWrite of pendingWrites) handle.write(pendingWrite);
         pendingWrites = [];
       }
       process.stdout.write(data);
-    },
-    (info) => process.exit(info.exitCode || 0));
-  handle = result.handle;
+    });
+  handle.onExit((info) => process.exit(info.exitCode || 0));
 }
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (data) => {
-  if (ready) native.write(handle, data);
+  if (ready) handle.write(data);
   else pendingWrites.push(data);
 });
 let pending = "";
@@ -186,31 +184,19 @@ fs.createReadStream(null, { fd: 3 }).setEncoding("utf8").on("data", (data) => {
     const [cols, rows] = pending.slice(0, newline).split("x").map(Number);
     pending = pending.slice(newline + 1);
     if (cols > 0 && rows > 0) {
-      if (ready) native.resize(handle, cols, rows);
+      if (ready) handle.resize(cols, rows);
       else pendingResize = { cols, rows };
     }
   }
 });
 fs.createReadStream(null, { fd: 4 }).once("data", start);
 process.on("SIGTERM", () => {
-  if (handle) native.kill(handle);
+  if (handle) handle.kill();
   else process.exit(0);
 });
 `;
 
-const materializedWindowsPty = new Map<string, string>();
 let materializedWindowsPtyJobHost: string | null = null;
-
-function materializeWindowsPtyNative(architecture: "x64" | "arm64"): string {
-	const existing = materializedWindowsPty.get(architecture);
-	if (existing) return existing;
-	const base64 = architecture === "arm64" ? WINDOWS_PTY_NATIVE_ARM64_BASE64 : WINDOWS_PTY_NATIVE_X64_BASE64;
-	const directory = fs.mkdtempSync(path.join(os.tmpdir(), "obsidian-opencode-"));
-	const nativeModule = path.join(directory, `zigpty-${architecture}.node`);
-	fs.writeFileSync(nativeModule, Buffer.from(base64, "base64"), { flag: "wx", mode: 0o600 });
-	materializedWindowsPty.set(architecture, nativeModule);
-	return nativeModule;
-}
 
 function materializeWindowsPtyJobHost(): string {
 	if (materializedWindowsPtyJobHost) return materializedWindowsPtyJobHost;
@@ -291,8 +277,8 @@ export class PtySession {
 		this.windowsGracefulExitRequested = false;
 		if (process.platform === "win32") {
 			const windowsBuild = Number(os.release().split(".")[2]);
-			if (Number.isFinite(windowsBuild) && windowsBuild > 0 && windowsBuild < 17763) {
-				terminal.writeln("\r\nOpenCode requires Windows 10 version 1809 or later for ConPTY support.\r\n");
+			if (Number.isFinite(windowsBuild) && windowsBuild > 0 && windowsBuild < 18362) {
+				terminal.writeln("\r\nOpenCode requires Windows 10 version 1903 (build 18362) or later for the packaged ConPTY backend.\r\n");
 				return;
 			}
 		}
@@ -361,7 +347,7 @@ export class PtySession {
 				ptyProcess = windowsPtyProcess = spawn(nodeExecutable, [
 					"-e",
 					WINDOWS_PTY_HOST_JS,
-					materializeWindowsPtyNative(nodeArchitecture),
+					materializeWindowsNodePty(nodeArchitecture),
 					String(Math.min(32767, Math.max(1, terminal.cols))),
 					String(Math.min(32767, Math.max(1, terminal.rows))),
 					executable,

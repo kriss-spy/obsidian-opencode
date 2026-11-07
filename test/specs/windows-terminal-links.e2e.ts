@@ -115,9 +115,11 @@ describe("Windows ConPTY terminal link responsiveness", function () {
 					wrappedSpan = Math.max(wrappedSpan, span);
 				}
 				trace.wrappedSpanAtHover = wrappedSpan;
-				// A passing test must exercise the pathological state, not just a
-				// healthy home screen. Fail explicitly if upstream reflow changes.
-				if (wrappedSpan < 64) throw new Error(`ConPTY repro did not produce a screen-sized wrapped block (largest span: ${wrappedSpan})`);
+				// The packaged console host fixes the old OS host's screen-sized
+				// wrapped block. Assert that it stays fixed, then still require real
+				// pointer/provider activity and prompt input under the same reflow.
+				// The link-provider unit/app fixtures retain the pathological case.
+				if (wrappedSpan >= 64) throw new Error(`Packaged ConPTY regressed native row boundaries (largest span: ${wrappedSpan})`);
 				trace.calls = [];
 				trace.lastTick = performance.now();
 				trace.timer = setInterval(() => {
