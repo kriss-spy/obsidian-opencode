@@ -4,6 +4,20 @@ Web addresses and existing Markdown note paths are clickable wherever xterm rend
 
 Note paths resolve relative to the active vault, regardless of the terminal's working directory. Relative paths, absolute paths inside the vault, `/` and `\` separators, spaces and Unicode are supported. Backticks, quotes, parentheses and Markdown link destinations can delimit a path. For unquoted space-containing paths, the provider chooses the first candidate that matches an existing indexed note, excluding preceding prose. It does not search by note basename or create missing files.
 
+### Path examples
+
+- `Notes/Example.md` resolves from the active vault root, even if the terminal uses another working directory.
+- `Example.md` opens only a note at the vault root. It does not search subfolders for that filename or match a partial path.
+- `/home/me/vault/Notes/Example.md` is an absolute Linux path inside the vault.
+- `/home/me/project/My notes/README.md` is an absolute Linux path outside the vault.
+- `C:\Users\me\Documents\My notes\README.md` is an absolute Windows path. It can point inside or outside the vault.
+
+A leading `/` means an absolute filesystem path on Linux or macOS. It does not by itself mean the file is outside the vault. Windows drive paths require both the drive and separator, such as `C:\`; `C:README.md` is unsupported. Native Linux does not resolve Windows drive paths. WSL mappings follow the rules below.
+
+External Markdown links require Obsidian 1.14.2 or newer. Files with spaces are supported; quotes or backticks help delimit the complete path.
+
+### Locations and clicks
+
 Suffixes `:42` and `:42:8` mean one-based line and column. The editor opens in source mode for these locations and clamps a position beyond the end of a note. Obsidian's normal Cmd/Ctrl modifier behavior selects a new tab or split. Ordinary clicks open through the normal navigable editor leaf.
 
 When OpenCode enables terminal mouse reporting, ordinary clicks remain owned by its TUI. Hold Cmd/Ctrl while clicking a link to activate it. Dragging or an existing terminal selection never activates a link. Modifier activation on a hovered link consumes its mouse press/release before they reach OpenCode; non-link input keeps its normal behavior.
