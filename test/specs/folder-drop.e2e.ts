@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { resolveOpencodeExecutable } from "../../src/utils/opencodeExecutable";
 import { browser, expect } from "@wdio/globals";
 import { WebSocket } from "ws";
+import { promptInputWrites } from "../helpers/promptInputWrites";
 
 const stub = path.resolve(`test/fixtures/opencode-stub${process.platform === "win32" ? ".cmd" : ""}`);
 const folder = "Folder drop 笔记";
@@ -55,9 +56,10 @@ async function dragFromExplorer(directory: string): Promise<void> {
 }
 
 async function input(): Promise<string[]> {
-	// Explorer activation can report focus changes; they are terminal protocol,
-	// separate from the dropped prompt content. Keep every other input byte.
-	return browser.execute(() => (window as any).__folderDropInput.filter((data: string) => data !== "\x1b[I" && data !== "\x1b[O"));
+	// Native ConPTY startup can query device attributes, and explorer activation
+	// can report focus. Observe dropped prompt text without those complete replies.
+	const writes: string[] = await browser.execute(() => (window as any).__folderDropInput);
+	return promptInputWrites(writes);
 }
 
 describe("folder drag and drop in an isolated vault", function () {

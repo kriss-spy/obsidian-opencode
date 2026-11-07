@@ -28,6 +28,7 @@ vi.mock("fs", () => ({
 	statSync: vi.fn(() => ({ isFile: () => true })),
 	existsSync: vi.fn().mockReturnValue(false),
 	mkdtempSync: vi.fn().mockReturnValue("C:\\temp\\obsidian-opencode-test"),
+	mkdirSync: vi.fn(),
 	writeFileSync: vi.fn(),
 	constants: { X_OK: 1 },
 }));
@@ -67,6 +68,36 @@ describe("PtySession", () => {
 	});
 
 	afterEach(() => vi.unstubAllGlobals());
+	it.each([17763, 18309, 18361])("rejects unsupported Windows build %i before starting a helper", (build) => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+		vi.mocked(os.release).mockReturnValueOnce(`10.0.${build}`);
+		const terminal = { rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() };
+		try {
+			new PtySession().spawn(terminal as unknown as Terminal, { opencodePath: "opencode", cwd: "C:\\vault", args: [] });
+			expect(terminal.writeln).toHaveBeenCalledWith(expect.stringContaining("Windows 10 version 1903 (build 18362) or later"));
+			expect(execFileSync).not.toHaveBeenCalled();
+			expect(spawn).not.toHaveBeenCalled();
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it("accepts Windows 10 version 1903 at the minimum supported build", () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+		vi.mocked(os.release).mockReturnValueOnce("10.0.18362");
+		const child = createProcess();
+		child.pid = 1234;
+		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+		const terminal = { rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() };
+		try {
+			new PtySession().spawn(terminal as unknown as Terminal, { opencodePath: "opencode", cwd: "C:\\vault", args: [] });
+			expect(execFileSync).toHaveBeenCalled();
+			expect(spawn).toHaveBeenCalled();
+			expect(terminal.writeln).not.toHaveBeenCalled();
+		} finally {
+			platform.mockRestore();
+		}
+	});
 
 	it("keeps the replacement PTY active when the killed PTY exits", () => {
 		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");
@@ -381,7 +412,7 @@ print(json.dumps({"after_partial": after_partial, "after_complete": resizes}))
 			expect(spawn).toHaveBeenNthCalledWith(1, expect.stringMatching(/node\.exe$/i), [
 				"-e",
 				expect.any(String),
-				expect.stringMatching(/[\\/]zigpty-x64\.node$/i),
+				expect.stringMatching(/[\\/]lib[\\/]index\.js$/i),
 				"100",
 				"30",
 				expect.stringMatching(/opencode(?:\.[A-Z]+)?$/i),
@@ -424,7 +455,7 @@ print(json.dumps({"after_partial": after_partial, "after_complete": resizes}))
 			expect(spawn).toHaveBeenNthCalledWith(1, expect.stringMatching(/node\.exe$/i), [
 				"-e",
 				expect.any(String),
-				expect.stringMatching(/[\\/]zigpty-x64\.node$/i),
+				expect.stringMatching(/[\\/]lib[\\/]index\.js$/i),
 				"80",
 				"24",
 				expect.stringMatching(/powershell\.exe$/i),
@@ -514,8 +545,8 @@ print(json.dumps({"after_partial": after_partial, "after_complete": resizes}))
 
 			expect(spawn).toHaveBeenCalledWith(expect.stringMatching(/node\.exe$/i), [
 				"-e",
-				expect.stringMatching(/pendingWrites[\s\S]*native\.resize\(handle, cols, rows\)/),
-				expect.stringMatching(/[\\/]zigpty-x64\.node$/i),
+				expect.stringMatching(/pendingWrites[\s\S]*handle\.resize\(cols, rows\)/),
+				expect.stringMatching(/[\\/]lib[\\/]index\.js$/i),
 				"100",
 				"30",
 				expect.stringMatching(/opencode(?:\.[A-Z]+)?$/i),
