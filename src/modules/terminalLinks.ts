@@ -6,6 +6,8 @@ import { currentOsc8Link } from "./xtermOsc8";
 
 export interface NoteTarget {
 	path: string;
+	/** Absolute filesystem path outside the vault. */
+	external?: boolean;
 	line?: number;
 	column?: number;
 }
@@ -18,6 +20,8 @@ export interface TerminalLinkOptions {
 	isModEvent(event: MouseEvent): boolean;
 	onError(error: unknown): void;
 	wslDistro?: string;
+	/** Obsidian 1.14.2+ can open individual Markdown files. */
+	allowExternalNotes?: boolean;
 	/** Override only for filesystem-independent tests. Production always uses realpath. */
 	realpath?: (path: string) => Promise<string>;
 }
@@ -60,7 +64,7 @@ function containedRelative(root: string, target: string): string | null {
 		? relative.split(api.sep).join("/") : null;
 }
 
-export function resolveNoteTarget(text: string, root: string, distro?: string): NoteTarget | null {
+function parseNoteTarget(text: string, root: string, distro?: string): NoteTarget | null {
 	if (hasControlCharacter(text) || /^[a-z][a-z\d+.-]*:\/\//i.test(text)) return null;
 	const match = /^(.*\.md)(?::([1-9]\d*))?(?::([1-9]\d*))?$/i.exec(text);
 	if (!match) return null;
@@ -70,28 +74,47 @@ export function resolveNoteTarget(text: string, root: string, distro?: string): 
 	const api = pathApi(root);
 	// Drive-relative and Windows root-relative paths depend on process cwd/drive.
 	if (api === path.win32 && (/^[a-z]:[^\\]/i.test(native) || /^\\(?!\\)/.test(native))) return null;
-	const relative = containedRelative(root, api.resolve(root, native));
-	if (!relative) return null;
 	const line = match[2] ? Number(match[2]) : undefined;
 	const column = match[3] ? Number(match[3]) : undefined;
 	if ((line !== undefined && !Number.isSafeInteger(line)) || (column !== undefined && !Number.isSafeInteger(column))) return null;
-	return { path: relative, line, column };
+	return { path: native, line, column };
 }
+
+export function resolveNoteTarget(text: string, root: string, distro?: string): NoteTarget | null {
+	const target = parseNoteTarget(text, root, distro);
+	if (!target) return null;
+	const api = pathApi(root);
+	const relative = containedRelative(root, api.resolve(root, target.path));
+	return relative ? { ...target, path: relative } : null;
+}
+
+export function resolveExternalNoteTarget(text: string, root: string, distro?: string): NoteTarget | null {
+	// Only explicit full paths qualify; relative traversal must stay vault-bound.
+	if (!/^(?:\/(?!\/)|[a-z]:[\\/]|\\\\)/i.test(text)) return null;
+	const target = parseNoteTarget(text, root, distro);
+	if (!target) return null;
+	const api = pathApi(root);
+	if (!api.isAbsolute(target.path) || containedRelative(root, target.path)) return null;
+	return { ...target, path: api.normalize(target.path), external: true };
+}
+
+type NoteLinkOptions = Pick<TerminalLinkOptions, "vaultRoot" | "hasNote" | "wslDistro" | "allowExternalNotes">;
 
 interface TextMatch { start: number; end: number; text: string; note?: NoteTarget }
 
-function indexedNote(text: string, options: Pick<TerminalLinkOptions, "vaultRoot" | "hasNote" | "wslDistro">,
+function matchingNote(text: string, options: NoteLinkOptions,
 	cache?: Map<string, NoteTarget | null>): NoteTarget | null {
 	const cached = cache?.get(text);
 	if (cached !== undefined) return cached;
 	const target = resolveNoteTarget(text, options.vaultRoot, options.wslDistro);
-	const note = target && options.hasNote(target.path) ? target : null;
+	const note = target && options.hasNote(target.path) ? target
+		: options.allowExternalNotes ? resolveExternalNoteTarget(text, options.vaultRoot, options.wslDistro) : null;
 	cache?.set(text, note);
 	return note;
 }
 
-/** Spaces are resolved against existing notes rather than guessed from prose. */
-export function findTerminalLinks(text: string, options: Pick<TerminalLinkOptions, "vaultRoot" | "hasNote" | "wslDistro">, noteStartLimit = text.length,
+/** Vault paths use the index; external candidates require an explicit root. */
+export function findTerminalLinks(text: string, options: NoteLinkOptions, noteStartLimit = text.length,
 	noteCache?: Map<string, NoteTarget | null>): TextMatch[] {
 	const links: TextMatch[] = [];
 	const urls = /https?:\/\/[^\s<>"'`]+/gi;
@@ -111,6 +134,9 @@ export function findTerminalLinks(text: string, options: Pick<TerminalLinkOption
 	let previousEnd = 0;
 	while ((match = ends.exec(text))) {
 		const end = match.index + match[0].length;
+		// An external candidate has no index to disambiguate intermediate .md
+		// suffixes (README.md.md) from the complete filename.
+		if (options.allowExternalNotes && /^\.[^\s`"'<>()[\]{},;.!?|│┃]/.test(text.slice(end))) continue;
 		// Try the complete phrase before its suffixes: commas, semicolons and
 		// brackets can belong to an indexed note name, including quoted paths.
 		let phraseStart = match.index;
@@ -123,7 +149,7 @@ export function findTerminalLinks(text: string, options: Pick<TerminalLinkOption
 			const value = text.slice(start, end);
 			const explicit = /^(?:[a-z]:[\\/]|[\\/]|\.\.[\\/]|[a-z][a-z\d+.-]*:\/\/)/i.test(value);
 			if (links.some(link => start < link.end && end > link.start)) break;
-			const note = indexedNote(value, options, noteCache);
+			const note = matchingNote(value, options, noteCache);
 			if (note) {
 				links.push({ start, end, text: value, note });
 				break;
@@ -601,14 +627,14 @@ export class TerminalLinks implements ILinkProvider {
 		const suffixes = lines.flatMap(line => {
 			// A prose or quoted cell can still use the ordinary parser. Only an
 			// exact complete path or a reconstructed continuation owns its cells.
-			if (line.exactNote && !line.continuation && !indexedNote(line.line.text, this.options, noteCache)) return [];
+			if (line.exactNote && !line.continuation && !matchingNote(line.line.text, this.options, noteCache)) return [];
 			return (line.suffixes ?? (line.suffix ? [line.suffix] : [])).map(range => ({
 				range, noteOnly: line.exactNote || line.continuation === "note", wrapped: Boolean(line.continuation),
 			}));
 		});
 		const before = (a: IBufferCellPosition, b: IBufferCellPosition) => a.y < b.y || (a.y === b.y && a.x <= b.x);
 		const links = lines.flatMap(({ line, current, continuation, blocked, noteStartLimit, exactNote, exactWeb }) => {
-			const note = exactNote ? indexedNote(line.text, this.options, noteCache) : null;
+			const note = exactNote ? matchingNote(line.text, this.options, noteCache) : null;
 			const matches: TextMatch[] = exactNote ? (note ? [{ start: 0, end: line.text.length, text: line.text, note }] : [])
 				: exactWeb ? [{ start: 0, end: line.text.length, text: line.text }]
 					: findTerminalLinks(line.text, this.options, noteStartLimit, noteCache);
@@ -684,6 +710,16 @@ export class TerminalLinks implements ILinkProvider {
 		try {
 			const url = safeWebUrl(text);
 			if (url) { await this.options.openExternal(url); return; }
+			const external = this.options.allowExternalNotes
+				? resolveExternalNoteTarget(text, this.options.vaultRoot, this.options.wslDistro) : null;
+			if (external) {
+				const file = await (this.options.realpath ?? fs.realpath)(external.path);
+				if (!/\.md$/i.test(file) || !(await fs.stat(file)).isFile()) return;
+				this.logicalLines.invalidate();
+				if (this.disposed || revision !== this.revision || (hoveredRow && snapshot !== this.logicalLines.read(hoveredRow)?.text)) return;
+				await this.options.openNote({ ...external, path: file }, event);
+				return;
+			}
 			const note = resolveNoteTarget(text, this.options.vaultRoot, this.options.wslDistro);
 			if (!note || !this.options.hasNote(note.path)) return;
 			const realpath = this.options.realpath ?? fs.realpath;

@@ -65,10 +65,14 @@ export class TerminalKeyRouter {
 		this.shiftEnterDisposer?.();
 		this.shiftEnterDisposer = null;
 		this.clearShiftEnterTimers();
-		if (!enabled || !onShiftEnterNewline) return;
 
 		terminal.attachCustomKeyEventHandler((event) => {
+			// xterm 5.5 treats Meta as a composition terminator, unlike Shift,
+			// Ctrl and Alt. Fcitx commits after Meta goes down during Super+Space;
+			// finalizing here sends preedit before that commit (#86).
+			if (event.type === "keydown" && event.key === "Meta" && event.isComposing) return false;
 			if (event.isComposing || isImeKey(event)) return true;
+			if (!enabled || !onShiftEnterNewline) return true;
 			if (event.type === "keydown" && event.key === "Enter" && event.shiftKey &&
 				!event.ctrlKey && !event.altKey && !event.metaKey) {
 				event.preventDefault();

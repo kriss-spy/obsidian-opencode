@@ -69,6 +69,45 @@ async function waitForProcessToDisappear(pid: number, timeoutMs: number): Promis
 }
 
 describe("Windows PTY Job Object host", () => {
+	windowsIt("round-trips SIXEL capabilities, pixel dimensions and SGR mouse through the packaged host", async () => {
+		const session = new PtySession();
+		let output = "";
+		const repliedThrough = new Map<string, number>();
+		const terminal = {
+			rows: 33, cols: 59,
+			write: (data: string | Uint8Array) => {
+				output += data.toString();
+				for (const [query, reply] of [
+					["\x1b[c", "\x1b[?62;4;9;22c"],
+					["\x1b[14t", "\x1b[4;462;826t"],
+					["\x1b[?1006h", "\x1b[<0;5;5M\x1b[<0;5;5m"],
+				]) {
+					let index: number;
+					while ((index = output.indexOf(query, repliedThrough.get(query) ?? 0)) >= 0) {
+						repliedThrough.set(query, index + query.length);
+						session.writeStdin(reply);
+					}
+				}
+			},
+			writeln: (data: string) => { output += data; },
+		};
+		const script = `process.stdin.setRawMode(true);process.stdin.resume();let input='';process.stdin.on('data',d=>input+=d);process.stdout.write('READY\\r\\n');setTimeout(()=>process.stdout.write('\\x1b[c\\x1b[14t\\x1b[?1000h\\x1b[?1006h'),100);setTimeout(()=>{console.log('ROUNDTRIP:'+Buffer.from(input).toString('base64'));process.exit(0)},1200)`;
+		session.spawn(terminal as unknown as Terminal, { opencodePath: process.execPath, cwd: process.cwd(), args: ["-e", script] });
+		try {
+			await new Promise<void>((resolve, reject) => {
+				const deadline = Date.now() + 7000;
+				const poll = () => {
+					if (/ROUNDTRIP:([A-Za-z0-9+/=]+)[\r\n]/.test(output)) resolve();
+					else if (Date.now() > deadline) reject(new Error(`Protocol peer failed: ${JSON.stringify(output)}`));
+					else nodeSetTimeout(poll, 25);
+				}; poll();
+			});
+			const input = Buffer.from(output.match(/ROUNDTRIP:([A-Za-z0-9+/=]+)/)![1], "base64").toString();
+			expect(input).toContain("\x1b[?62;4;9;22c");
+			expect(input).toContain("\x1b[4;462;826t");
+			expect(input).toContain("\x1b[<0;5;5M\x1b[<0;5;5m");
+		} finally { await session.kill(); }
+	}, 12000);
 	windowsIt("terminates the complete descendant tree when its owner exits", async () => {
 		const directory = mkdtempSync(join(tmpdir(), "obsidian-opencode-job-test-"));
 		cleanupDirectories.add(directory);
@@ -130,7 +169,7 @@ describe("Windows PTY Job Object host", () => {
 		]);
 	}, 20000);
 
-	windowsIt("stops a real zigpty descendant tree through PtySession", async () => {
+	windowsIt("stops a real ConPTY descendant tree through PtySession", async () => {
 		const output: string[] = [];
 		const terminal = {
 			rows: 24,
@@ -237,7 +276,7 @@ describe("Windows PTY Job Object host", () => {
 		}
 	}, 10000);
 
-	windowsIt("hides terminal capability probes mangled by ConPTY", async () => {
+	windowsIt("preserves graphics probes without leaking their payload as text", async () => {
 		const output: string[] = [];
 		const terminal = {
 			rows: 24,
@@ -263,7 +302,8 @@ describe("Windows PTY Job Object host", () => {
 				};
 				inspect();
 			});
-			expect(output.join("")).toContain("beforeafter");
+			expect(output.join("")).toContain("before");
+			expect(output.join("")).toContain("\x1b_Gi=31337,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\");
 			expect(output.join("")).not.toContain("+q4d73Gi=31337");
 		} finally {
 			await session.kill();

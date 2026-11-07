@@ -436,6 +436,59 @@ describe("OpenCode plugin in a fresh vault", function () {
 		}
 	});
 
+	for (const [capture, committed] of [["chinese-first", "nihao"], ["japanese-1", "こんにちわ"]]) {
+		it(`[issue #86] replays Fedora ${capture} IME switch without duplicating preedit`, async function () {
+			const trace = JSON.parse(readFileSync(path.resolve(
+				`test/fixtures/issue-86-fedora-ime/${capture}-events.json`,
+			), "utf8"));
+			const start = trace.events.findIndex((event: { type: string }) => event.type === "compositionstart");
+			const events = trace.events.slice(start);
+			await browser.execute(async () => {
+				const app = (window as any).app;
+				for (const leaf of app.workspace.getLeavesOfType("opencode-terminal")) await leaf.detach();
+				await app.plugins.plugins.opencode.activateTerminalView();
+			});
+			await waitForTerminalText("OpenCode isolated test stub");
+			const data = await browser.execute(async (serializedEvents: string) => {
+				const events: Array<Record<string, any>> = JSON.parse(serializedEvents);
+				const terminal = (window as any).app.workspace.getLeavesOfType("opencode-terminal")[0].view.terminal;
+				const textarea = terminal.textarea as HTMLTextAreaElement;
+				textarea.focus();
+				const output: string[] = [];
+				const listener = terminal.onData((value: string) => output.push(value));
+				try {
+					for (let index = 0; index < events.length; index++) {
+						const event = events[index];
+						textarea.value = event.value;
+						if (event.type.startsWith("composition")) {
+							textarea.dispatchEvent(new CompositionEvent(event.type, { bubbles: true, data: event.data }));
+						} else if (event.type === "input" || event.type === "beforeinput") {
+							textarea.dispatchEvent(new InputEvent(event.type, {
+								bubbles: true, data: event.data, inputType: event.inputType, isComposing: event.isComposing,
+							}));
+						} else {
+							const key = new KeyboardEvent(event.type, {
+								bubbles: true, cancelable: true, key: event.key, code: event.code,
+								metaKey: event.meta, isComposing: event.isComposing,
+							});
+							Object.defineProperty(key, "keyCode", { value: event.key === "Meta" ? 91 : 229 });
+							textarea.dispatchEvent(key);
+						}
+						// Keep each native event burst together, allowing xterm's deferred
+						// textarea reads between bursts without replaying human pauses.
+						if (!events[index + 1] || events[index + 1].ms - event.ms > 5) {
+							await new Promise((resolve) => window.setTimeout(resolve, 20));
+						}
+					}
+					return output;
+				} finally {
+					listener.dispose();
+				}
+			}, JSON.stringify(events));
+			expect(data.join("")).toBe(committed);
+		});
+	}
+
 	it("[issue #26] sends only committed Chinese text during IME composition", async function () {
 		await browser.execute(async () => {
 			const app = (window as any).app;

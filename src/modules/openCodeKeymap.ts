@@ -167,7 +167,7 @@ export function resolveOpenCodeSuspendHotkeys(
 	return new Set(bindingKeys(value, "").filter(key => !leaders.has(key)));
 }
 
-function parseJsonc(text: string): unknown {
+export function parseJsonc(text: string): unknown {
 	let result = "";
 	let inString = false;
 	let escaped = false;

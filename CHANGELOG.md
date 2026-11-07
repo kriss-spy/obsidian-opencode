@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-11-07
+
+### Added
+
+- Copy resumable OpenCode session links from the command palette or conversations panel (#69).
+- Open full external Markdown paths on Obsidian 1.14.2+, including spaces and line/column locations (#66).
+
+### Fixed
+
+- Prevent duplicate Chinese and Japanese text when switching Fcitx5 input methods with Super+Space (#86). Captured event replays pass; native patched-build confirmation remains pending.
+- Restore Windows terminal graphics negotiation and native picker clicks through packaged ConPTY (#83).
+
+### Changed
+
+- Require Windows 10 version 1903 or newer for packaged ConPTY.
+- Validate the exact packaged release across Linux, Windows and macOS before publication.
+- Document exact vault-relative paths, native absolute paths and session links. Partial-path lookup remains unsupported.
+
 ## [2.3.2] - 2026-10-25
 
 ### Added

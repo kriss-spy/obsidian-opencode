@@ -147,6 +147,27 @@ function registerRouter(
 }
 
 describe("TerminalKeyRouter", () => {
+	it("keeps composing Meta out of xterm without cancelling the native IME shortcut", () => {
+		const context = registerRouter();
+		const composing = context.dispatchTerminalKey({ key: "Meta", keyCode: 91, isComposing: true });
+		expect(composing.result).toBe(false);
+		expect(composing.preventDefault).not.toHaveBeenCalled();
+		for (const event of [
+			{ key: "Meta", isComposing: false },
+			{ key: "Meta", type: "keyup", isComposing: true },
+			{ key: "Control", isComposing: true },
+			{ key: "a", isComposing: true },
+		]) {
+			expect(context.dispatchTerminalKey(event).result).toBe(true);
+		}
+		context.setShiftEnterNewline(true, vi.fn());
+		expect(context.dispatchTerminalKey({ key: "Meta", isComposing: true }).result).toBe(false);
+		context.setShiftEnterNewline(false);
+		expect(context.dispatchTerminalKey({ key: "Meta", isComposing: true }).result).toBe(false);
+		context.router.dispose();
+		expect(context.dispatchTerminalKey({ key: "Meta", isComposing: true }).result).toBe(true);
+	});
+
 	it("cancels deferred input through its original window after moving the terminal", () => {
 		const context = registerRouter();
 		const firstWindow = { setTimeout: vi.fn(() => 7), clearTimeout: vi.fn() };
