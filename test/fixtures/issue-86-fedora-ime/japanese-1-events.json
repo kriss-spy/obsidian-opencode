@@ -1,0 +1,640 @@
+{
+  "preedit": {
+    "events": [
+      {
+        "data": "",
+        "isTrusted": true,
+        "ms": 913,
+        "type": "compositionstart",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihao"
+      },
+      {
+        "data": "ｋ",
+        "isTrusted": true,
+        "ms": 913,
+        "type": "compositionupdate",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihao"
+      },
+      {
+        "data": "ｋ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 913,
+        "type": "beforeinput",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihao"
+      },
+      {
+        "data": "ｋ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 914,
+        "type": "input",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoｋ"
+      },
+      {
+        "data": "こ",
+        "isTrusted": true,
+        "ms": 1114,
+        "type": "compositionupdate",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoｋ"
+      },
+      {
+        "data": "こ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 1114,
+        "type": "beforeinput",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoｋ"
+      },
+      {
+        "data": "こ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 1115,
+        "type": "input",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこ"
+      },
+      {
+        "data": "こｎ",
+        "isTrusted": true,
+        "ms": 1314,
+        "type": "compositionupdate",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこ"
+      },
+      {
+        "data": "こｎ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 1314,
+        "type": "beforeinput",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこ"
+      },
+      {
+        "data": "こｎ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 1315,
+        "type": "input",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこｎ"
+      },
+      {
+        "data": "こん",
+        "isTrusted": true,
+        "ms": 1514,
+        "type": "compositionupdate",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこｎ"
+      },
+      {
+        "data": "こん",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 1514,
+        "type": "beforeinput",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこｎ"
+      },
+      {
+        "data": "こん",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 1515,
+        "type": "input",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこん"
+      },
+      {
+        "data": "こんｎ",
+        "isTrusted": true,
+        "ms": 1713,
+        "type": "compositionupdate",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこん"
+      },
+      {
+        "data": "こんｎ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 1714,
+        "type": "beforeinput",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこん"
+      },
+      {
+        "data": "こんｎ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 1715,
+        "type": "input",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんｎ"
+      },
+      {
+        "data": "こんに",
+        "isTrusted": true,
+        "ms": 1935,
+        "type": "compositionupdate",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんｎ"
+      },
+      {
+        "data": "こんに",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 1935,
+        "type": "beforeinput",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんｎ"
+      },
+      {
+        "data": "こんに",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 1936,
+        "type": "input",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんに"
+      },
+      {
+        "data": "こんにｃ",
+        "isTrusted": true,
+        "ms": 2115,
+        "type": "compositionupdate",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんに"
+      },
+      {
+        "data": "こんにｃ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 2116,
+        "type": "beforeinput",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんに"
+      },
+      {
+        "data": "こんにｃ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 2116,
+        "type": "input",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにｃ"
+      },
+      {
+        "data": "こんにｃｈ",
+        "isTrusted": true,
+        "ms": 2315,
+        "type": "compositionupdate",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにｃ"
+      },
+      {
+        "data": "こんにｃｈ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 2316,
+        "type": "beforeinput",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにｃ"
+      },
+      {
+        "data": "こんにｃｈ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 2317,
+        "type": "input",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにｃｈ"
+      },
+      {
+        "data": "こんにち",
+        "isTrusted": true,
+        "ms": 2516,
+        "type": "compositionupdate",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにｃｈ"
+      },
+      {
+        "data": "こんにち",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 2517,
+        "type": "beforeinput",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにｃｈ"
+      },
+      {
+        "data": "こんにち",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 2518,
+        "type": "input",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにち"
+      },
+      {
+        "data": "こんにちｗ",
+        "isTrusted": true,
+        "ms": 2717,
+        "type": "compositionupdate",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにち"
+      },
+      {
+        "data": "こんにちｗ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 2718,
+        "type": "beforeinput",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにち"
+      },
+      {
+        "data": "こんにちｗ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 2718,
+        "type": "input",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちｗ"
+      },
+      {
+        "data": "こんにちわ",
+        "isTrusted": true,
+        "ms": 2915,
+        "type": "compositionupdate",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちｗ"
+      },
+      {
+        "data": "こんにちわ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 2916,
+        "type": "beforeinput",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちｗ"
+      },
+      {
+        "data": "こんにちわ",
+        "inputType": "insertCompositionText",
+        "isComposing": true,
+        "isTrusted": true,
+        "ms": 2916,
+        "type": "input",
+        "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちわ"
+      }
+    ],
+    "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちわ"
+  },
+  "data": [
+    {
+      "data": "こんにちわ",
+      "ms": 4509
+    },
+    {
+      "data": "こんにちわ",
+      "ms": 4612
+    }
+  ],
+  "events": [
+    {
+      "data": "",
+      "isTrusted": true,
+      "ms": 913,
+      "type": "compositionstart",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihao"
+    },
+    {
+      "data": "ｋ",
+      "isTrusted": true,
+      "ms": 913,
+      "type": "compositionupdate",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihao"
+    },
+    {
+      "data": "ｋ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 913,
+      "type": "beforeinput",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihao"
+    },
+    {
+      "data": "ｋ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 914,
+      "type": "input",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoｋ"
+    },
+    {
+      "data": "こ",
+      "isTrusted": true,
+      "ms": 1114,
+      "type": "compositionupdate",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoｋ"
+    },
+    {
+      "data": "こ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 1114,
+      "type": "beforeinput",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoｋ"
+    },
+    {
+      "data": "こ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 1115,
+      "type": "input",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこ"
+    },
+    {
+      "data": "こｎ",
+      "isTrusted": true,
+      "ms": 1314,
+      "type": "compositionupdate",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこ"
+    },
+    {
+      "data": "こｎ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 1314,
+      "type": "beforeinput",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこ"
+    },
+    {
+      "data": "こｎ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 1315,
+      "type": "input",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこｎ"
+    },
+    {
+      "data": "こん",
+      "isTrusted": true,
+      "ms": 1514,
+      "type": "compositionupdate",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこｎ"
+    },
+    {
+      "data": "こん",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 1514,
+      "type": "beforeinput",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこｎ"
+    },
+    {
+      "data": "こん",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 1515,
+      "type": "input",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこん"
+    },
+    {
+      "data": "こんｎ",
+      "isTrusted": true,
+      "ms": 1713,
+      "type": "compositionupdate",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこん"
+    },
+    {
+      "data": "こんｎ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 1714,
+      "type": "beforeinput",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこん"
+    },
+    {
+      "data": "こんｎ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 1715,
+      "type": "input",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんｎ"
+    },
+    {
+      "data": "こんに",
+      "isTrusted": true,
+      "ms": 1935,
+      "type": "compositionupdate",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんｎ"
+    },
+    {
+      "data": "こんに",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 1935,
+      "type": "beforeinput",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんｎ"
+    },
+    {
+      "data": "こんに",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 1936,
+      "type": "input",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんに"
+    },
+    {
+      "data": "こんにｃ",
+      "isTrusted": true,
+      "ms": 2115,
+      "type": "compositionupdate",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんに"
+    },
+    {
+      "data": "こんにｃ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 2116,
+      "type": "beforeinput",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんに"
+    },
+    {
+      "data": "こんにｃ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 2116,
+      "type": "input",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにｃ"
+    },
+    {
+      "data": "こんにｃｈ",
+      "isTrusted": true,
+      "ms": 2315,
+      "type": "compositionupdate",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにｃ"
+    },
+    {
+      "data": "こんにｃｈ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 2316,
+      "type": "beforeinput",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにｃ"
+    },
+    {
+      "data": "こんにｃｈ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 2317,
+      "type": "input",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにｃｈ"
+    },
+    {
+      "data": "こんにち",
+      "isTrusted": true,
+      "ms": 2516,
+      "type": "compositionupdate",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにｃｈ"
+    },
+    {
+      "data": "こんにち",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 2517,
+      "type": "beforeinput",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにｃｈ"
+    },
+    {
+      "data": "こんにち",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 2518,
+      "type": "input",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにち"
+    },
+    {
+      "data": "こんにちｗ",
+      "isTrusted": true,
+      "ms": 2717,
+      "type": "compositionupdate",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにち"
+    },
+    {
+      "data": "こんにちｗ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 2718,
+      "type": "beforeinput",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにち"
+    },
+    {
+      "data": "こんにちｗ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 2718,
+      "type": "input",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちｗ"
+    },
+    {
+      "data": "こんにちわ",
+      "isTrusted": true,
+      "ms": 2915,
+      "type": "compositionupdate",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちｗ"
+    },
+    {
+      "data": "こんにちわ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 2916,
+      "type": "beforeinput",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちｗ"
+    },
+    {
+      "data": "こんにちわ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 2916,
+      "type": "input",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちわ"
+    },
+    {
+      "code": "MetaLeft",
+      "isComposing": true,
+      "isTrusted": true,
+      "key": "Meta",
+      "meta": false,
+      "ms": 4509,
+      "type": "keydown",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちわ"
+    },
+    {
+      "data": "こんにちわ",
+      "isTrusted": true,
+      "ms": 4610,
+      "type": "compositionupdate",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちわ"
+    },
+    {
+      "data": "こんにちわ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 4610,
+      "type": "beforeinput",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちわ"
+    },
+    {
+      "data": "こんにちわ",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 4611,
+      "type": "input",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちわ"
+    },
+    {
+      "data": "こんにちわ",
+      "isTrusted": false,
+      "ms": 4611,
+      "type": "compositionend",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちわ"
+    },
+    {
+      "code": "MetaLeft",
+      "isComposing": false,
+      "isTrusted": true,
+      "key": "Meta",
+      "meta": true,
+      "ms": 4809,
+      "type": "keyup",
+      "value": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちわ"
+    }
+  ],
+  "started": 1794056399034,
+  "input": "こんにちわこんにちわ",
+  "expected": "こんにちわ",
+  "actual": "こんにちわこんにちわ",
+  "reproduced": true
+}
