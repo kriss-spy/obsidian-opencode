@@ -1,0 +1,38 @@
+[
+  {
+    "case": "chinese",
+    "attempt": 1,
+    "preedit": "nihaonihaonihaoこんいちわこんいちわni hao",
+    "input": "ni haonihao",
+    "expected": "nihao",
+    "bufferMatch": true,
+    "reproduced": true
+  },
+  {
+    "case": "chinese",
+    "attempt": 2,
+    "preedit": "nihaonihaonihaoこんいちわこんいちわnihaoni hao",
+    "input": "ni haonihao",
+    "expected": "nihao",
+    "bufferMatch": true,
+    "reproduced": true
+  },
+  {
+    "case": "japanese",
+    "attempt": 1,
+    "preedit": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちわ",
+    "input": "こんにちわこんにちわ",
+    "expected": "こんにちわ",
+    "bufferMatch": true,
+    "reproduced": true
+  },
+  {
+    "case": "japanese",
+    "attempt": 2,
+    "preedit": "nihaonihaonihaoこんいちわこんいちわnihaonihaoこんにちわこんにちわ",
+    "input": "こんにちわこんにちわ",
+    "expected": "こんにちわ",
+    "bufferMatch": true,
+    "reproduced": true
+  }
+]

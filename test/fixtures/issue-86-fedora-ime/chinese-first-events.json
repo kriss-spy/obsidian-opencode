@@ -1,0 +1,313 @@
+{
+  "data": [
+    {
+      "data": "\u001b[I",
+      "ms": 9
+    },
+    {
+      "data": "\u001b[I",
+      "ms": 18
+    },
+    {
+      "data": "\u001b[O",
+      "ms": 1930
+    },
+    {
+      "data": "\u001b[I",
+      "ms": 45119
+    },
+    {
+      "data": "\u001b[I",
+      "ms": 45126
+    },
+    {
+      "data": "\u0015",
+      "ms": 45923
+    },
+    {
+      "data": "ni hao",
+      "ms": 55922
+    },
+    {
+      "data": "nihao",
+      "ms": 56026
+    }
+  ],
+  "events": [
+    {
+      "code": "ControlLeft",
+      "isComposing": false,
+      "isTrusted": true,
+      "key": "Control",
+      "meta": false,
+      "ms": 716,
+      "type": "keydown",
+      "value": ""
+    },
+    {
+      "code": "MetaLeft",
+      "isComposing": false,
+      "isTrusted": true,
+      "key": "Meta",
+      "meta": false,
+      "ms": 758,
+      "type": "keydown",
+      "value": ""
+    },
+    {
+      "code": "MetaLeft",
+      "isComposing": false,
+      "isTrusted": true,
+      "key": "Meta",
+      "meta": true,
+      "ms": 915,
+      "type": "keyup",
+      "value": ""
+    },
+    {
+      "code": "ControlLeft",
+      "isComposing": false,
+      "isTrusted": true,
+      "key": "Control",
+      "meta": false,
+      "ms": 1016,
+      "type": "keyup",
+      "value": ""
+    },
+    {
+      "code": "MetaLeft",
+      "isComposing": false,
+      "isTrusted": true,
+      "key": "Meta",
+      "meta": false,
+      "ms": 1859,
+      "type": "keydown",
+      "value": ""
+    },
+    {
+      "code": "ControlLeft",
+      "isComposing": false,
+      "isTrusted": true,
+      "key": "Control",
+      "meta": false,
+      "ms": 45825,
+      "type": "keydown",
+      "value": ""
+    },
+    {
+      "code": "KeyU",
+      "isComposing": false,
+      "isTrusted": true,
+      "key": "u",
+      "meta": false,
+      "ms": 45923,
+      "type": "keydown",
+      "value": ""
+    },
+    {
+      "code": "KeyU",
+      "isComposing": false,
+      "isTrusted": true,
+      "key": "u",
+      "meta": false,
+      "ms": 46023,
+      "type": "keyup",
+      "value": ""
+    },
+    {
+      "code": "ControlLeft",
+      "isComposing": false,
+      "isTrusted": true,
+      "key": "Control",
+      "meta": false,
+      "ms": 46123,
+      "type": "keyup",
+      "value": ""
+    },
+    {
+      "data": "",
+      "isTrusted": true,
+      "ms": 47487,
+      "type": "compositionstart",
+      "value": ""
+    },
+    {
+      "data": "n",
+      "isTrusted": true,
+      "ms": 47487,
+      "type": "compositionupdate",
+      "value": ""
+    },
+    {
+      "data": "n",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 47489,
+      "type": "beforeinput",
+      "value": ""
+    },
+    {
+      "data": "n",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 47489,
+      "type": "input",
+      "value": "n"
+    },
+    {
+      "data": "ni",
+      "isTrusted": true,
+      "ms": 47687,
+      "type": "compositionupdate",
+      "value": "n"
+    },
+    {
+      "data": "ni",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 47688,
+      "type": "beforeinput",
+      "value": "n"
+    },
+    {
+      "data": "ni",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 47688,
+      "type": "input",
+      "value": "ni"
+    },
+    {
+      "data": "ni h",
+      "isTrusted": true,
+      "ms": 47889,
+      "type": "compositionupdate",
+      "value": "ni"
+    },
+    {
+      "data": "ni h",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 47890,
+      "type": "beforeinput",
+      "value": "ni"
+    },
+    {
+      "data": "ni h",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 47891,
+      "type": "input",
+      "value": "ni h"
+    },
+    {
+      "data": "ni ha",
+      "isTrusted": true,
+      "ms": 48088,
+      "type": "compositionupdate",
+      "value": "ni h"
+    },
+    {
+      "data": "ni ha",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 48089,
+      "type": "beforeinput",
+      "value": "ni h"
+    },
+    {
+      "data": "ni ha",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 48089,
+      "type": "input",
+      "value": "ni ha"
+    },
+    {
+      "data": "ni hao",
+      "isTrusted": true,
+      "ms": 48287,
+      "type": "compositionupdate",
+      "value": "ni ha"
+    },
+    {
+      "data": "ni hao",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 48288,
+      "type": "beforeinput",
+      "value": "ni ha"
+    },
+    {
+      "data": "ni hao",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 48289,
+      "type": "input",
+      "value": "ni hao"
+    },
+    {
+      "code": "MetaLeft",
+      "isComposing": true,
+      "isTrusted": true,
+      "key": "Meta",
+      "meta": false,
+      "ms": 55922,
+      "type": "keydown",
+      "value": "ni hao"
+    },
+    {
+      "data": "nihao",
+      "isTrusted": true,
+      "ms": 56023,
+      "type": "compositionupdate",
+      "value": "ni hao"
+    },
+    {
+      "data": "nihao",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 56024,
+      "type": "beforeinput",
+      "value": "ni hao"
+    },
+    {
+      "data": "nihao",
+      "inputType": "insertCompositionText",
+      "isComposing": true,
+      "isTrusted": true,
+      "ms": 56024,
+      "type": "input",
+      "value": "nihao"
+    },
+    {
+      "data": "nihao",
+      "isTrusted": false,
+      "ms": 56024,
+      "type": "compositionend",
+      "value": "nihao"
+    },
+    {
+      "code": "MetaLeft",
+      "isComposing": false,
+      "isTrusted": true,
+      "key": "Meta",
+      "meta": true,
+      "ms": 56222,
+      "type": "keyup",
+      "value": "nihao"
+    }
+  ],
+  "started": 1794056212212
+}

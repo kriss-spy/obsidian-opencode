@@ -22107,10 +22107,11 @@ var TerminalKeyRouter = class {
     (_a = this.shiftEnterDisposer) == null ? void 0 : _a.call(this);
     this.shiftEnterDisposer = null;
     this.clearShiftEnterTimers();
-    if (!enabled || !onShiftEnterNewline) return;
     terminal.attachCustomKeyEventHandler((event) => {
       var _a2, _b;
+      if (event.type === "keydown" && event.key === "Meta" && event.isComposing) return false;
       if (event.isComposing || isImeKey(event)) return true;
+      if (!enabled || !onShiftEnterNewline) return true;
       if (event.type === "keydown" && event.key === "Enter" && event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
         event.preventDefault();
         const ownerWindow = (_b = (_a2 = terminal.element) == null ? void 0 : _a2.ownerDocument.defaultView) != null ? _b : window;
