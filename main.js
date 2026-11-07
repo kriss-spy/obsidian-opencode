@@ -21299,7 +21299,7 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // manifest.json
-var version = "2.4.0";
+var version = "2.4.1";
 
 // src/editorServer.ts
 var fs2 = __toESM(require("fs"));
@@ -22107,10 +22107,11 @@ var TerminalKeyRouter = class {
     (_a = this.shiftEnterDisposer) == null ? void 0 : _a.call(this);
     this.shiftEnterDisposer = null;
     this.clearShiftEnterTimers();
-    if (!enabled || !onShiftEnterNewline) return;
     terminal.attachCustomKeyEventHandler((event) => {
       var _a2, _b;
+      if (event.type === "keydown" && event.key === "Meta" && event.isComposing) return false;
       if (event.isComposing || isImeKey(event)) return true;
+      if (!enabled || !onShiftEnterNewline) return true;
       if (event.type === "keydown" && event.key === "Enter" && event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
         event.preventDefault();
         const ownerWindow = (_b = (_a2 = terminal.element) == null ? void 0 : _a2.ownerDocument.defaultView) != null ? _b : window;

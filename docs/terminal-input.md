@@ -81,6 +81,19 @@ The automated Obsidian test covers the Korean commit-plus-Space ordering with xt
 
 ## Native IME smoke test
 
+Issue #86's native Fedora/Fcitx5 captures are preserved in
+`test/fixtures/issue-86-fedora-ime`. The WDIO plugin suite replays the Chinese
+and Japanese event traces through the installed plugin and real xterm textarea.
+Both traces duplicated preedit on the unmodified development base. xterm 5.5
+finalizes composition on Meta keydown, before Fcitx's switch commits the text.
+The plugin's public xterm key handler now returns false for Meta keydown while
+`isComposing` is true. It does not prevent the native shortcut or write text;
+xterm still handles the subsequent composition commit. This guard remains
+active when Shift+Enter customization is disabled.
+
+Passing trace replay does not establish a native Fedora fix. Repeat the original
+native Super+Space scenarios against the patched build before claiming that.
+
 Synthetic browser events cannot validate an operating system's candidate window or every native event sequence. Before changing the router or xterm version, run this short native check on each available platform:
 
 1. Focus the OpenCode prompt and enter composed Korean, Japanese, or Chinese text followed immediately by Space and Enter.
