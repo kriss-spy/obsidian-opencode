@@ -27,7 +27,7 @@ Use OpenCode 2's multi-session interface in a full Obsidian editor tab:
 
 - **Linux**: stable on my daily driver, not tested on all distros.
 - **WSL2/X410**: Supported with the Linux Obsidian app and formal OpenCode V2. Text copy/paste, OSC 52, Windows clipboard image paste, and copying rendered terminal images use a Unicode-safe Windows PowerShell bridge. WSLg is outside this support contract.
-- **Windows**: Beta support on Windows 10 version 1809 and later through ConPTY. Node.js must be available on `PATH` for the isolated PTY helper.
+- **Windows**: Beta support on Windows 10 version 1903 (build 18362) and later through packaged ConPTY. Node.js must be available on `PATH` for the isolated PTY helper.
 - **macOS**: Experimental.
 
 ## Known Issues

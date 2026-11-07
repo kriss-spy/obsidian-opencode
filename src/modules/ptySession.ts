@@ -277,8 +277,8 @@ export class PtySession {
 		this.windowsGracefulExitRequested = false;
 		if (process.platform === "win32") {
 			const windowsBuild = Number(os.release().split(".")[2]);
-			if (Number.isFinite(windowsBuild) && windowsBuild > 0 && windowsBuild < 17763) {
-				terminal.writeln("\r\nOpenCode requires Windows 10 version 1809 or later for ConPTY support.\r\n");
+			if (Number.isFinite(windowsBuild) && windowsBuild > 0 && windowsBuild < 18362) {
+				terminal.writeln("\r\nOpenCode requires Windows 10 version 1903 (build 18362) or later for the packaged ConPTY backend.\r\n");
 				return;
 			}
 		}

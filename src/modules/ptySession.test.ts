@@ -68,6 +68,36 @@ describe("PtySession", () => {
 	});
 
 	afterEach(() => vi.unstubAllGlobals());
+	it.each([17763, 18309, 18361])("rejects unsupported Windows build %i before starting a helper", (build) => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+		vi.mocked(os.release).mockReturnValueOnce(`10.0.${build}`);
+		const terminal = { rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() };
+		try {
+			new PtySession().spawn(terminal as unknown as Terminal, { opencodePath: "opencode", cwd: "C:\\vault", args: [] });
+			expect(terminal.writeln).toHaveBeenCalledWith(expect.stringContaining("Windows 10 version 1903 (build 18362) or later"));
+			expect(execFileSync).not.toHaveBeenCalled();
+			expect(spawn).not.toHaveBeenCalled();
+		} finally {
+			platform.mockRestore();
+		}
+	});
+
+	it("accepts Windows 10 version 1903 at the minimum supported build", () => {
+		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+		vi.mocked(os.release).mockReturnValueOnce("10.0.18362");
+		const child = createProcess();
+		child.pid = 1234;
+		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+		const terminal = { rows: 24, cols: 80, write: vi.fn(), writeln: vi.fn() };
+		try {
+			new PtySession().spawn(terminal as unknown as Terminal, { opencodePath: "opencode", cwd: "C:\\vault", args: [] });
+			expect(execFileSync).toHaveBeenCalled();
+			expect(spawn).toHaveBeenCalled();
+			expect(terminal.writeln).not.toHaveBeenCalled();
+		} finally {
+			platform.mockRestore();
+		}
+	});
 
 	it("keeps the replacement PTY active when the killed PTY exits", () => {
 		const platform = vi.spyOn(process, "platform", "get").mockReturnValue("linux");

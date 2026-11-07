@@ -2,7 +2,7 @@
 
 The Windows helper uses **node-pty 1.1.0 with `useConptyDll: true`**. It embeds the official package's x64/ARM64 JavaScript, native modules, packaged `conpty.dll`/`OpenConsole.exe`, and MIT license into the three-file plugin distribution. Regenerate the payloads with `npm run embed:windows-pty`; node-pty is pinned in the package and lockfile. No native module is loaded into Electron: it stays in the existing external Node helper, which still starts inside the kill-on-close Job Object.
 
-Linux/macOS retain the Python PTY implementation. Windows does not silently fall back to the older OS host when the packaged runtime cannot load; setup errors are reported in the terminal. Node.js on PATH and Windows 10 1809+ remain required.
+Linux/macOS retain the Python PTY implementation. Windows does not silently fall back to the older OS host when the packaged runtime cannot load; setup errors are reported in the terminal. Node.js on PATH and Windows 10 version 1903 (build 18362) or later are required. Windows 10 1809, including LTSC 2019, is no longer supported: node-pty selects its legacy WinPTY backend there, which is not included in this distribution. Older builds are rejected before starting a helper.
 
 ## Options compared
 
